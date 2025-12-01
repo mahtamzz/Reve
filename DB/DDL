@@ -3,7 +3,7 @@ CREATE TABLE Users (
 	googleid     INT,
     username     VARCHAR(50),
     email          VARCHAR(100) UNIQUE NOT NULL,
-	password    VARCHAR(50),
+	password    VARCHAR(255),
     -- pic            TEXT,
     weekly_goal    INT,
     xp             INT DEFAULT 0,
