@@ -1,0 +1,11 @@
+@import "tailwindcss";
+
+/* تعریف رنگ‌های سفارشی */
+@theme {
+  --color-loginbg: #6C6850;
+  --color-creamtext: #FFFDEF;
+  --color-chocolate: #290102;
+  --color-niceblue: #678CD5;
+
+  --font-serif: Georgia, serif;
+}

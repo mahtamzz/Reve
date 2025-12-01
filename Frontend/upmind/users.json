@@ -1,0 +1,14 @@
+{
+    "user1" : {
+        "id" : 1,
+        "name" : "nafas",
+        "email" : "rezaeinafas99@gmail.com",
+        "password" : "nafasr84"
+    },
+    "user2" : {
+        "id" : 2,
+        "name" : "mahta",
+        "email" : "mahtamohammadi@gmail.com",
+        "password" : "mahta84"
+    }
+}
