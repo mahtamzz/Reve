@@ -1,7 +1,15 @@
 import { Link, NavLink } from "react-router-dom";
 import GoogleButton from "../GoogleButton/GoogleButton";
+import { useNavigate } from "react-router-dom";
 
 export default function Signup() {
+  const navigate = useNavigate();
+
+  function handleSignup(e) {
+    e.preventDefault();
+    navigate("/verification");
+  }
+
     return (
       <div className="min-h-screen bg-loginbg font-serif text-brand-text flex flex-col items-center">
         
@@ -57,7 +65,7 @@ export default function Signup() {
               />
             </div>
 
-            <button className="w-full bg-chocolate text-creamtext py-3 rounded-md mt-6">
+            <button onClick={handleSignup} className="w-full bg-chocolate text-creamtext py-3 rounded-md mt-6">
               Sign up
             </button>
 
