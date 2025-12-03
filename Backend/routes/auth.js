@@ -48,18 +48,26 @@ router.get('/google/callback',
                     user.google_id = profile.id;
                 }
             } else {
-                // User is not available - Create a new user, generate token and send it
+            
+                const usernameSource =
+                    profile.displayName ||
+                    profile.name?.givenName ||
+                    (profile.emails && profile.emails[0]?.value.split("@")[0]) ||
+                    "user";
+
                 const baseUsername =
-                    displayName.replace(/\s+/g, "").toLowerCase() +
+                    usernameSource.replace(/\s+/g, "").toLowerCase() +
                     Math.floor(Math.random() * 10000);
 
+            
                 const insertUser = await pool.query(
                     `INSERT INTO users (google_id, email, username) VALUES ($1, $2, $3) RETURNING *`,
                     [profile.id, profile.emails[0].value, baseUsername]
                 );
-
+            
                 user = insertUser.rows[0];
             }
+            
             const token = jwt.sign({ user_id: user.user_id, username: user.username }, process.env.JWT_KEY, { expiresIn: '1h' });
             res.json(token);
             // res.redirect(`http://localhost:5137/dashboard?token=${token}`);
