@@ -53,7 +53,7 @@ export default function Login() {
               Login
             </button>
 
-            {/* OR Divider */}
+            {/* OR */}
             <div className="flex items-center gap-2 -mt-4">
               <div className="flex-1 h-px bg-chocolate/40"></div>
               <span className="text-chocolate/70 text-sm font-medium">OR</span>
