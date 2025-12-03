@@ -1,12 +1,20 @@
 import { useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
+import Dashboard from "../Dashboard/Dashboard";
 
 const CODE_LENGTH = 6;
 
 export default function Verification() {
   const [code, setCode] = useState(Array(CODE_LENGTH).fill(""));
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [loading, setLoading] = useState(false);
+
   const inputsRef = useRef([]);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const email = location.state?.email;
 
   function goback(e) {
     e.preventDefault();
@@ -49,11 +57,56 @@ export default function Verification() {
     });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setError("");
+    setSuccess("");
+
     const finalCode = code.join("");
-    console.log("Verification code:", finalCode);
-    // اینجا کال API یا IAM رو می‌زنی
+
+    if (!email) {
+      setError("no such email found");
+      return;
+    }
+
+    if (finalCode.length !== CODE_LENGTH) {
+      setError("it has to be 6 digits!");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const res = await fetch("http://localhost:3000/api/users/verify-otp", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: email,
+          otp: finalCode,
+        }),
+      });
+
+      const data = await res.json();
+      console.log("VERIFY RESPONSE:", data);
+
+      if (!res.ok) {
+        setError(data.error || "invalid code");
+        return;
+      }
+
+      setSuccess("email validated successfully");
+
+      setTimeout(() => {
+        navigate("/Dashboard");
+      }, 1000);
+    } catch (err) {
+      console.error(err);
+      setError("there is a problem");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -85,18 +138,30 @@ export default function Verification() {
 
           <hr className="mb-6 border-chocolate/10" />
 
-          {/* متن توضیحی */}
           <div className="text-sm text-brand-text mb-6 space-y-1 text-center md:text-left">
             <p>
               A verification code has been sent to{" "}
-              <span className="font-semibold">your-email@example.com</span>
+              <span className="font-semibold">
+                {email || "your-email@example.com"}
+              </span>
             </p>
             <p>
               Please check your inbox and enter the verification code below to
               verify your email address. The code will expire in{" "}
-              <span className="font-semibold">00:00</span>.
+              <span className="font-semibold">10:00</span>.
             </p>
           </div>
+
+          {error && (
+            <p className="text-red-600 text-sm mb-3 text-center">
+              {typeof error === "string" ? error : JSON.stringify(error)}
+            </p>
+          )}
+          {success && (
+            <p className="text-green-700 text-sm mb-3 text-center">
+              {success}
+            </p>
+          )}
 
           <form onSubmit={handleSubmit}>
             <div className="flex justify-center gap-2 md:gap-3 mb-6">
@@ -118,9 +183,10 @@ export default function Verification() {
 
             <button
               type="submit"
-              className="w-full bg-chocolate hover:bg-chocolate/90 text-creamtext font-medium py-2.5 rounded-md transition-colors"
+              disabled={loading}
+              className="w-full bg-chocolate hover:bg-chocolate/90 text-creamtext font-medium py-2.5 rounded-md transition-colors disabled:opacity-60"
             >
-              Verify
+              {loading ? "Please wait..." : "Verify"}
             </button>
           </form>
 
@@ -135,6 +201,7 @@ export default function Verification() {
             <button
               type="button"
               className="text-niceblue hover:underline"
+              onClick={goback}
             >
               Change email
             </button>
