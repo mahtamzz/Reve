@@ -13,3 +13,12 @@ passport.use(
             return done(null, profile);
         })
 );
+
+// Required for session support
+passport.serializeUser((user, done) => {
+    done(null, user);
+});
+
+passport.deserializeUser((obj, done) => {
+    done(null, obj);
+});

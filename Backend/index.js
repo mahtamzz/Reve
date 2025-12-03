@@ -2,6 +2,9 @@ require("dotenv").config();
 const cors = require("cors");
 const express = require("express");
 const passport = require("passport");
+const session = require("express-session");
+
+require("./config/passport");
 
 const app = express();
 
@@ -11,9 +14,17 @@ app.use(cors({
     credentials: true,
 }));
 
+app.use(session({
+    secret: process.env.SESSION_SECRET || "supersecret",
+    resave: false,
+    saveUninitialized: false,
+    cookie: { secure: false }   // set secure: true only if using HTTPS
+}));
+
 // Middleware
 app.use(express.json());
 app.use(passport.initialize());
+app.use(passport.session());
 
 // Routes
 app.use("/api/users", require("./routes/users"));
