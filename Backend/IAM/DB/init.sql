@@ -3,7 +3,6 @@ CREATE TABLE Users (
 	googleid     INT,
     username     VARCHAR(50),
     email          VARCHAR(100) UNIQUE NOT NULL,
-    is_verified BOOLEAN DEFAULT FALSE,
 	password    VARCHAR(255),
     -- pic            TEXT,
     weekly_goal    INT,

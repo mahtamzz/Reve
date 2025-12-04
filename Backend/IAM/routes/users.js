@@ -23,37 +23,40 @@ router.post('/register', async (req, res) => {
     }
 
     try {
-        const checkUser = await pool.query( 
-            'SELECT * FROM Users WHERE email = $1',
+        const existingUser = await pool.query(
+            'SELECT id FROM Users WHERE email = $1',
             [email]
         );
-
-        if (checkUser.rows.length > 0) {
+        if (existingUser.rows.length > 0) {
             return res.status(400).json({ error: 'User already exists' });
+        }
+
+        const pendingUser = await redisClient.get(`pending_user:${email}`);
+        if (pendingUser) {
+            await redisClient.del(`pending_user:${email}`);
+            await redisClient.del(`otp:${email}`);
         }
 
         const hashedPass = await bcrypt.hash(password, 10);
 
-        // Generate OTP
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
-        // Save OTP in Redis (expires in 10 min)
-        await redisClient.set(`otp:${email}`, otp, { EX: 600 });
 
-        const insertUser = await pool.query(
-            `INSERT INTO Users (username, email, password)
-            VALUES ($1, $2, $3) RETURNING id, email`,
-            [username, email, hashedPass]
+        // Store user data temporarily in Redis
+        await redisClient.set(
+            `pending_user:${email}`,
+            JSON.stringify({ username, email, password: hashedPass }),
+            { EX: 600 } // expires in 10 minutes
         );
 
-        // Send OTP email
+        // Store OTP
+        await redisClient.set(`otp:${email}`, otp, { EX: 600 });
+
         await sendOTPEmail(email, otp);
 
-        res.status(201).json({
-            message: "User registered. OTP sent to email.",
-            user_id: insertUser.rows[0].id
-        });
+        res.status(201).json({ message: "OTP sent to email" });
+
     } catch (err) {
-        console.error('Database error:', err);
+        console.error('Registration error:', err);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
@@ -63,123 +66,151 @@ router.post('/verify-otp', async (req, res) => {
 
     try {
         const storedOtp = await redisClient.get(`otp:${email}`);
+        if (!storedOtp) return res.status(400).json({ error: "OTP expired!" });
+        if (storedOtp !== otp) return res.status(400).json({ error: "Invalid OTP." });
 
-        if (!storedOtp)
-            return res.status(400).json({ error: "OTP expired or not found" });
+        // Get pending user from Redis
+        const pendingUserData = await redisClient.get(`pending_user:${email}`);
+        if (!pendingUserData) return res.status(400).json({ error: "No registration pending for this email" });
 
-        if (storedOtp !== otp)
-            return res.status(400).json({ error: "Invalid OTP" });
+        const userData = JSON.parse(pendingUserData);
 
-        // Update user to set is_verified = true
-        await pool.query(
-            `UPDATE Users SET is_verified = true WHERE email = $1`,
-            [email]
+        // Insert verified user into PostgreSQL
+        const insertResult = await pool.query(
+            `INSERT INTO Users (username, email, password)
+            VALUES ($1, $2, $3) RETURNING id, username`,
+            [userData.username, userData.email, userData.password]
         );
 
-        // Fetch the user data to create token
-        const userResult = await pool.query(
-            `SELECT id, username FROM Users WHERE email = $1`,
-            [email]
-        );
+        const user = insertResult.rows[0];
 
-        const user = userResult.rows[0];
-        if (!user) {
-            return res.status(404).json({ error: "User not found after verification" });
-        }
-
+        // Delete pending data and OTP
+        await redisClient.del(`pending_user:${email}`);
         await redisClient.del(`otp:${email}`);
 
+        // Generate JWT
         const token = generateToken({ user_id: user.id, username: user.username });
 
-        res.json({ message: "Email verified successfully", token });
+        res.json({ message: "Email verified and account created!", token });
 
     } catch (err) {
-        console.error("OTP verify error:", err);
-        res.status(500).json({ error: "Internal server error" });
+        console.error('OTP verification error:', err);
+        res.status(500).json({ error: 'Internal server error' });
     }
 });
-
 
 router.post('/resend-otp', async (req, res) => {
     const { email } = req.body;
 
     try {
-        const user = await pool.query(
-            `SELECT id, is_verified FROM Users WHERE email = $1`,
-            [email]
-        );
+        const pendingUser = await redisClient.get(`pending_user:${email}`);
+        if (!pendingUser) {
+            return res.status(400).json({ error: "No registration pending for this email" });
+        }
 
-        if (user.rows.length === 0)
-            return res.status(400).json({ error: "User not found" });
-
-        if (user.rows[0].is_verified)
-            return res.status(400).json({ error: "User already verified" });
-
+        // Generate new OTP
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
-
         await redisClient.set(`otp:${email}`, otp, { EX: 600 });
 
         await sendOTPEmail(email, otp);
 
-        res.json({ message: "New OTP sent to email" });
+        res.json({ message: "OTP resent to email" });
 
     } catch (err) {
-        console.error("Resend OTP Error:", err);
+        console.error("Resend OTP error:", err);
         return res.status(500).json({ error: "Internal server error" });
     }
 });
 
 router.post('/login', async (req, res) => {
     const { email, password } = req.body;
+
     try {
-        const checkUser = await pool.query( 
-            'SELECT * FROM Users WHERE email = $1',
-            [email]
-        );
+        const dbUserResult = await pool.query('SELECT * FROM Users WHERE email = $1', [email]);
 
-        if (checkUser.rows.length === 0) {
-            return res.status(401).json({ error: 'Invalid credentials' });
+        if (dbUserResult.rows.length > 0) {
+            const user = dbUserResult.rows[0];
+            const validPassword = await bcrypt.compare(password, user.password);
+            if (!validPassword)
+                return res.status(401).json({ error: 'Invalid credentials.' });
+
+            const token = generateToken({ user_id: user.id, username: user.username });
+            return res.json({ message: "Login successful", token });
         }
-        
-        //compare encrypted password
-        const user = checkUser.rows[0];
-        
-        const validPassword = await bcrypt.compare(password, user.password)
-        if (!validPassword)
-            return res.status(401).json({ error: 'Invalid credentials' });
-        
-        if (!user.is_verified)
-            return res.status(403).json({ error: "Email not verified" });
 
-        // create JSON web token and send it in response
-        const token = generateToken({ user_id: user.id, username: user.username });
-        res.json(token);
+        // If not in PostgreSQL, check Redis for pending verification. User should be redirected to verifying page.
+        const tempUserStr = await redisClient.get(`pending:${email}`);
+        if (tempUserStr) {
+            return res.status(403).json({ error: "Email not verified yet. Please check your inbox for OTP." });
+        }
+
+        return res.status(401).json({ error: "Invalid credentials" });
 
     } catch (err) {
-        console.error('Database error:', err);
-        res.status(500).json({ error: 'Internal server error' });
+        console.error('Login error:', err);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+router.post('/forgot-password', async (req, res) => {
+    const { email } = req.body;
+
+    try {
+        // Only verified users can reset password
+        const dbUserResult = await pool.query('SELECT id FROM Users WHERE email = $1', [email]);
+        if (dbUserResult.rows.length === 0) {
+            return res.status(400).json({ error: "User not found or not verified" });
+        }
+
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        await redisClient.set(`reset:${email}`, otp, { EX: 600 });
+        await sendOTPEmail(email, otp);
+
+        res.json({ message: "Password reset OTP sent to email." });
+
+    } catch (err) {
+        console.error('Forgot password error:', err);
+        return res.status(500).json({ error: "Internal server error" });
+    }
+});
+
+router.post('/reset-password', async (req, res) => {
+    const { email, otp, newPassword } = req.body;
+
+    if (!newPassword || newPassword.length < 6)
+        return res.status(400).json({ error: "Password must be at least 6 characters" });
+
+    try {
+        const storedOtp = await redisClient.get(`reset:${email}`);
+        if (!storedOtp) return res.status(400).json({ error: "OTP expired!" });
+        if (storedOtp !== otp) return res.status(400).json({ error: "Invalid OTP." });
+
+        const hashedPass = await bcrypt.hash(newPassword, 10);
+        await pool.query('UPDATE Users SET password = $1 WHERE email = $2', [hashedPass, email]);
+
+        await redisClient.del(`reset:${email}`);
+        res.json({ message: "Password reset successfully." });
+
+    } catch (err) {
+        console.error('Reset password error:', err);
+        return res.status(500).json({ error: "Internal server error." });
     }
 });
 
 router.get('/me', authMiddleware, async (req, res) => {
     try {
-        const userId = req.user.user_id;  
+        const userId = req.user.user_id;
 
-        const user = await pool.query(
-            'SELECT id, username, email FROM Users WHERE id = $1',
-            [userId]
-        );
+        const userResult = await pool.query('SELECT id, username, email FROM Users WHERE id = $1', [userId]);
+        if (userResult.rows.length === 0) return res.status(404).json({ error: 'User not found' });
 
-        if (user.rows.length === 0) {
-            return res.status(404).json({ error: 'User not found' });
-        }
-
-        res.json(user.rows[0]);
+        res.json(userResult.rows[0]);
     } catch (err) {
-        console.error('Database error:', err);
-        res.status(500).json({ error: 'Internal server error' });
+        console.error('Get me error:', err);
+        return res.status(500).json({ error: 'Internal server error' });
     }
-})
+});
+
 
 const generateToken = (data) => {
     return jwt.sign(
