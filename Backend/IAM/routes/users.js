@@ -70,22 +70,35 @@ router.post('/verify-otp', async (req, res) => {
         if (storedOtp !== otp)
             return res.status(400).json({ error: "Invalid OTP" });
 
+        // Update user to set is_verified = true
         await pool.query(
             `UPDATE Users SET is_verified = true WHERE email = $1`,
             [email]
         );
 
+        // Fetch the user data to create token
+        const userResult = await pool.query(
+            `SELECT id, username FROM Users WHERE email = $1`,
+            [email]
+        );
+
+        const user = userResult.rows[0];
+        if (!user) {
+            return res.status(404).json({ error: "User not found after verification" });
+        }
+
         await redisClient.del(`otp:${email}`);
 
-        const token = generateToken({ user_id: user.rows[0].id, username: user.rows[0].username });
+        const token = generateToken({ user_id: user.id, username: user.username });
 
-        res.json({ message: `Email verified successfully. \nToken: ${token}` });
+        res.json({ message: "Email verified successfully", token });
 
     } catch (err) {
         console.error("OTP verify error:", err);
         res.status(500).json({ error: "Internal server error" });
     }
 });
+
 
 router.post('/resend-otp', async (req, res) => {
     const { email } = req.body;
