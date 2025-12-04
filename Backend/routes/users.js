@@ -64,11 +64,24 @@ router.post('/verify-otp', async (req, res) => {
     try {
         const storedOtp = await redisClient.get(`otp:${email}`);
 
-        if (!storedOtp)
+        if (!storedOtp) {
             return res.status(400).json({ error: "OTP expired or not found" });
+        }
 
-        if (storedOtp !== otp)
+        if (storedOtp !== otp) {
             return res.status(400).json({ error: "Invalid OTP" });
+        }
+
+        const userResult = await pool.query(
+            `SELECT id, username FROM Users WHERE email = $1`,
+            [email]
+        );
+
+        if (userResult.rows.length === 0) {
+            return res.status(400).json({ error: "User not found" });
+        }
+
+        const { id, username } = userResult.rows[0];
 
         await pool.query(
             `UPDATE Users SET is_verified = true WHERE email = $1`,
@@ -77,15 +90,19 @@ router.post('/verify-otp', async (req, res) => {
 
         await redisClient.del(`otp:${email}`);
 
-        const token = generateToken({ user_id: user.rows[0].id, username: user.rows[0].username });
+        const token = generateToken({ user_id: id, username });
 
-        res.json({ message: `Email verified successfully. \nToken: ${token}` });
+        res.json({
+            message: "Email verified successfully.",
+            token,
+        });
 
     } catch (err) {
         console.error("OTP verify error:", err);
         res.status(500).json({ error: "Internal server error" });
     }
 });
+
 
 router.post('/resend-otp', async (req, res) => {
     const { email } = req.body;
