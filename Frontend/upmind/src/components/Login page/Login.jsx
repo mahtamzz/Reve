@@ -89,7 +89,16 @@ export default function Login() {
           <div>
             <div className="flex justify-between text-sm mb-2">
               <label>password</label>
-              <a href="#" className="text-niceblue underline">forgot password?</a>
+              <a
+                href="#"
+                className="text-niceblue underline"
+                onClick={(e) => {
+                  e.preventDefault();
+                  navigate("/forgot-password");
+                }}
+              >
+                forgot password?
+              </a>            
             </div>
             <input 
               type="password"

@@ -60,13 +60,13 @@ export default function Signup() {
         <div className="text-3xl tracking-widest text-creamtext">REVE</div>
 
         <nav className="flex gap-12 text-lg">
-          <NavLink className="cursor-pointer hover:opacity-80 text-creamtext">
+          <NavLink to="/about" className="cursor-pointer hover:opacity-80 text-creamtext">
             About
           </NavLink>
-          <NavLink className="cursor-pointer hover:opacity-80 text-creamtext">
+          <NavLink to="/services" className="cursor-pointer hover:opacity-80 text-creamtext">
             Services
           </NavLink>
-          <NavLink className="cursor-pointer hover:opacity-80 text-creamtext">
+          <NavLink to="/contact" className="cursor-pointer hover:opacity-80 text-creamtext">
             Contact us
           </NavLink>
         </nav>
@@ -118,7 +118,14 @@ export default function Signup() {
           <div>
             <div className="flex justify-between text-sm mb-2">
               <label>password</label>
-              <a href="#" className="text-niceblue underline">
+              <a
+                href="#"
+                className="text-niceblue underline"
+                onClick={(e) => {
+                  e.preventDefault();
+                  navigate("/forgot-password");
+                }}
+              >
                 forgot password?
               </a>
             </div>
