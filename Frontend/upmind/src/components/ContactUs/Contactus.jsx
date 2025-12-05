@@ -32,12 +32,10 @@ export default function Contactus() {
         return;
       }
 
-      // موفقیت
       setSentMessage(
         data.message || "Your message has been sent. We will get back to you soon!"
       );
 
-      // خالی کردن فرم بعد از ارسال
       setEmail("");
       setMessage("");
 

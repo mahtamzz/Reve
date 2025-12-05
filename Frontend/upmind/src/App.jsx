@@ -6,6 +6,7 @@ import ForgotPassword from "./components/Forgotpass/ForgotPassword";
 import About from "./components/About/About";
 import Services from "./components/Services/Services";
 import Contactus from "./components/ContactUs/Contactus";
+import ResetPassword from "./components/ResetPassword/ResetPassword";
 import {Route, Routes} from 'react-router-dom'
 
 function App() {
@@ -19,6 +20,7 @@ function App() {
       <Route path="/about" element={<About />} />
       <Route path="/services" element={<Services />} />
       <Route path="/contact" element={<Contactus />} />
+      <Route path="/reset-password" element={<ResetPassword/>}></Route>
     </Routes>
   )
 }

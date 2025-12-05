@@ -43,7 +43,7 @@ export default function Signup() {
         state: {
           email: email,
           userId: data.user_id,
-        },
+        }
       });
     } catch (err) {
       console.error(err);
@@ -105,7 +105,7 @@ export default function Signup() {
           </div>
 
           <div>
-            <label className="block text-sm mb-2">email or phone</label>
+            <label className="block text-sm mb-2">email</label>
             <input
               type="email"
               className="w-full bg-transparent border-b border-brand-text/50 outline-none pb-1"
@@ -158,7 +158,7 @@ export default function Signup() {
             <div className="flex-1 h-px bg-chocolate/40"></div>
           </div>
 
-          <GoogleButton text="Continue with Google" />
+          <GoogleButton text="Continue with Google" origin="signup" />
         </form>
       </div>
     </div>

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");
@@ -7,14 +7,16 @@ export default function ForgotPassword() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
+  const navigate = useNavigate();
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
     setMessage("");
-  
+
     try {
       setLoading(true);
-  
+
       const res = await fetch("http://localhost:3000/api/users/forgot-password", {
         method: "POST",
         headers: {
@@ -22,18 +24,23 @@ export default function ForgotPassword() {
         },
         body: JSON.stringify({ email }),
       });
-  
+
       const data = await res.json();
       console.log("FORGOT PASSWORD RESPONSE:", data);
-  
+
       if (!res.ok) {
         setError(data.error || "Something went wrong. Please try again.");
         return;
       }
 
       setMessage(
-        data.message || "If this email exists, a reset link has been sent."
+        data.message || "If this email exists, a reset code has been sent."
       );
+
+      navigate("/reset-password", {
+        state: { email },
+      });
+
     } catch (err) {
       console.error(err);
       setError("Something went wrong. Please try again.");
@@ -41,7 +48,6 @@ export default function ForgotPassword() {
       setLoading(false);
     }
   };
-  
 
   return (
     <div className="min-h-screen bg-loginbg font-serif text-brand-text flex flex-col items-center">
@@ -70,7 +76,7 @@ export default function ForgotPassword() {
 
         <p className="text-sm text-chocolate/80 mb-6 text-center">
           Enter the email address associated with your account and we’ll send you
-          a link to reset your password.
+          a code to reset your password.
         </p>
 
         <form className="space-y-6" onSubmit={handleSubmit}>
@@ -98,7 +104,7 @@ export default function ForgotPassword() {
             disabled={loading}
             className="w-full bg-chocolate text-creamtext py-3 rounded-md mt-2 disabled:opacity-60 hover:bg-chocolate/90 transition-colors"
           >
-            {loading ? "Please wait..." : "Send reset link"}
+            {loading ? "Please wait..." : "Send reset code"}
           </button>
         </form>
 

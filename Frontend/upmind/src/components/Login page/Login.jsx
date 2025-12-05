@@ -7,6 +7,7 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
   
   const navigate = useNavigate();
 
@@ -127,7 +128,7 @@ export default function Login() {
             <div className="flex-1 h-px bg-chocolate/40"></div>
           </div>
 
-          <GoogleButton text="Continue with Google" />
+          <GoogleButton text="Continue with Google" origin="login" />
         </form>
       </div>
 
