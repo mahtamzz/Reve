@@ -1,14 +1,16 @@
 import { useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import Dashboard from "../Dashboard/Dashboard";
 
 const CODE_LENGTH = 6;
 
 export default function Verification() {
-  const [code, setCode] = useState(Array(CODE_LENGTH).fill(""));
+  const [code, setCode] = useState(Array(CODE_LENGTH).fill("")); // ["", "", "", "",...]
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendMessage, setResendMessage] = useState("");
+
 
   const inputsRef = useRef([]);
   const navigate = useNavigate();
@@ -56,6 +58,45 @@ export default function Verification() {
       return next;
     });
   };
+
+  const handleResend = async () => {
+    setError("");
+    setSuccess("");
+    setResendMessage("");
+  
+    if (!email) {
+      setError("no email found to resend code");
+      return;
+    }
+  
+    try {
+      setResendLoading(true);
+  
+      const res = await fetch("http://localhost:3000/api/users/resend-otp", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email }),
+      });
+  
+      const data = await res.json();
+      console.log("RESEND OTP RESPONSE:", data);
+  
+      if (!res.ok) {
+        setError(data.error || "could not resend code");
+        return;
+      }
+  
+      setResendMessage(data.message || "A new code has been sent to your email.");
+    } catch (err) {
+      console.error(err);
+      setError("there is a problem while resending code");
+    } finally {
+      setResendLoading(false);
+    }
+  };
+  
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -194,8 +235,10 @@ export default function Verification() {
             <button
               type="button"
               className="text-niceblue hover:underline"
+              onClick={handleResend}
+              disabled={resendLoading || loading}
             >
-              Resend code
+              {resendLoading ? "Resending..." : "Resend code"}
             </button>
             <span className="hidden md:inline text-gray-400">|</span>
             <button

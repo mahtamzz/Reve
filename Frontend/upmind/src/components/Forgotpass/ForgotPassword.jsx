@@ -11,20 +11,37 @@ export default function ForgotPassword() {
     e.preventDefault();
     setError("");
     setMessage("");
-
-    // TODO: اینجا بعداً API واقعی رو صدا بزن (مثلاً /api/users/forgot-password)
+  
     try {
       setLoading(true);
+  
+      const res = await fetch("http://localhost:3000/api/users/forgot-password", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email }),
+      });
+  
+      const data = await res.json();
+      console.log("FORGOT PASSWORD RESPONSE:", data);
+  
+      if (!res.ok) {
+        setError(data.error || "Something went wrong. Please try again.");
+        return;
+      }
 
-      //تست
-      await new Promise((res) => setTimeout(res, 800));
-      setMessage("If this email exists, a reset link has been sent.");
+      setMessage(
+        data.message || "If this email exists, a reset link has been sent."
+      );
     } catch (err) {
+      console.error(err);
       setError("Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }
   };
+  
 
   return (
     <div className="min-h-screen bg-loginbg font-serif text-brand-text flex flex-col items-center">

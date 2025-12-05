@@ -35,7 +35,7 @@ export default function Login() {
       }
 
       // for using in saving token /me
-      localStorage.setItem("token", data);
+      localStorage.setItem("token", data.token);
 
       navigate("/dashboard");
 

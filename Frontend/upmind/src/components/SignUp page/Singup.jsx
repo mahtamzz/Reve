@@ -77,7 +77,7 @@ export default function Signup() {
         className="
           mt-10 bg-creamtext text-brand-text 
           rounded-xl 
-          px-6 sm:px-14 py-10 
+          px-2 sm:px-14 py-10
           w-full max-w-sm sm:max-w-md md:max-w-lg 
           shadow
         "
@@ -93,7 +93,7 @@ export default function Signup() {
           </Link>
         </p>
 
-        <form className="space-y-8" onSubmit={handleSignup}>
+        <form className="space-y-6" onSubmit={handleSignup}>
           <div>
             <label className="block text-sm mb-2">name</label>
             <input
@@ -139,7 +139,7 @@ export default function Signup() {
           </div>
 
           {error && (
-            <p className="text-red-600 text-sm mt-2">
+            <p className="text-red-600 text-sm">
               {typeof error === "string" ? error : JSON.stringify(error)}
             </p>
           )}
@@ -147,12 +147,12 @@ export default function Signup() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-chocolate text-creamtext py-3 rounded-md mt-6 disabled:opacity-60"
+            className="w-full bg-chocolate text-creamtext py-3 rounded-md disabled:opacity-60"
           >
             {loading ? "Please wait..." : "Sign up"}
           </button>
 
-          <div className="flex items-center gap-2 mt-2">
+          <div className="flex items-center gap-1 mt-2">
             <div className="flex-1 h-px bg-chocolate/40"></div>
             <span className="text-chocolate/70 font-medium">OR</span>
             <div className="flex-1 h-px bg-chocolate/40"></div>
