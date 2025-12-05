@@ -1,6 +1,6 @@
 CREATE TABLE Users (
     id            SERIAL PRIMARY KEY,
-	googleid     INT,
+	googleid     TEXT,
     username     VARCHAR(50),
     email          VARCHAR(100) UNIQUE NOT NULL,
 	password    VARCHAR(255),
