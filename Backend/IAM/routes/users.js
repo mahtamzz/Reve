@@ -14,42 +14,11 @@ const createUserSchema = Joi.object({
     password: Joi.string().min(6).required()
 });
 
-/**
- * @swagger
- * /api/users/register:
- *   post:
- *     summary: Register a new user (sends OTP to email)
- *     tags: [Users]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - username
- *               - email
- *               - password
- *             properties:
- *               username:
- *                 type: string
- *                 example: johndoe
- *               email:
- *                 type: string
- *                 example: john@example.com
- *               password:
- *                 type: string
- *                 example: myStrongPassword123
- *     responses:
- *       201:
- *         description: OTP sent to email
- *       400:
- *         description: Validation error or user already exists
- *       500:
- *         description: Internal server error
- */
+
 router.post('/register', async (req, res) => {
     const { username, email, password } = req.body;
+
+    console.log('Registration attempt:', { username, email, password }); /////////
 
     const joiValidation = createUserSchema.validate(req.body);
     if (joiValidation.error) {
@@ -258,6 +227,40 @@ const generateToken = (data) => {
 module.exports = router;
 
 
+/**
+ * @swagger
+ * /api/users/register:
+ *   post:
+ *     summary: Register a new user (sends OTP to email)
+ *     tags: [Users]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - username
+ *               - email
+ *               - password
+ *             properties:
+ *               username:
+ *                 type: string
+ *                 example: johndoe
+ *               email:
+ *                 type: string
+ *                 example: john@example.com
+ *               password:
+ *                 type: string
+ *                 example: myStrongPassword123
+ *     responses:
+ *       201:
+ *         description: OTP sent to email
+ *       400:
+ *         description: Validation error or user already exists
+ *       500:
+ *         description: Internal server error
+ */
 
 /**
  * @swagger
