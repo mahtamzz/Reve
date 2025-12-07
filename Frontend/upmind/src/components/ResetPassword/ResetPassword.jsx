@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 const CODE_LENGTH = 6;
@@ -12,11 +12,20 @@ export default function ResetPassword() {
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [passwordStrength, setPasswordStrength] = useState("empty");
+
   const inputsRef = useRef([]);
   const location = useLocation();
   const navigate = useNavigate();
 
   const email = location.state?.email;
+
+  // فوکوس خودکار روی خانه‌ی اول کد
+  useEffect(() => {
+    inputsRef.current[0]?.focus();
+  }, []);
 
   const updateCode = (index, value) => {
     setCode((prev) => {
@@ -54,6 +63,27 @@ export default function ResetPassword() {
     }
   };
 
+  // محاسبه‌ی قدرت رمز عبور
+  const evaluatePasswordStrength = (password) => {
+    if (!password) return "empty";
+
+    let score = 0;
+    if (password.length >= 8) score++;
+    if (/[A-Z]/.test(password)) score++;
+    if (/[0-9]/.test(password)) score++;
+    if (/[^A-Za-z0-9]/.test(password)) score++;
+
+    if (score <= 1) return "weak";
+    if (score === 2 || score === 3) return "medium";
+    return "strong";
+  };
+
+  const handleNewPasswordChange = (e) => {
+    const value = e.target.value;
+    setNewPassword(value);
+    setPasswordStrength(evaluatePasswordStrength(value));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
@@ -84,17 +114,20 @@ export default function ResetPassword() {
     try {
       setLoading(true);
 
-      const res = await fetch("http://localhost:3000/api/users/reset-password", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          email,
-          otp: finalCode,
-          newPassword,
-        }),
-      });
+      const res = await fetch(
+        "http://localhost:8080/api/users/reset-password",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            email,
+            otp: finalCode,
+            newPassword,
+          }),
+        }
+      );
 
       const data = await res.json();
       console.log("RESET PASSWORD RESPONSE:", data);
@@ -121,10 +154,41 @@ export default function ResetPassword() {
     navigate("/forgot-password");
   };
 
+  // استایل و متن قدرت پسورد
+  const strengthConfig = {
+    empty: { label: "", bar: "w-0", color: "bg-transparent" },
+    weak: {
+      label: "Weak password",
+      bar: "w-1/3",
+      color: "bg-red-400",
+    },
+    medium: {
+      label: "Medium strength",
+      bar: "w-2/3",
+      color: "bg-amber-400",
+    },
+    strong: {
+      label: "Strong password",
+      bar: "w-full",
+      color: "bg-emerald-500",
+    },
+  };
+
+  const { label, bar, color } = strengthConfig[passwordStrength];
+
   return (
     <div className="min-h-screen bg-loginbg flex flex-col justify-center items-center px-4 font-serif text-brand-text">
       <main className="w-full max-w-xl">
         <div className="bg-creamtext w-full rounded-md shadow px-8 md:px-16 py-10">
+          {/* Step indicator */}
+          <div className="flex justify-between items-center mb-3 text-xs text-gray-500">
+            <span>Step 2 of 2</span>
+            <span className="text-niceblue cursor-pointer" onClick={goBack}>
+              Back to previous step
+            </span>
+          </div>
+
+          {/* Header */}
           <div className="flex flex-col items-center gap-3 mb-6">
             <div className="h-12 w-12 rounded-full bg-loginbg flex items-center justify-center shadow-md border border-creamtext/40">
               <svg
@@ -145,6 +209,9 @@ export default function ResetPassword() {
               <h1 className="tracking-wide text-base md:text-lg font-semibold text-chocolate">
                 RESET YOUR PASSWORD
               </h1>
+              <p className="text-xs text-gray-500 mt-1">
+                Enter the code we sent and choose a new secure password.
+              </p>
             </div>
           </div>
 
@@ -157,9 +224,7 @@ export default function ResetPassword() {
                 {email || "your-email@example.com"}
               </span>
             </p>
-            <p>
-              Enter the code and your new password below.
-            </p>
+            <p>Enter the code and your new password below.</p>
           </div>
 
           {error && (
@@ -168,9 +233,7 @@ export default function ResetPassword() {
             </p>
           )}
           {success && (
-            <p className="text-green-700 text-sm mb-3 text-center">
-              {success}
-            </p>
+            <p className="text-green-700 text-sm mb-3 text-center">{success}</p>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-5">
@@ -194,21 +257,58 @@ export default function ResetPassword() {
 
             {/* New password */}
             <div>
-              <label className="block text-sm mb-2">New password</label>
+              <div className="flex justify-between items-center mb-2">
+                <label className="block text-sm">New password</label>
+                <button
+                  type="button"
+                  className="text-xs text-niceblue hover:underline"
+                  onClick={() =>
+                    setShowNewPassword((prev) => !prev)
+                  }
+                >
+                  {showNewPassword ? "Hide" : "Show"}
+                </button>
+              </div>
               <input
-                type="password"
+                type={showNewPassword ? "text" : "password"}
                 className="w-full bg-transparent border-b border-brand-text/50 outline-none pb-1"
                 value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
+                onChange={handleNewPasswordChange}
                 required
               />
+              {/* Password strength */}
+              <div className="mt-2">
+                <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full ${bar} ${color} transition-all duration-300`}
+                  />
+                </div>
+                {label && (
+                  <p className="mt-1 text-xs text-gray-600">{label}</p>
+                )}
+                <p className="mt-1 text-[11px] text-gray-500">
+                  Use at least 8 characters, including uppercase, numbers and
+                  symbols for a stronger password.
+                </p>
+              </div>
             </div>
 
             {/* Confirm password */}
             <div>
-              <label className="block text-sm mb-2">Confirm password</label>
+              <div className="flex justify-between items-center mb-2">
+                <label className="block text-sm">Confirm password</label>
+                <button
+                  type="button"
+                  className="text-xs text-niceblue hover:underline"
+                  onClick={() =>
+                    setShowConfirmPassword((prev) => !prev)
+                  }
+                >
+                  {showConfirmPassword ? "Hide" : "Show"}
+                </button>
+              </div>
               <input
-                type="password"
+                type={showConfirmPassword ? "text" : "password"}
                 className="w-full bg-transparent border-b border-brand-text/50 outline-none pb-1"
                 value={confirm}
                 onChange={(e) => setConfirm(e.target.value)}

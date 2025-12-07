@@ -79,7 +79,7 @@ router.get('/google/callback',
                 }
             });
 
-            // res.redirect(`http://localhost:5137/dashboard?token=${token}`);
+            res.redirect(`http://localhost:5137/dashboard?token=${token}`);
         } catch (err) {
             console.error("OAuth error:", err);
             res.status(500).json({ error: "OAuth login failed" });

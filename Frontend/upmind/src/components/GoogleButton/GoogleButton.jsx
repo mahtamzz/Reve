@@ -4,7 +4,7 @@ export default function GoogleButton({
 }) {
 
   const handleGoogleClick = () => {
-    window.location.href = `http://localhost:3000/api/auth/google?origin=${origin}`;
+    window.location.href = `http://localhost:8080/api/auth/google?origin=${origin}`;
   };
 
   return (
