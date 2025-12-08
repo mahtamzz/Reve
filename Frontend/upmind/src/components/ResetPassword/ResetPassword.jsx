@@ -115,7 +115,7 @@ export default function ResetPassword() {
       setLoading(true);
 
       const res = await fetch(
-        "http://localhost:8080/api/users/reset-password",
+        "http://localhost:8080/api/routes/reset-password",
         {
           method: "POST",
           headers: {

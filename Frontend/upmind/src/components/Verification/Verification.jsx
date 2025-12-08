@@ -116,7 +116,7 @@ export default function Verification() {
     try {
       setResendLoading(true);
 
-      const res = await fetch("http://localhost:8080/api/users/resend-otp", {
+      const res = await fetch("http://localhost:8080/api/auth/resend-otp", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -173,7 +173,7 @@ export default function Verification() {
     try {
       setLoading(true);
 
-      const res = await fetch("http://localhost:3000/api/users/verify-otp", {
+      const res = await fetch("http://localhost:3000/api/auth/verify-otp", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

@@ -34,7 +34,7 @@ export default function ForgotPassword() {
       setLoading(true);
 
       const res = await fetch(
-        "http://localhost:8080/api/users/forgot-password",
+        "http://localhost:8080/api/auth/forgot-password",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

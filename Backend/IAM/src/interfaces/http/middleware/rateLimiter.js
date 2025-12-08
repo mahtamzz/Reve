@@ -68,7 +68,7 @@
 
 
 const { RateLimiterRedis } = require('rate-limiter-flexible');
-const redisClient = require('../DB/redis');
+const redisClient = require('../../../infrastructure/db/redis');
 
 // Only login limiter
 const loginLimiter = new RateLimiterRedis({

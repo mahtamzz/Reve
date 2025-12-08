@@ -6,19 +6,11 @@ services:
       dockerfile: Dockerfile
     container_name: backend_service
     restart: always
-    environment:
-      - PORT=3000
-      - SESSION_SECRET=supersecret
-      - JWT_KEY=yourjwtkey
-      - PGUSER=postgres
-      - PGPASSWORD=postgres
-      - PGHOST=postgres
-      - PGDATABASE=mydb
-      - PGPORT=5432
-      - REDIS_HOST=redis
+    env_file:
+      - ./IAM/.env
     depends_on:
       redis:
-        condition: service_started   # changed from healthy
+        condition: service_started
       postgres:
         condition: service_healthy
     ports:
