@@ -5,7 +5,8 @@ const Joi = require('joi');
 const jwt = require('jsonwebtoken');
 const pool = require('../DB/postgres');
 const authMiddleware = require('../middleware/auth');
-const { loginRateLimiter, otpRateLimiter } = require('../middleware/rateLimiter');
+// const { loginRateLimiter, otpRateLimiter } = require('../middleware/rateLimiter');
+const { loginRateLimiter } = require('../middleware/rateLimiter');
 const sendOTPEmail = require('../utils/sendEmail');
 const redisClient = require("../DB/redis");
 
@@ -16,7 +17,7 @@ const createUserSchema = Joi.object({
 });
 
 
-router.post('/register', otpRateLimiter, async (req, res) => {
+router.post('/register', async (req, res) => {
     const { username, email, password } = req.body;
 
     console.log('Registration attempt:', { username, email, password }); /////////
@@ -103,7 +104,7 @@ router.post('/verify-otp', async (req, res) => {
     }
 });
 
-router.post('/resend-otp', otpRateLimiter, async (req, res) => {
+router.post('/resend-otp', async (req, res) => {
     const { email } = req.body;
 
     try {

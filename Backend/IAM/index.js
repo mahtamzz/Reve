@@ -23,6 +23,8 @@ app.use(session({
     cookie: { secure: false }   // set secure: true only if using HTTPS
 }));
 
+app.set('trust proxy', true);
+
 // Middleware
 app.use(express.json());
 app.use(passport.initialize());
