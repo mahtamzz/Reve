@@ -26,7 +26,6 @@ export default function ResetPassword() {
     inputsRef.current[0]?.focus();
   }, []);  
 
-  // فوکوس خودکار روی خانه‌ی اول کد
   useEffect(() => {
     inputsRef.current[0]?.focus();
   }, []);
