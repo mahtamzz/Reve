@@ -24,8 +24,8 @@ app.use(express.json());
 app.use(passport.initialize());
 app.use(passport.session());
 
-app.use("/api/users", require("./interfaces/http/routes/user.routes"));
 app.use("/api/auth", require("./interfaces/http/routes/auth.routes"));
+app.use("/api/users", require("./interfaces/http/routes/user.routes"));
 
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 

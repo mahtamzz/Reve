@@ -11,7 +11,7 @@ router.post("/resend-otp", auditMiddleware('RESEND_OTP'), (req, res) => AuthCont
 router.post("/login", auditMiddleware('LOGIN_ATTEMPT'), loginLimiter, (req, res) => AuthController.login(req, res));
 router.post("/forgot-password", (req, res) => AuthController.forgotPassword(req, res));
 router.post("/reset-password", (req, res) => AuthController.resetPassword(req, res));
-
+router.post("/admin/login", auditMiddleware('ADMIN_LOGIN_ATTEMPT'), (req, res) => AuthController.adminLogin);
 
 /* ---------------- GOOGLE AUTH ROUTES ---------------- */
 router.get(

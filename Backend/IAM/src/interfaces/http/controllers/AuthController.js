@@ -1,11 +1,12 @@
 const Register = require("../../../application/useCases/auth/Register");
 const VerifyOtp = require("../../../application/useCases/auth/VerifyOtp");
 const ResendOtp = require("../../../application/useCases/auth/ResendOtp");
-const LoginUser = require("../../../application/useCases/auth/Login");
+const LoginUser = require("../../../application/useCases/auth/UserLogin");
 const ForgotPassword = require("../../../application/useCases/auth/ForgotPassword");
 const ResetPassword = require("../../../application/useCases/auth/ResetPassword");
 const GoogleAuth = require("../../../application/useCases/auth/GoogleAuth");
 const AuthValidator = require("../validators/AuthValidator");
+const AdminLogin = require("../../../application/useCases/auth/AdminLogin");
 
 class AuthController {
 
@@ -83,6 +84,16 @@ class AuthController {
             res.status(500).json({ message: "Google auth failed" });
         }
     }
+
+    async adminLogin(req, res) {
+        try {
+            const { admin, token } = await AdminLogin.execute(req.body);
+            res.json({ admin, token });
+        } catch (err) {
+            res.status(401).json({ message: err.message });
+        }
+    }
+
 }
 
 module.exports = new AuthController();

@@ -92,7 +92,15 @@ CREATE TABLE Audit_Log (
     created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
-
+CREATE TABLE Admins (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(50) NOT NULL,
+    email VARCHAR(100) UNIQUE NOT NULL,
+    password VARCHAR(255) NOT NULL,
+    -- role VARCHAR(50) DEFAULT 'admin', 
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
 
 -- DO $$ 
 -- DECLARE 

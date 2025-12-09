@@ -1,18 +1,39 @@
 const pool = require("../db/postgres");
+const cache = require("../cache/CacheService");
 
 class UserRepository {
     async findByEmail(email) {
-        const result = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
-        return result.rows[0];
+        const cacheKey = `user:${email}`;
+
+        // 1) Try cache
+        const cached = await cache.get(cacheKey);
+        if (cached) return cached;
+
+        // 2) Fetch DB
+        const result = await pool.query(
+            "SELECT * FROM users WHERE email = $1 LIMIT 1",
+            [email]
+        );
+        const user = result.rows[0];
+
+        // 3) Store in cache
+        if (user) await cache.set(cacheKey, user, 300); // 5 minutes
+
+        return user;
     }
 
     async create(user) {
         const result = await pool.query(
             `INSERT INTO users (username, email, password)
-       VALUES ($1, $2, $3) RETURNING *`,
+            VALUES ($1, $2, $3) RETURNING *`,
             [user.username, user.email, user.password]
         );
-        return result.rows[0];
+        const created = result.rows[0];
+
+        // Invalidate any existing cache for this email
+        await cache.del(`user:${created.email}`);
+
+        return created;
     }
 
     async updatePassword(email, hashedPassword) {
@@ -20,6 +41,9 @@ class UserRepository {
             "UPDATE users SET password = $1 WHERE email = $2",
             [hashedPassword, email]
         );
+
+        // Password changed → remove old cached version
+        await cache.del(`user:${email}`);
     }
 
     async findById(id) {
@@ -31,22 +55,39 @@ class UserRepository {
     }
 
     async findByGoogleIdOrEmail(googleId, email) {
+        const cacheKey = `user_google:${googleId || "none"}:${email || "none"}`;
+
+        const cached = await cache.get(cacheKey);
+        if (cached) return cached;
+
         const result = await pool.query(
-            "SELECT * FROM users WHERE googleid = $1 OR email = $2",
+            "SELECT * FROM users WHERE googleid = $1 OR email = $2 LIMIT 1",
             [googleId, email]
         );
-        return result.rows[0];
+
+        const user = result.rows[0];
+
+        if (user) await cache.set(cacheKey, user, 300);
+
+        return user;
     }
 
     async createGoogleUser({ googleid, email, username }) {
         const result = await pool.query(
             `INSERT INTO users (googleid, email, username)
-     VALUES ($1, $2, $3) RETURNING *`,
+            VALUES ($1, $2, $3)
+             RETURNING *`,
             [googleid, email, username]
         );
-        return result.rows[0];
-    }
 
+        const user = result.rows[0];
+
+        // Clear all related cached entries
+        await cache.del(`user:${email}`);
+        await cache.del(`user_google:${googleid}:${email}`);
+
+        return user;
+    }
 }
 
 module.exports = new UserRepository();
