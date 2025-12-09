@@ -3,7 +3,14 @@ const userRepo = require("../../../infrastructure/repositories/UserRepository");
 
 class VerifyOtp {
     async execute({ email, otp }) {
+        console.log("🔍 VerifyOtp called with:");
+        console.log("email:", email);
+        console.log("otp provided:", otp);
+
         const storedOtp = await redis.get(`otp:${email}`);
+        console.log("otp stored in redis:", storedOtp);
+
+        // const storedOtp = await redis.get(`otp:${email}`);
         if (!storedOtp) throw new Error("OTP expired");
         if (storedOtp !== otp) throw new Error("Invalid OTP");
 

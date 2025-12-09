@@ -17,7 +17,7 @@ class Register {
         );
 
         await redis.set(`otp:${email}`, otp, { EX: 600 });
-
+        
         await EmailService.send(email, "Your OTP", otp);
 
         return { message: "OTP sent to email" };

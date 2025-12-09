@@ -1,4 +1,4 @@
-const RegisterUser = require("../../../application/useCases/auth/Register");
+const Register = require("../../../application/useCases/auth/Register");
 const VerifyOtp = require("../../../application/useCases/auth/VerifyOtp");
 const ResendOtp = require("../../../application/useCases/auth/ResendOtp");
 const LoginUser = require("../../../application/useCases/auth/Login");
@@ -14,7 +14,7 @@ class AuthController {
         if (error) return res.status(400).json({ message: error.details[0].message });
 
         try {
-            const result = await RegisterUser.execute(req.body);
+            const result = await Register.execute(req.body);
             res.status(201).json(result);
         } catch (err) {
             res.status(400).json({ message: err.message });
@@ -22,8 +22,8 @@ class AuthController {
     }
 
     async verifyOtp(req, res) {
-        const { error } = AuthValidator.verifyOtp(req.body);
-        if (error) return res.status(400).json({ message: error.details[0].message });
+        // const { error } = AuthValidator.verifyOtp(req.body);
+        // if (error) return res.status(400).json({ message: error.details[0].message });
 
         try {
             const result = await VerifyOtp.execute(req.body);
@@ -34,9 +34,6 @@ class AuthController {
     }
 
     async resendOtp(req, res) {
-        const { error } = AuthValidator.verifyOtp(req.body); // reuse OTP validation
-        if (error) return res.status(400).json({ message: error.details[0].message });
-
         try {
             const result = await ResendOtp.execute(req.body);
             res.json(result);

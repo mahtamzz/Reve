@@ -46,7 +46,7 @@ export default function Signup() {
       }
 
       navigate("/verification", {
-        state: { email: email, userId: data.user_id },
+        state: { email: email },
       });
     } catch (err) {
       console.error(err);
