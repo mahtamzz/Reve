@@ -7,6 +7,8 @@ const ResetPassword = require("../../../application/useCases/auth/ResetPassword"
 const GoogleAuth = require("../../../application/useCases/auth/GoogleAuth");
 const AuthValidator = require("../validators/AuthValidator");
 const AdminLogin = require("../../../application/useCases/auth/AdminLogin");
+const AdminForgotPassword = require("../../../application/useCases/auth/AdminForgotPassword");
+const AdminResetPassword = require("../../../application/useCases/auth/AdminResetPassword");
 
 class AuthController {
 
@@ -91,6 +93,30 @@ class AuthController {
             res.json({ admin, token });
         } catch (err) {
             res.status(401).json({ message: err.message });
+        }
+    }
+
+        async adminForgotPassword(req, res) {
+        const { error } = AuthValidator.forgotPassword(req.body);
+        if (error) return res.status(400).json({ message: error.details[0].message });
+
+        try {
+            const result = await AdminForgotPassword.execute(req.body);
+            res.json(result);
+        } catch (err) {
+            res.status(400).json({ message: err.message });
+        }
+    }
+
+    async adminResetPassword(req, res) {
+        const { error } = AuthValidator.resetPassword(req.body);
+        if (error) return res.status(400).json({ message: error.details[0].message });
+
+        try {
+            const { admin, token } = await AdminResetPassword.execute(req.body);
+            res.json({ admin, token, message: "Admin password reset successfully" });
+        } catch (err) {
+            res.status(400).json({ message: err.message });
         }
     }
 
