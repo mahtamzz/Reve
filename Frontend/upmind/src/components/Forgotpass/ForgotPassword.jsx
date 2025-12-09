@@ -46,7 +46,7 @@ export default function ForgotPassword() {
       console.log("FORGOT PASSWORD RESPONSE:", data);
 
       if (!res.ok) {
-        setError(data.error || "Something went wrong. Please try again.");
+        setError(data.message);
         return;
       }
 
@@ -61,7 +61,7 @@ export default function ForgotPassword() {
       }, 600);
     } catch (err) {
       console.error(err);
-      setError("Something went wrong. Please try again.");
+      setError(err || "Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }

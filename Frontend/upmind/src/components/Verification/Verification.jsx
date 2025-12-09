@@ -3,6 +3,8 @@ import { useNavigate, useLocation } from "react-router-dom";
 
 const CODE_LENGTH = 6;
 const OTP_DURATION = 10 * 60; // 10 minutes in seconds
+const getOtpExpiryKey = (email) => `otpExpiry_${email}`;
+
 
 export default function Verification() {
   const [code, setCode] = useState(Array(CODE_LENGTH).fill(""));
@@ -17,26 +19,45 @@ export default function Verification() {
   const location = useLocation();
   const email = location.state?.email;
 
-  const [timeLeft, setTimeLeft] = useState(() => {
-    // سعی کن از localStorage بخونی
-    const storedExpiry = localStorage.getItem("otpExpiry");
+  const [timeLeft, setTimeLeft] = useState(0);
+  const [otpInitialized, setOtpInitialized] = useState(false); // ⭐️ جدید
 
+  useEffect(() => {
+    inputsRef.current[0]?.focus();
+  }, []);  
+
+  useEffect(() => {
+    if (!email) return;
+  
+    const key = getOtpExpiryKey(email);
+    const storedExpiry = localStorage.getItem(key);
+    const now = Date.now();
+  
     if (storedExpiry) {
       const expiry = parseInt(storedExpiry, 10);
-      const diff = Math.floor((expiry - Date.now()) / 1000); // ثانیه
-
-      // اگر هنوز زمان مونده
-      if (diff > 0) return diff;
-
-      // اگر منقضی شده
-      return 0;
+      const diff = Math.floor((expiry - now) / 1000);
+  
+      if (diff > 0) {
+        // یعنی برای این ایمیل، OTP هنوز اعتبار داره
+        setTimeLeft(diff);
+        setOtpInitialized(true);
+        return;
+      }
     }
-
-    // اگر چیزی تو localStorage نبود، یعنی اولین باره این صفحه رو باز کرده
-    const expiry = Date.now() + OTP_DURATION * 1000;
-    localStorage.setItem("otpExpiry", String(expiry));
-    return OTP_DURATION;
-  });
+  
+    // این ایمیل OTP معتبر نداره → باید یک OTP جدید بفرستیم
+    const sendInitialOtp = async () => {
+      try {
+        await handleResend(); // همین تابعی که برای دکمه Resend داری
+      } finally {
+        setOtpInitialized(true);
+      }
+    };
+  
+    sendInitialOtp();
+  }, [email]);
+  
+  
   
 
   // ------------------ TIMER LOGIC ------------------
@@ -53,7 +74,7 @@ export default function Verification() {
 
   const minutes = String(Math.floor(timeLeft / 60)).padStart(2, "0");
   const seconds = String(timeLeft % 60).padStart(2, "0");
-  const isExpired = timeLeft <= 0;
+  const isExpired = otpInitialized && timeLeft <= 0;
   
 
   // circle progress
@@ -107,38 +128,36 @@ export default function Verification() {
     setError("");
     setSuccess("");
     setResendMessage("");
-
+  
     if (!email) {
       setError("no email found to resend code");
       return;
     }
-
+  
     try {
       setResendLoading(true);
-
+  
       const res = await fetch("http://localhost:8080/api/auth/resend-otp", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
       });
-
+  
       const data = await res.json();
       console.log("RESEND OTP RESPONSE:", data);
-
+  
       if (!res.ok) {
-        setError(data.error || "could not resend code");
+        setError(data.message || data.error || "could not resend code");
         return;
       }
-
+  
       setResendMessage(
         data.message || "A new code has been sent to your email."
       );
+  
       const newExpiry = Date.now() + OTP_DURATION * 1000;
-      localStorage.setItem("otpExpiry", String(newExpiry));
-      setTimeLeft(OTP_DURATION);
-      // ریست تایمر به ۱۰ دقیقه
+      const key = getOtpExpiryKey(email);
+      localStorage.setItem(key, String(newExpiry));
       setTimeLeft(OTP_DURATION);
     } catch (err) {
       console.error(err);
@@ -147,6 +166,7 @@ export default function Verification() {
       setResendLoading(false);
     }
   };
+  
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -299,6 +319,7 @@ export default function Verification() {
               The code has expired. Please click "Resend code" to get a new one.
             </p>
           )}
+
 
           <form onSubmit={handleSubmit}>
             <div className="flex justify-center gap-2 md:gap-3 mb-6">

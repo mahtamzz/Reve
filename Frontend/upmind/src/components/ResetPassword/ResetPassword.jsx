@@ -22,6 +22,10 @@ export default function ResetPassword() {
 
   const email = location.state?.email;
 
+  useEffect(() => {
+    inputsRef.current[0]?.focus();
+  }, []);  
+
   // فوکوس خودکار روی خانه‌ی اول کد
   useEffect(() => {
     inputsRef.current[0]?.focus();
@@ -115,7 +119,7 @@ export default function ResetPassword() {
       setLoading(true);
 
       const res = await fetch(
-        "http://localhost:8080/api/routes/reset-password",
+        "http://localhost:8080/api/auth/reset-password",
         {
           method: "POST",
           headers: {

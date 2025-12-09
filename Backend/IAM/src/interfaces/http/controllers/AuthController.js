@@ -17,6 +17,7 @@ class AuthController {
             const result = await Register.execute(req.body);
             res.status(201).json(result);
         } catch (err) {
+            console.error("REGISTER ERROR:", err); // 👈 این رو اضافه کن
             res.status(400).json({ message: err.message });
         }
     }
