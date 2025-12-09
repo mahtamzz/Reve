@@ -1,7 +1,7 @@
 // src/pages/SignupPage.jsx
 import { useEffect, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import SignupForm from "../components/SignUp page/Singup";
+import SignupForm from "@/components/SignUp page/Singup";
 
 export default function SignupPage() {
   const navigate = useNavigate();

@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import VerificationView from "../components/Verification/Verification";
+import VerificationView from "@/components/Verification/Verification";
 import React from "react";
 
 const CODE_LENGTH = 6;
@@ -19,7 +19,7 @@ const getOtpExpiryKey = (email) => `otpExpiry_${email}`;
   const navigate = useNavigate();
   const location = useLocation();
   const email = location.state?.email;
-  const from = location.state?.from; // مثلا "signup"
+  const from = location.state?.from; 
 
   const [timeLeft, setTimeLeft] = useState(0);
   const [otpInitialized, setOtpInitialized] = useState(false);
@@ -230,7 +230,7 @@ const getOtpExpiryKey = (email) => `otpExpiry_${email}`;
       console.log("VERIFY RESPONSE:", data);
 
       if (!res.ok) {
-        setError(data.error || "invalid code");
+        setError(data.message || "invalid code");
         return;
       }
 

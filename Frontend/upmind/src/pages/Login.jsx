@@ -1,7 +1,7 @@
 // src/pages/LoginPage.jsx
 import { useEffect, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import LoginForm from "../components/Login page/Login";
+import LoginForm from "@/components/Login page/Login";
 import React from "react";
 
 export default function LoginPage() {
