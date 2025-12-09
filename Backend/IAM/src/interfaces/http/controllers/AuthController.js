@@ -81,7 +81,7 @@ class AuthController {
     async googleCallback(req, res) {
         try {
             const { user, token } = await GoogleAuth.execute(req.user);
-            res.redirect(`http://localhost:5137/dashboard?token=${token}`);
+            res.redirect(`http://localhost:5173/dashboard`);
         } catch (err) {
             res.status(500).json({ message: "Google auth failed" });
         }
