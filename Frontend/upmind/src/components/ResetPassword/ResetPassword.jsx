@@ -38,19 +38,36 @@ export default function ResetPassword() {
     });
   };
 
+
   const handleChange = (index, e) => {
     const value = e.target.value.replace(/[^0-9]/g, "");
+  
     if (!value) {
       updateCode(index, "");
       return;
     }
-
+  
     updateCode(index, value.slice(-1));
-
+  
+    // اگر هنوز به input بعدی نرسیده‌ایم، فوکوس را جابه‌جا کن
     if (index < CODE_LENGTH - 1) {
       inputsRef.current[index + 1]?.focus();
     }
+  
+    // اگر آخرین input مقدار گرفت → به‌صورت اتوماتیک Submit کن
+    if (index === CODE_LENGTH - 1 && value) {
+      setTimeout(() => {
+        const finalCode = [...code];
+        finalCode[index] = value.slice(-1);
+  
+        // اگر هر ۶ رقم پر شده بود → Submit کن
+        if (finalCode.join("").length === CODE_LENGTH) {
+          handleSubmit(new Event("submit"));
+        }
+      }, 50);
+    }
   };
+  
 
   const handleKeyDown = (index, e) => {
     if (e.key === "Backspace" && !code[index] && index > 0) {

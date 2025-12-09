@@ -5,7 +5,6 @@ const CODE_LENGTH = 6;
 const OTP_DURATION = 10 * 60; // 10 minutes in seconds
 const getOtpExpiryKey = (email) => `otpExpiry_${email}`;
 
-
 export default function Verification() {
   const [code, setCode] = useState(Array(CODE_LENGTH).fill(""));
   const [error, setError] = useState("");
@@ -18,64 +17,74 @@ export default function Verification() {
   const navigate = useNavigate();
   const location = useLocation();
   const email = location.state?.email;
+  const from = location.state?.from; // مثلا "signup"
 
   const [timeLeft, setTimeLeft] = useState(0);
-  const [otpInitialized, setOtpInitialized] = useState(false); // ⭐️ جدید
+  const [otpInitialized, setOtpInitialized] = useState(false);
 
-  useEffect(() => {
-    inputsRef.current[0]?.focus();
-  }, []);  
-
+  // ------------------ OTP INIT (localStorage + signup flow) ------------------
   useEffect(() => {
     if (!email) return;
-  
+
     const key = getOtpExpiryKey(email);
     const storedExpiry = localStorage.getItem(key);
     const now = Date.now();
-  
+
     if (storedExpiry) {
       const expiry = parseInt(storedExpiry, 10);
       const diff = Math.floor((expiry - now) / 1000);
-  
+
       if (diff > 0) {
-        // یعنی برای این ایمیل، OTP هنوز اعتبار داره
+        // برای این ایمیل، یک OTP معتبر وجود دارد
         setTimeLeft(diff);
         setOtpInitialized(true);
         return;
       }
     }
-  
-    // این ایمیل OTP معتبر نداره → باید یک OTP جدید بفرستیم
+
+    // اگر از Signup آمده‌ایم، یعنی بک‌اند همین الان OTP فرستاده
+    if (from === "signup") {
+      const newExpiry = Date.now() + OTP_DURATION * 1000;
+      localStorage.setItem(key, String(newExpiry));
+      setTimeLeft(OTP_DURATION);
+      setOtpInitialized(true);
+      return;
+    }
+
+    // در غیر این صورت: این ایمیل OTP معتبر ندارد → خودکار یک OTP جدید بفرست
     const sendInitialOtp = async () => {
       try {
-        await handleResend(); // همین تابعی که برای دکمه Resend داری
+        await handleResend(); // از همان تابع resend استفاده می‌کنیم
       } finally {
         setOtpInitialized(true);
       }
     };
-  
+
     sendInitialOtp();
-  }, [email]);
-  
-  
-  
+  }, [email, from]);
 
   // ------------------ TIMER LOGIC ------------------
   useEffect(() => {
     if (timeLeft <= 0) return;
-  
+
     const interval = setInterval(() => {
       setTimeLeft((prev) => prev - 1);
     }, 1000);
-  
+
     return () => clearInterval(interval);
   }, [timeLeft]);
-  
 
   const minutes = String(Math.floor(timeLeft / 60)).padStart(2, "0");
   const seconds = String(timeLeft % 60).padStart(2, "0");
   const isExpired = otpInitialized && timeLeft <= 0;
-  
+
+  // ------------------ AUTO FOCUS ON FIRST INPUT ------------------
+  useEffect(() => {
+    // وقتی OTP آماده شد و هنوز منقضی نشده، فوکوس روی input اول
+    if (otpInitialized && !isExpired) {
+      inputsRef.current[0]?.focus();
+    }
+  }, [otpInitialized, isExpired]);
 
   // circle progress
   const radius = 40;
@@ -88,17 +97,41 @@ export default function Verification() {
     navigate("/");
   }
 
+  // ------------------ CODE INPUT HANDLERS ------------------
+  const updateCode = (index, value) => {
+    setCode((prev) => {
+      const next = [...prev];
+      next[index] = value;
+      return next;
+    });
+  };
+
   const handleChange = (index, e) => {
     const value = e.target.value.replace(/[^0-9]/g, "");
+
     if (!value) {
       updateCode(index, "");
       return;
     }
 
-    updateCode(index, value.slice(-1));
+    const digit = value.slice(-1);
+    const newCode = [...code];
+    newCode[index] = digit;
+    setCode(newCode);
 
+    // فوکوس به input بعدی
     if (index < CODE_LENGTH - 1) {
       inputsRef.current[index + 1]?.focus();
+    }
+
+    // اگر آخرین input مقدار گرفت → اگر 6 رقم کامل شده بود، خودکار submit کن
+    if (index === CODE_LENGTH - 1) {
+      const finalCode = newCode.join("");
+
+      if (finalCode.length === CODE_LENGTH) {
+        // بدون نیاز به event واقعی
+        handleSubmit(undefined, finalCode);
+      }
     }
   };
 
@@ -116,45 +149,38 @@ export default function Verification() {
     }
   };
 
-  const updateCode = (index, value) => {
-    setCode((prev) => {
-      const next = [...prev];
-      next[index] = value;
-      return next;
-    });
-  };
-
+  // ------------------ RESEND ------------------
   const handleResend = async () => {
     setError("");
     setSuccess("");
     setResendMessage("");
-  
+
     if (!email) {
       setError("no email found to resend code");
       return;
     }
-  
+
     try {
       setResendLoading(true);
-  
+
       const res = await fetch("http://localhost:8080/api/auth/resend-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
       });
-  
+
       const data = await res.json();
       console.log("RESEND OTP RESPONSE:", data);
-  
+
       if (!res.ok) {
         setError(data.message || data.error || "could not resend code");
         return;
       }
-  
+
       setResendMessage(
         data.message || "A new code has been sent to your email."
       );
-  
+
       const newExpiry = Date.now() + OTP_DURATION * 1000;
       const key = getOtpExpiryKey(email);
       localStorage.setItem(key, String(newExpiry));
@@ -166,10 +192,10 @@ export default function Verification() {
       setResendLoading(false);
     }
   };
-  
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  // ------------------ SUBMIT (VERIFY) ------------------
+  const handleSubmit = async (e, overrideCode) => {
+    if (e) e.preventDefault();
     setError("");
     setSuccess("");
 
@@ -178,7 +204,7 @@ export default function Verification() {
       return;
     }
 
-    const finalCode = code.join("");
+    const finalCode = overrideCode ?? code.join("");
 
     if (!email) {
       setError("no such email found");
@@ -228,28 +254,26 @@ export default function Verification() {
     }
   };
 
+  // ------------------ JSX ------------------
   return (
     <div className="min-h-screen bg-loginbg flex flex-col justify-center items-center px-4">
       <main className="w-full max-w-xl">
         <div className="bg-creamtext w-full rounded-md shadow px-8 md:px-16 py-10">
           {/* HEADER + CIRCULAR TIMER */}
           <div className="flex flex-col items-center gap-3 mb-6">
-            {/* دایره‌ی تایمر */}
             <div className="relative w-24 h-24">
               <svg
                 viewBox="0 0 100 100"
                 className="w-24 h-24 transform -rotate-90"
               >
-                {/* پس‌زمینه‌ی دایره */}
                 <circle
                   cx="50"
                   cy="50"
                   r={radius}
-                  stroke="rgba(34,197,94,0.2)" // سبز کم‌رنگ
+                  stroke="rgba(34,197,94,0.2)"
                   strokeWidth="8"
                   fill="none"
                 />
-                {/* دایره‌ی پرشونده */}
                 <circle
                   cx="50"
                   cy="50"
@@ -263,9 +287,8 @@ export default function Verification() {
                 />
               </svg>
 
-              {/* متن داخل دایره */}
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-xs text-gray-500 mb-0.5">time left </span>
+                <span className="text-xs text-gray-500 mb-0.5">time left</span>
                 <span className="text-sm font-semibold text-emerald-600">
                   {minutes}:{seconds}
                 </span>
@@ -307,7 +330,9 @@ export default function Verification() {
             </p>
           )}
           {success && (
-            <p className="text-green-700 text-sm mb-2 text-center">{success}</p>
+            <p className="text-green-700 text-sm mb-2 text-center">
+              {success}
+            </p>
           )}
           {resendMessage && (
             <p className="text-emerald-600 text-xs mb-2 text-center">
@@ -319,7 +344,6 @@ export default function Verification() {
               The code has expired. Please click "Resend code" to get a new one.
             </p>
           )}
-
 
           <form onSubmit={handleSubmit}>
             <div className="flex justify-center gap-2 md:gap-3 mb-6">
