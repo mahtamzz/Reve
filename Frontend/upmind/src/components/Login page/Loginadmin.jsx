@@ -2,7 +2,7 @@ import { Link, NavLink, useNavigate } from "react-router-dom";
 import GoogleButton from "../GoogleButton/GoogleButton";
 import { useEffect, useState, useRef } from "react";
 
-export default function Login() {
+export default function LoginAdmin() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -106,9 +106,10 @@ export default function Login() {
           ${mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"}
         `}
       >
-        <h1 className="text-center text-3xl text-chocolate mb-10">
-          Login
+        <h1 className="text-center text-3xl text-chocolate mb-5">
+          Login 
         </h1>
+        <p className="text-center text-gray mb-5">Admin</p>
 
         <form className="space-y-8" onSubmit={handleLogin}>
 

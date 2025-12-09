@@ -1,29 +1,201 @@
-// src/components/auth/ResetPasswordView.jsx
+import { useRef, useState, useEffect } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 
-export default function ResetPasswordView({
-  CODE_LENGTH,
-  code,
-  inputsRef,
-  newPassword,
-  confirm,
-  error,
-  success,
-  loading,
-  showNewPassword,
-  showConfirmPassword,
-  passwordLabel,
-  passwordBarClass,
-  passwordColorClass,
-  email,
-  onOtpChange,
-  onOtpKeyDown,
-  onNewPasswordChange,
-  onConfirmChange,
-  onToggleShowNewPassword,
-  onToggleShowConfirmPassword,
-  onSubmit,
-  onGoBack,
-}) {
+const CODE_LENGTH = 6;
+
+export default function ResetPassword() {
+  const [code, setCode] = useState(Array(CODE_LENGTH).fill(""));
+  const [newPassword, setNewPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [passwordStrength, setPasswordStrength] = useState("empty");
+
+  const inputsRef = useRef([]);
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const email = location.state?.email;
+
+  useEffect(() => {
+    inputsRef.current[0]?.focus();
+  }, []);  
+
+  useEffect(() => {
+    inputsRef.current[0]?.focus();
+  }, []);
+
+  const updateCode = (index, value) => {
+    setCode((prev) => {
+      const next = [...prev];
+      next[index] = value;
+      return next;
+    });
+  };
+
+
+  const handleChange = (index, e) => {
+    const value = e.target.value.replace(/[^0-9]/g, "");
+  
+    if (!value) {
+      updateCode(index, "");
+      return;
+    }
+  
+    updateCode(index, value.slice(-1));
+  
+    // اگر هنوز به input بعدی نرسیده‌ایم، فوکوس را جابه‌جا کن
+    if (index < CODE_LENGTH - 1) {
+      inputsRef.current[index + 1]?.focus();
+    }
+  
+    // // اگر آخرین input مقدار گرفت → به‌صورت اتوماتیک Submit کن
+    // if (index === CODE_LENGTH - 1 && value) {
+    //   setTimeout(() => {
+    //     const finalCode = [...code];
+    //     finalCode[index] = value.slice(-1);
+  
+    //     // اگر هر ۶ رقم پر شده بود → Submit کن
+    //     if (finalCode.join("").length === CODE_LENGTH) {
+    //       handleSubmit(new Event("submit"));
+    //     }
+    //   }, 50);
+    // }
+  };
+  
+
+  const handleKeyDown = (index, e) => {
+    if (e.key === "Backspace" && !code[index] && index > 0) {
+      inputsRef.current[index - 1]?.focus();
+    }
+
+    if (e.key === "ArrowLeft" && index > 0) {
+      inputsRef.current[index - 1]?.focus();
+    }
+
+    if (e.key === "ArrowRight" && index < CODE_LENGTH - 1) {
+      inputsRef.current[index + 1]?.focus();
+    }
+  };
+
+  // محاسبه‌ی قدرت رمز عبور
+  const evaluatePasswordStrength = (password) => {
+    if (!password) return "empty";
+
+    let score = 0;
+    if (password.length >= 8) score++;
+    if (/[A-Z]/.test(password)) score++;
+    if (/[0-9]/.test(password)) score++;
+    if (/[^A-Za-z0-9]/.test(password)) score++;
+
+    if (score <= 1) return "weak";
+    if (score === 2 || score === 3) return "medium";
+    return "strong";
+  };
+
+  const handleNewPasswordChange = (e) => {
+    const value = e.target.value;
+    setNewPassword(value);
+    setPasswordStrength(evaluatePasswordStrength(value));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+    setSuccess("");
+
+    const finalCode = code.join("");
+
+    if (!email) {
+      setError("no email found for reset");
+      return;
+    }
+
+    if (finalCode.length !== CODE_LENGTH) {
+      setError("code must be 6 digits");
+      return;
+    }
+
+    if (!newPassword || newPassword.length < 6) {
+      setError("password must be at least 6 characters");
+      return;
+    }
+
+    if (newPassword !== confirm) {
+      setError("passwords do not match");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const res = await fetch(
+        "http://localhost:8080/api/auth/reset-password",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            email,
+            otp: finalCode,
+            newPassword,
+          }),
+        }
+      );
+
+      const data = await res.json();
+      console.log("RESET PASSWORD RESPONSE:", data);
+
+      if (!res.ok) {
+        setError(data.error || "invalid code or password");
+        return;
+      }
+
+      setSuccess(data.message || "Password reset successfully.");
+
+      setTimeout(() => {
+        navigate("/login");
+      }, 1000);
+    } catch (err) {
+      console.error(err);
+      setError("there is a problem");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const goBack = () => {
+    navigate("/forgot-password");
+  };
+
+  // استایل و متن قدرت پسورد
+  const strengthConfig = {
+    empty: { label: "", bar: "w-0", color: "bg-transparent" },
+    weak: {
+      label: "Weak password",
+      bar: "w-1/3",
+      color: "bg-red-400",
+    },
+    medium: {
+      label: "Medium strength",
+      bar: "w-2/3",
+      color: "bg-amber-400",
+    },
+    strong: {
+      label: "Strong password",
+      bar: "w-full",
+      color: "bg-emerald-500",
+    },
+  };
+
+  const { label, bar, color } = strengthConfig[passwordStrength];
+
   return (
     <div className="min-h-screen bg-loginbg flex flex-col justify-center items-center px-4 font-serif text-brand-text">
       <main className="w-full max-w-xl">
@@ -31,10 +203,7 @@ export default function ResetPasswordView({
           {/* Step indicator */}
           <div className="flex justify-between items-center mb-3 text-xs text-gray-500">
             <span>Step 2 of 2</span>
-            <span
-              className="text-niceblue cursor-pointer"
-              onClick={onGoBack}
-            >
+            <span className="text-niceblue cursor-pointer" onClick={goBack}>
               Back to previous step
             </span>
           </div>
@@ -84,12 +253,10 @@ export default function ResetPasswordView({
             </p>
           )}
           {success && (
-            <p className="text-green-700 text-sm mb-3 text-center">
-              {success}
-            </p>
+            <p className="text-green-700 text-sm mb-3 text-center">{success}</p>
           )}
 
-          <form onSubmit={onSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-5">
             {/* OTP inputs */}
             <div className="flex justify-center gap-2 md:gap-3 mb-4">
               {Array.from({ length: CODE_LENGTH }).map((_, index) => (
@@ -100,8 +267,8 @@ export default function ResetPasswordView({
                   inputMode="numeric"
                   maxLength={1}
                   value={code[index]}
-                  onChange={(e) => onOtpChange(index, e)}
-                  onKeyDown={(e) => onOtpKeyDown(index, e)}
+                  onChange={(e) => handleChange(index, e)}
+                  onKeyDown={(e) => handleKeyDown(index, e)}
                   className="w-10 h-12 md:w-12 md:h-14 border border-chocolate/30 rounded-md text-center text-lg md:text-xl tracking-widest bg-white
                              focus:outline-none focus:ring-2 focus:ring-niceblue focus:border-niceblue"
                 />
@@ -110,12 +277,14 @@ export default function ResetPasswordView({
 
             {/* New password */}
             <div>
-              <div className="flex justify_between items-center mb-2">
+              <div className="flex justify-between items-center mb-2">
                 <label className="block text-sm">New password</label>
                 <button
                   type="button"
                   className="text-xs text-niceblue hover:underline"
-                  onClick={onToggleShowNewPassword}
+                  onClick={() =>
+                    setShowNewPassword((prev) => !prev)
+                  }
                 >
                   {showNewPassword ? "Hide" : "Show"}
                 </button>
@@ -124,18 +293,18 @@ export default function ResetPasswordView({
                 type={showNewPassword ? "text" : "password"}
                 className="w-full bg-transparent border-b border-brand-text/50 outline-none pb-1"
                 value={newPassword}
-                onChange={onNewPasswordChange}
+                onChange={handleNewPasswordChange}
                 required
               />
               {/* Password strength */}
               <div className="mt-2">
                 <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
                   <div
-                    className={`h-full ${passwordBarClass} ${passwordColorClass} transition-all duration-300`}
+                    className={`h-full ${bar} ${color} transition-all duration-300`}
                   />
                 </div>
-                {passwordLabel && (
-                  <p className="mt-1 text-xs text-gray-600">{passwordLabel}</p>
+                {label && (
+                  <p className="mt-1 text-xs text-gray-600">{label}</p>
                 )}
                 <p className="mt-1 text-[11px] text-gray-500">
                   Use at least 8 characters, including uppercase, numbers and
@@ -151,7 +320,9 @@ export default function ResetPasswordView({
                 <button
                   type="button"
                   className="text-xs text-niceblue hover:underline"
-                  onClick={onToggleShowConfirmPassword}
+                  onClick={() =>
+                    setShowConfirmPassword((prev) => !prev)
+                  }
                 >
                   {showConfirmPassword ? "Hide" : "Show"}
                 </button>
@@ -160,7 +331,7 @@ export default function ResetPasswordView({
                 type={showConfirmPassword ? "text" : "password"}
                 className="w-full bg-transparent border-b border-brand-text/50 outline-none pb-1"
                 value={confirm}
-                onChange={onConfirmChange}
+                onChange={(e) => setConfirm(e.target.value)}
                 required
               />
             </div>
@@ -176,7 +347,7 @@ export default function ResetPasswordView({
 
           <div className="mt-6 text-center text-sm">
             <button
-              onClick={onGoBack}
+              onClick={goBack}
               className="text-niceblue hover:underline"
               type="button"
             >
