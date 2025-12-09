@@ -45,9 +45,8 @@ export default function Signup() {
         return;
       }
 
-      navigate("/verification", {
-        state: { email: email },
-      });
+      navigate("/verification", { state: { email, from: "signup" } });
+
     } catch (err) {
       console.error(err);
       setError("there is a problem. try again.");
