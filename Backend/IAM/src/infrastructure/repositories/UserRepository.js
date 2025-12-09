@@ -37,13 +37,15 @@ class UserRepository {
     }
 
     async updatePassword(email, hashedPassword) {
-        await pool.query(
-            "UPDATE users SET password = $1 WHERE email = $2",
+        const result = await pool.query(
+            "UPDATE users SET password = $1 WHERE email = $2 RETURNING id, username, email",
             [hashedPassword, email]
         );
 
         // Password changed → remove old cached version
         await cache.del(`user:${email}`);
+
+        return result.rows[0]; // now this will be the updated user
     }
 
     async findById(id) {

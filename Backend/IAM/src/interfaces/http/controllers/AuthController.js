@@ -1,7 +1,7 @@
 const Register = require("../../../application/useCases/auth/Register");
 const VerifyOtp = require("../../../application/useCases/auth/VerifyOtp");
 const ResendOtp = require("../../../application/useCases/auth/ResendOtp");
-const LoginUser = require("../../../application/useCases/auth/UserLogin");
+const UserLogin = require("../../../application/useCases/auth/UserLogin");
 const ForgotPassword = require("../../../application/useCases/auth/ForgotPassword");
 const ResetPassword = require("../../../application/useCases/auth/ResetPassword");
 const GoogleAuth = require("../../../application/useCases/auth/GoogleAuth");
@@ -40,12 +40,12 @@ class AuthController {
         }
     }
 
-    async login(req, res) {
+    async userLogin(req, res) {
         const { error } = AuthValidator.login(req.body);
         if (error) return res.status(400).json({ message: error.details[0].message });
 
         try {
-            const { user, token }= await LoginUser.execute(req.body);
+            const { user, token }= await UserLogin.execute(req.body);
             res.json(user, token);
         } catch (err) {
             res.status(401).json({ message: err.message });

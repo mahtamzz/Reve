@@ -82,7 +82,9 @@ const loginLimiter = new RateLimiterRedis({
 const makeMiddleware = limiter => {
     return async (req, res, next) => {
         const ip = req.ip;
-
+        console.log("req.ip:", req.ip);
+        console.log("x-real-ip:", req.headers["x-real-ip"]);
+        console.log("x-forwarded-for:", req.headers["x-forwarded-for"]);
         try {
             await limiter.consume(ip);   // Only limit by IP
             next();
