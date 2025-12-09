@@ -134,7 +134,9 @@ function LoginAdmin() {
               <button
                 type="button"
                 className="text-niceblue underline"
-                onClick={() => navigate("/forgot-password")}
+                onClick={() =>
+                  navigate("/forgot-password", { state: { role: "admin" } })
+                }
               >
                 forgot password?
               </button>

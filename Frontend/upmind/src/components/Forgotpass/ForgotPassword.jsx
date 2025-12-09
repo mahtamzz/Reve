@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import React from "react";
 
 function ForgotPassword() {
@@ -10,8 +10,10 @@ function ForgotPassword() {
 
   const inputRef = useRef(null);
   const navigate = useNavigate();
+  const location = useLocation();
 
-  // Focus on email input automatically
+  const role = location.state?.role || "user";
+
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
@@ -34,20 +36,22 @@ function ForgotPassword() {
     try {
       setLoading(true);
 
-      const res = await fetch(
-        "http://localhost:8080/api/auth/forgot-password",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email }),
-        }
-      );
+      const endpoint =
+        role === "admin"
+          ? "http://localhost:8080/api/auth/admin/forgot-password"
+          : "http://localhost:8080/api/auth/forgot-password";
+
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
 
       const data = await res.json();
       console.log("FORGOT PASSWORD RESPONSE:", data);
 
       if (!res.ok) {
-        setError(data.message);
+        setError(data.message || "Something went wrong");
         return;
       }
 
@@ -56,13 +60,13 @@ function ForgotPassword() {
           "If this email exists, a reset code has been sent to your inbox."
       );
 
-      // Small delay for UX
+      // role رو هم برای مرحله بعد می‌بریم
       setTimeout(() => {
-        navigate("/reset-password", { state: { email } });
+        navigate("/reset-password", { state: { email, role } });
       }, 600);
     } catch (err) {
       console.error(err);
-      setError(err || "Something went wrong. Please try again.");
+      setError("Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -89,7 +93,6 @@ function ForgotPassword() {
 
       {/* Card */}
       <div className="mt-16 bg-creamtext text-brand-text rounded-xl px-8 sm:px-10 py-10 w-full max-w-[460px] shadow">
-
         {/* Step indicator */}
         <div className="flex justify-between items-center mb-4 text-xs text-gray-500">
           <span>Step 1 of 2</span>
@@ -163,4 +166,5 @@ function ForgotPassword() {
     </div>
   );
 }
-export default React.memo(ForgotPassword)
+
+export default React.memo(ForgotPassword);

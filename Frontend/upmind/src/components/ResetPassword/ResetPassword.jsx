@@ -22,10 +22,7 @@ function ResetPassword() {
   const navigate = useNavigate();
 
   const email = location.state?.email;
-
-  useEffect(() => {
-    inputsRef.current[0]?.focus();
-  }, []);  
+  const role = location.state?.role || "user"; // 👈 نقش را از state می‌گیریم
 
   useEffect(() => {
     inputsRef.current[0]?.focus();
@@ -39,36 +36,20 @@ function ResetPassword() {
     });
   };
 
-
   const handleChange = (index, e) => {
     const value = e.target.value.replace(/[^0-9]/g, "");
-  
+
     if (!value) {
       updateCode(index, "");
       return;
     }
-  
+
     updateCode(index, value.slice(-1));
-  
-    // اگر هنوز به input بعدی نرسیده‌ایم، فوکوس را جابه‌جا کن
+
     if (index < CODE_LENGTH - 1) {
       inputsRef.current[index + 1]?.focus();
     }
-  
-    // // اگر آخرین input مقدار گرفت → به‌صورت اتوماتیک Submit کن
-    // if (index === CODE_LENGTH - 1 && value) {
-    //   setTimeout(() => {
-    //     const finalCode = [...code];
-    //     finalCode[index] = value.slice(-1);
-  
-    //     // اگر هر ۶ رقم پر شده بود → Submit کن
-    //     if (finalCode.join("").length === CODE_LENGTH) {
-    //       handleSubmit(new Event("submit"));
-    //     }
-    //   }, 50);
-    // }
   };
-  
 
   const handleKeyDown = (index, e) => {
     if (e.key === "Backspace" && !code[index] && index > 0) {
@@ -84,7 +65,6 @@ function ResetPassword() {
     }
   };
 
-  // محاسبه‌ی قدرت رمز عبور
   const evaluatePasswordStrength = (password) => {
     if (!password) return "empty";
 
@@ -135,20 +115,23 @@ function ResetPassword() {
     try {
       setLoading(true);
 
-      const res = await fetch(
-        "http://localhost:8080/api/auth/reset-password",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            email,
-            otp: finalCode,
-            newPassword,
-          }),
-        }
-      );
+      // 👇 اینجا بر اساس role، endpoint را انتخاب می‌کنیم
+      const endpoint =
+        role === "admin"
+          ? "http://localhost:8080/api/auth/admin/reset-password"
+          : "http://localhost:8080/api/auth/reset-password";
+
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email,
+          otp: finalCode,
+          newPassword,
+        }),
+      });
 
       const data = await res.json();
       console.log("RESET PASSWORD RESPONSE:", data);
@@ -161,6 +144,7 @@ function ResetPassword() {
       setSuccess(data.message || "Password reset successfully.");
 
       setTimeout(() => {
+        // 👇 اگر خواستی اینجا هم می‌تونی بر اساس role به login admin یا user جدا بری
         navigate("/login");
       }, 1000);
     } catch (err) {
@@ -172,10 +156,10 @@ function ResetPassword() {
   };
 
   const goBack = () => {
-    navigate("/forgot-password");
+    // 👈 نقش را هم برمی‌گردانیم عقب
+    navigate("/forgot-password", { state: { role } });
   };
 
-  // استایل و متن قدرت پسورد
   const strengthConfig = {
     empty: { label: "", bar: "w-0", color: "bg-transparent" },
     weak: {
@@ -278,14 +262,12 @@ function ResetPassword() {
 
             {/* New password */}
             <div>
-              <div className="flex justify-between items-center mb-2">
+              <div className="flex justify بين items-center mb-2">
                 <label className="block text-sm">New password</label>
                 <button
                   type="button"
                   className="text-xs text-niceblue hover:underline"
-                  onClick={() =>
-                    setShowNewPassword((prev) => !prev)
-                  }
+                  onClick={() => setShowNewPassword((prev) => !prev)}
                 >
                   {showNewPassword ? "Hide" : "Show"}
                 </button>
