@@ -1,103 +1,35 @@
 import { useRef, useState, useEffect } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 const CODE_LENGTH = 6;
-const OTP_DURATION = 10 * 60; // 10 minutes in seconds
-const getOtpExpiryKey = (email) => `otpExpiry_${email}`;
 
-export default function Verification() {
+export default function ResetPassword() {
   const [code, setCode] = useState(Array(CODE_LENGTH).fill(""));
+  const [newPassword, setNewPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
-  const [resendLoading, setResendLoading] = useState(false);
-  const [resendMessage, setResendMessage] = useState("");
+
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [passwordStrength, setPasswordStrength] = useState("empty");
 
   const inputsRef = useRef([]);
-  const navigate = useNavigate();
   const location = useLocation();
+  const navigate = useNavigate();
+
   const email = location.state?.email;
-  const from = location.state?.from; // مثلا "signup"
 
-  const [timeLeft, setTimeLeft] = useState(0);
-  const [otpInitialized, setOtpInitialized] = useState(false);
-
-  // ------------------ OTP INIT (localStorage + signup flow) ------------------
   useEffect(() => {
-    if (!email) return;
+    inputsRef.current[0]?.focus();
+  }, []);  
 
-    const key = getOtpExpiryKey(email);
-    const storedExpiry = localStorage.getItem(key);
-    const now = Date.now();
-
-    if (storedExpiry) {
-      const expiry = parseInt(storedExpiry, 10);
-      const diff = Math.floor((expiry - now) / 1000);
-
-      if (diff > 0) {
-        // برای این ایمیل، یک OTP معتبر وجود دارد
-        setTimeLeft(diff);
-        setOtpInitialized(true);
-        return;
-      }
-    }
-
-    // اگر از Signup آمده‌ایم، یعنی بک‌اند همین الان OTP فرستاده
-    if (from === "signup") {
-      const newExpiry = Date.now() + OTP_DURATION * 1000;
-      localStorage.setItem(key, String(newExpiry));
-      setTimeLeft(OTP_DURATION);
-      setOtpInitialized(true);
-      return;
-    }
-
-    // در غیر این صورت: این ایمیل OTP معتبر ندارد → خودکار یک OTP جدید بفرست
-    const sendInitialOtp = async () => {
-      try {
-        await handleResend(); // از همان تابع resend استفاده می‌کنیم
-      } finally {
-        setOtpInitialized(true);
-      }
-    };
-
-    sendInitialOtp();
-  }, [email, from]);
-
-  // ------------------ TIMER LOGIC ------------------
   useEffect(() => {
-    if (timeLeft <= 0) return;
+    inputsRef.current[0]?.focus();
+  }, []);
 
-    const interval = setInterval(() => {
-      setTimeLeft((prev) => prev - 1);
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [timeLeft]);
-
-  const minutes = String(Math.floor(timeLeft / 60)).padStart(2, "0");
-  const seconds = String(timeLeft % 60).padStart(2, "0");
-  const isExpired = otpInitialized && timeLeft <= 0;
-
-  // ------------------ AUTO FOCUS ON FIRST INPUT ------------------
-  useEffect(() => {
-    // وقتی OTP آماده شد و هنوز منقضی نشده، فوکوس روی input اول
-    if (otpInitialized && !isExpired) {
-      inputsRef.current[0]?.focus();
-    }
-  }, [otpInitialized, isExpired]);
-
-  // circle progress
-  const radius = 40;
-  const circumference = 2 * Math.PI * radius;
-  const progress = timeLeft / OTP_DURATION; // از ۱ به ۰
-  const strokeDashoffset = circumference * (1 - progress);
-
-  function goback(e) {
-    e.preventDefault();
-    navigate("/");
-  }
-
-  // ------------------ CODE INPUT HANDLERS ------------------
   const updateCode = (index, value) => {
     setCode((prev) => {
       const next = [...prev];
@@ -106,34 +38,36 @@ export default function Verification() {
     });
   };
 
+
   const handleChange = (index, e) => {
     const value = e.target.value.replace(/[^0-9]/g, "");
-
+  
     if (!value) {
       updateCode(index, "");
       return;
     }
-
-    const digit = value.slice(-1);
-    const newCode = [...code];
-    newCode[index] = digit;
-    setCode(newCode);
-
-    // فوکوس به input بعدی
+  
+    updateCode(index, value.slice(-1));
+  
+    // اگر هنوز به input بعدی نرسیده‌ایم، فوکوس را جابه‌جا کن
     if (index < CODE_LENGTH - 1) {
       inputsRef.current[index + 1]?.focus();
     }
-
-    // اگر آخرین input مقدار گرفت → اگر 6 رقم کامل شده بود، خودکار submit کن
-    if (index === CODE_LENGTH - 1) {
-      const finalCode = newCode.join("");
-
-      if (finalCode.length === CODE_LENGTH) {
-        // بدون نیاز به event واقعی
-        handleSubmit(undefined, finalCode);
-      }
-    }
+  
+    // // اگر آخرین input مقدار گرفت → به‌صورت اتوماتیک Submit کن
+    // if (index === CODE_LENGTH - 1 && value) {
+    //   setTimeout(() => {
+    //     const finalCode = [...code];
+    //     finalCode[index] = value.slice(-1);
+  
+    //     // اگر هر ۶ رقم پر شده بود → Submit کن
+    //     if (finalCode.join("").length === CODE_LENGTH) {
+    //       handleSubmit(new Event("submit"));
+    //     }
+    //   }, 50);
+    // }
   };
+  
 
   const handleKeyDown = (index, e) => {
     if (e.key === "Backspace" && !code[index] && index > 0) {
@@ -149,103 +83,85 @@ export default function Verification() {
     }
   };
 
-  // ------------------ RESEND ------------------
-  const handleResend = async () => {
-    setError("");
-    setSuccess("");
-    setResendMessage("");
+  // محاسبه‌ی قدرت رمز عبور
+  const evaluatePasswordStrength = (password) => {
+    if (!password) return "empty";
 
-    if (!email) {
-      setError("no email found to resend code");
-      return;
-    }
+    let score = 0;
+    if (password.length >= 8) score++;
+    if (/[A-Z]/.test(password)) score++;
+    if (/[0-9]/.test(password)) score++;
+    if (/[^A-Za-z0-9]/.test(password)) score++;
 
-    try {
-      setResendLoading(true);
-
-      const res = await fetch("http://localhost:8080/api/auth/resend-otp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-      });
-
-      const data = await res.json();
-      console.log("RESEND OTP RESPONSE:", data);
-
-      if (!res.ok) {
-        setError(data.message || data.error || "could not resend code");
-        return;
-      }
-
-      setResendMessage(
-        data.message || "A new code has been sent to your email."
-      );
-
-      const newExpiry = Date.now() + OTP_DURATION * 1000;
-      const key = getOtpExpiryKey(email);
-      localStorage.setItem(key, String(newExpiry));
-      setTimeLeft(OTP_DURATION);
-    } catch (err) {
-      console.error(err);
-      setError("there is a problem while resending code");
-    } finally {
-      setResendLoading(false);
-    }
+    if (score <= 1) return "weak";
+    if (score === 2 || score === 3) return "medium";
+    return "strong";
   };
 
-  // ------------------ SUBMIT (VERIFY) ------------------
-  const handleSubmit = async (e, overrideCode) => {
-    if (e) e.preventDefault();
+  const handleNewPasswordChange = (e) => {
+    const value = e.target.value;
+    setNewPassword(value);
+    setPasswordStrength(evaluatePasswordStrength(value));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
     setError("");
     setSuccess("");
 
-    if (isExpired) {
-      setError("code has expired, please resend a new one.");
-      return;
-    }
-
-    const finalCode = overrideCode ?? code.join("");
+    const finalCode = code.join("");
 
     if (!email) {
-      setError("no such email found");
+      setError("no email found for reset");
       return;
     }
 
     if (finalCode.length !== CODE_LENGTH) {
-      setError("it has to be 6 digits!");
+      setError("code must be 6 digits");
+      return;
+    }
+
+    if (!newPassword || newPassword.length < 6) {
+      setError("password must be at least 6 characters");
+      return;
+    }
+
+    if (newPassword !== confirm) {
+      setError("passwords do not match");
       return;
     }
 
     try {
       setLoading(true);
 
-      const res = await fetch("http://localhost:8080/api/auth/verify-otp", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          email: email,
-          otp: finalCode,
-        }),
-      });
+      const res = await fetch(
+        "http://localhost:8080/api/auth/reset-password",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            email,
+            otp: finalCode,
+            newPassword,
+          }),
+        }
+      );
 
       const data = await res.json();
-      console.log("VERIFY RESPONSE:", data);
+      console.log("RESET PASSWORD RESPONSE:", data);
 
       if (!res.ok) {
-        setError(data.error || "invalid code");
+        setError(data.error || "invalid code or password");
         return;
       }
 
-      setSuccess("email validated successfully");
+      setSuccess(data.message || "Password reset successfully.");
 
-      const token = data.token;
-      if (token) {
-        localStorage.setItem("token", token);
-      }
-
-      navigate("/dashboard");
+      setTimeout(() => {
+        navigate("/login");
+      }, 1000);
     } catch (err) {
       console.error(err);
       setError("there is a problem");
@@ -254,54 +170,68 @@ export default function Verification() {
     }
   };
 
-  // ------------------ JSX ------------------
+  const goBack = () => {
+    navigate("/forgot-password");
+  };
+
+  // استایل و متن قدرت پسورد
+  const strengthConfig = {
+    empty: { label: "", bar: "w-0", color: "bg-transparent" },
+    weak: {
+      label: "Weak password",
+      bar: "w-1/3",
+      color: "bg-red-400",
+    },
+    medium: {
+      label: "Medium strength",
+      bar: "w-2/3",
+      color: "bg-amber-400",
+    },
+    strong: {
+      label: "Strong password",
+      bar: "w-full",
+      color: "bg-emerald-500",
+    },
+  };
+
+  const { label, bar, color } = strengthConfig[passwordStrength];
+
   return (
-    <div className="min-h-screen bg-loginbg flex flex-col justify-center items-center px-4">
+    <div className="min-h-screen bg-loginbg flex flex-col justify-center items-center px-4 font-serif text-brand-text">
       <main className="w-full max-w-xl">
         <div className="bg-creamtext w-full rounded-md shadow px-8 md:px-16 py-10">
-          {/* HEADER + CIRCULAR TIMER */}
+          {/* Step indicator */}
+          <div className="flex justify-between items-center mb-3 text-xs text-gray-500">
+            <span>Step 2 of 2</span>
+            <span className="text-niceblue cursor-pointer" onClick={goBack}>
+              Back to previous step
+            </span>
+          </div>
+
+          {/* Header */}
           <div className="flex flex-col items-center gap-3 mb-6">
-            <div className="relative w-24 h-24">
+            <div className="h-12 w-12 rounded-full bg-loginbg flex items-center justify-center shadow-md border border-creamtext/40">
               <svg
-                viewBox="0 0 100 100"
-                className="w-24 h-24 transform -rotate-90"
+                className="w-6 h-6 text-creamtext"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
               >
-                <circle
-                  cx="50"
-                  cy="50"
-                  r={radius}
-                  stroke="rgba(34,197,94,0.2)"
-                  strokeWidth="8"
-                  fill="none"
-                />
-                <circle
-                  cx="50"
-                  cy="50"
-                  r={radius}
-                  stroke="#22c55e"
-                  strokeWidth="8"
-                  fill="none"
-                  strokeDasharray={circumference}
-                  strokeDashoffset={strokeDashoffset}
-                  strokeLinecap="round"
-                />
+                <rect x="3" y="5" width="18" height="14" rx="2" ry="2" />
+                <polyline points="3,7 12,13 21,7" />
               </svg>
-
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-xs text-gray-500 mb-0.5">time left</span>
-                <span className="text-sm font-semibold text-emerald-600">
-                  {minutes}:{seconds}
-                </span>
-              </div>
             </div>
-
-            <div className="text-center mt-2">
+            <div className="text-center">
               <p className="text-[10px] tracking-[0.35em] text-chocolate/70 mb-1">
                 REVE
               </p>
               <h1 className="tracking-wide text-base md:text-lg font-semibold text-chocolate">
-                VERIFY YOUR EMAIL ADDRESS
+                RESET YOUR PASSWORD
               </h1>
+              <p className="text-xs text-gray-500 mt-1">
+                Enter the code we sent and choose a new secure password.
+              </p>
             </div>
           </div>
 
@@ -309,44 +239,26 @@ export default function Verification() {
 
           <div className="text-sm text-brand-text mb-6 space-y-1 text-center md:text-left">
             <p>
-              A verification code has been sent to{" "}
+              A reset code has been sent to{" "}
               <span className="font-semibold">
                 {email || "your-email@example.com"}
               </span>
             </p>
-            <p>
-              Please check your inbox and enter the verification code below to
-              verify your email address. The code will expire in{" "}
-              <span className="font-semibold">
-                {minutes}:{seconds}
-              </span>
-              .
-            </p>
+            <p>Enter the code and your new password below.</p>
           </div>
 
           {error && (
-            <p className="text-red-600 text-sm mb-2 text-center">
+            <p className="text-red-600 text-sm mb-3 text-center">
               {typeof error === "string" ? error : JSON.stringify(error)}
             </p>
           )}
           {success && (
-            <p className="text-green-700 text-sm mb-2 text-center">
-              {success}
-            </p>
-          )}
-          {resendMessage && (
-            <p className="text-emerald-600 text-xs mb-2 text-center">
-              {resendMessage}
-            </p>
-          )}
-          {isExpired && (
-            <p className="text-red-500 text-xs mb-3 text-center">
-              The code has expired. Please click "Resend code" to get a new one.
-            </p>
+            <p className="text-green-700 text-sm mb-3 text-center">{success}</p>
           )}
 
-          <form onSubmit={handleSubmit}>
-            <div className="flex justify-center gap-2 md:gap-3 mb-6">
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {/* OTP inputs */}
+            <div className="flex justify-center gap-2 md:gap-3 mb-4">
               {Array.from({ length: CODE_LENGTH }).map((_, index) => (
                 <input
                   key={index}
@@ -357,48 +269,89 @@ export default function Verification() {
                   value={code[index]}
                   onChange={(e) => handleChange(index, e)}
                   onKeyDown={(e) => handleKeyDown(index, e)}
-                  disabled={loading || isExpired}
                   className="w-10 h-12 md:w-12 md:h-14 border border-chocolate/30 rounded-md text-center text-lg md:text-xl tracking-widest bg-white
-                             focus:outline-none focus:ring-2 focus:ring-niceblue focus:border-niceblue disabled:bg-gray-100"
+                             focus:outline-none focus:ring-2 focus:ring-niceblue focus:border-niceblue"
                 />
               ))}
             </div>
 
+            {/* New password */}
+            <div>
+              <div className="flex justify-between items-center mb-2">
+                <label className="block text-sm">New password</label>
+                <button
+                  type="button"
+                  className="text-xs text-niceblue hover:underline"
+                  onClick={() =>
+                    setShowNewPassword((prev) => !prev)
+                  }
+                >
+                  {showNewPassword ? "Hide" : "Show"}
+                </button>
+              </div>
+              <input
+                type={showNewPassword ? "text" : "password"}
+                className="w-full bg-transparent border-b border-brand-text/50 outline-none pb-1"
+                value={newPassword}
+                onChange={handleNewPasswordChange}
+                required
+              />
+              {/* Password strength */}
+              <div className="mt-2">
+                <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full ${bar} ${color} transition-all duration-300`}
+                  />
+                </div>
+                {label && (
+                  <p className="mt-1 text-xs text-gray-600">{label}</p>
+                )}
+                <p className="mt-1 text-[11px] text-gray-500">
+                  Use at least 8 characters, including uppercase, numbers and
+                  symbols for a stronger password.
+                </p>
+              </div>
+            </div>
+
+            {/* Confirm password */}
+            <div>
+              <div className="flex justify-between items-center mb-2">
+                <label className="block text-sm">Confirm password</label>
+                <button
+                  type="button"
+                  className="text-xs text-niceblue hover:underline"
+                  onClick={() =>
+                    setShowConfirmPassword((prev) => !prev)
+                  }
+                >
+                  {showConfirmPassword ? "Hide" : "Show"}
+                </button>
+              </div>
+              <input
+                type={showConfirmPassword ? "text" : "password"}
+                className="w-full bg-transparent border-b border-brand-text/50 outline-none pb-1"
+                value={confirm}
+                onChange={(e) => setConfirm(e.target.value)}
+                required
+              />
+            </div>
+
             <button
               type="submit"
-              disabled={loading || isExpired}
-              className="w-full bg-chocolate hover:bg-chocolate/90 text-creamtext font-medium py-2.5 rounded-md transition-colors disabled:opacity-60"
+              disabled={loading}
+              className="w-full bg-chocolate hover:bg-chocolate/90 text-creamtext font-medium py-2.5 rounded-md transition-colors disabled:opacity-60 mt-2"
             >
-              {loading ? "Please wait..." : "Verify"}
+              {loading ? "Please wait..." : "Reset password"}
             </button>
           </form>
 
-          <div className="flex flex-col md:flex-row justify-center items-center gap-3 mt-5 text-sm">
+          <div className="mt-6 text-center text-sm">
             <button
-              type="button"
-              className="text-niceblue hover:underline disabled:text-gray-400"
-              onClick={handleResend}
-              disabled={resendLoading || loading}
-            >
-              {resendLoading ? "Resending..." : "Resend code"}
-            </button>
-            <span className="hidden md:inline text-gray-400">|</span>
-            <button
-              type="button"
+              onClick={goBack}
               className="text-niceblue hover:underline"
-              onClick={goback}
-            >
-              Change email
-            </button>
-          </div>
-
-          <div className="mt-8 text-center text-sm">
-            <button
-              onClick={goback}
               type="button"
-              className="text-niceblue hover:underline"
             >
-              Back to previous page
+              Back to forgot password
             </button>
           </div>
         </div>
