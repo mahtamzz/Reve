@@ -1,4 +1,6 @@
-export default function GoogleButton({
+import React from "react";
+
+function GoogleButton({
   text = "Continue with Google",
   origin = "login",
 }) {
@@ -22,3 +24,5 @@ export default function GoogleButton({
     </button>
   );
 }
+export default React.memo(GoogleButton)
+

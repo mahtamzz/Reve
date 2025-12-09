@@ -1,8 +1,9 @@
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import GoogleButton from "../GoogleButton/GoogleButton";
 import { useEffect, useState, useRef } from "react";
+import React from "react";
 
-export default function LoginAdmin() {
+function LoginAdmin() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -183,3 +184,5 @@ export default function LoginAdmin() {
     </div>
   );
 }
+
+export default React.memo(LoginAdmin)

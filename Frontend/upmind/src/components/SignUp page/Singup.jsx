@@ -1,9 +1,10 @@
 // src/components/auth/SignupForm.jsx
+import React from "react";
 import { useRef } from "react";
 import { Link } from "react-router-dom";
-import GoogleButton from "../GoogleButton/GoogleButton"; // مسیر را با ساختار خودت هماهنگ کن
+import GoogleButton from "../GoogleButton/GoogleButton";
 
-export default function SignupForm({
+function SignupForm({
   mounted,
   name,
   email,
@@ -124,3 +125,5 @@ export default function SignupForm({
     </div>
   );
 }
+
+export default React.memo(SignupForm);

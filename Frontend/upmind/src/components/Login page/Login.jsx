@@ -2,8 +2,9 @@
 import { useRef } from "react";
 import { Link } from "react-router-dom";
 import GoogleButton from "../GoogleButton/GoogleButton";
+import React from "react";
 
-export default function LoginForm({
+function LoginForm({
   mounted,
   email,
   password,
@@ -99,3 +100,5 @@ export default function LoginForm({
     </div>
   );
 }
+
+export default React.memo(LoginForm)

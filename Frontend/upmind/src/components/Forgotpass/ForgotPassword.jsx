@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import React from "react";
 
-export default function ForgotPassword() {
+function ForgotPassword() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -162,3 +163,4 @@ export default function ForgotPassword() {
     </div>
   );
 }
+export default React.memo(ForgotPassword)

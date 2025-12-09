@@ -1,13 +1,13 @@
-// src/pages/VerificationPage.jsx
 import { useRef, useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import VerificationView from "../components/Verification/Verification";
+import React from "react";
 
 const CODE_LENGTH = 6;
-const OTP_DURATION = 10 * 60; // 10 minutes in seconds
+const OTP_DURATION = 10 * 60;
 const getOtpExpiryKey = (email) => `otpExpiry_${email}`;
 
-export default function VerificationPage() {
+ function VerificationPage() {
   const [code, setCode] = useState(Array(CODE_LENGTH).fill(""));
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -275,3 +275,4 @@ export default function VerificationPage() {
     />
   );
 }
+export default React.memo(VerificationPage)

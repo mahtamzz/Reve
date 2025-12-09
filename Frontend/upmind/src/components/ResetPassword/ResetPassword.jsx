@@ -1,9 +1,10 @@
 import { useRef, useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import React from "react";
 
 const CODE_LENGTH = 6;
 
-export default function ResetPassword() {
+function ResetPassword() {
   const [code, setCode] = useState(Array(CODE_LENGTH).fill(""));
   const [newPassword, setNewPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -359,3 +360,5 @@ export default function ResetPassword() {
     </div>
   );
 }
+
+export default React.memo(ResetPassword);

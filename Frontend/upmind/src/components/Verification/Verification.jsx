@@ -1,5 +1,6 @@
-// src/components/auth/VerificationView.jsx
-export default function VerificationView({
+import React from "react";
+
+ function VerificationView({
   CODE_LENGTH,
   code,
   inputsRef,
@@ -172,3 +173,4 @@ export default function VerificationView({
     </div>
   );
 }
+export default React.memo(VerificationView)
