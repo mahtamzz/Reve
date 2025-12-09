@@ -1,6 +1,7 @@
 const bcrypt = require("bcrypt");
 const redis = require("../../../infrastructure/db/redis");
 const userRepo = require("../../../infrastructure/repositories/UserRepository");
+const JwtService = require("../../../infrastructure/auth/JwtService");
 
 class ResetPassword {
     async execute({ email, otp, newPassword }) {
@@ -13,12 +14,17 @@ class ResetPassword {
         if (storedOtp !== otp) throw new Error("Invalid OTP");
 
         const hashed = await bcrypt.hash(newPassword, 10);
-
-        await userRepo.updatePassword(email, hashed);
+        const user = await userRepo.updatePassword(email, hashed);
 
         await redis.del(`reset:${email}`);
 
-        return { message: "Password reset successfully" };
+        // Generate a new JWT for the user
+        const token = JwtService.generate({
+            user_id: user.id,
+            username: user.username,
+        });
+
+        return { user, token };
     }
 }
 

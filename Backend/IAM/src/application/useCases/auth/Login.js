@@ -21,7 +21,7 @@ class Login {
             username: user.username,
         });
 
-        return { token, user };
+        return { user, token };
     }
 }
 

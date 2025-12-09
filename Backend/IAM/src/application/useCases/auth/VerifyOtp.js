@@ -1,16 +1,10 @@
-const redis = require("../../../infrastructure/db/redis");
 const userRepo = require("../../../infrastructure/repositories/UserRepository");
+const redis = require("../../../infrastructure/db/redis");
+const JwtService = require("../../../infrastructure/auth/JwtService");
 
 class VerifyOtp {
     async execute({ email, otp }) {
-        console.log("🔍 VerifyOtp called with:");
-        console.log("email:", email);
-        console.log("otp provided:", otp);
-
         const storedOtp = await redis.get(`otp:${email}`);
-        console.log("otp stored in redis:", storedOtp);
-
-        // const storedOtp = await redis.get(`otp:${email}`);
         if (!storedOtp) throw new Error("OTP expired");
         if (storedOtp !== otp) throw new Error("Invalid OTP");
 
@@ -24,7 +18,12 @@ class VerifyOtp {
         await redis.del(`pending_user:${email}`);
         await redis.del(`otp:${email}`);
 
-        return user;
+        const token = JwtService.generate({
+            user_id: user.id,
+            username: user.username,
+        });
+
+        return { user, token };
     }
 }
 

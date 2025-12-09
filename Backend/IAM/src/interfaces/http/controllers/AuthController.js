@@ -22,12 +22,9 @@ class AuthController {
     }
 
     async verifyOtp(req, res) {
-        // const { error } = AuthValidator.verifyOtp(req.body);
-        // if (error) return res.status(400).json({ message: error.details[0].message });
-
         try {
-            const result = await VerifyOtp.execute(req.body);
-            res.json({ message: "Email verified", user: result });
+        const { user, token } = await VerifyOtp.execute(req.body);
+        res.json({ message: "Email verified", user, token });
         } catch (err) {
             res.status(400).json({ message: err.message });
         }
@@ -47,8 +44,8 @@ class AuthController {
         if (error) return res.status(400).json({ message: error.details[0].message });
 
         try {
-            const result = await LoginUser.execute(req.body);
-            res.json(result);
+            const { user, token }= await LoginUser.execute(req.body);
+            res.json(user, token);
         } catch (err) {
             res.status(401).json({ message: err.message });
         }
@@ -71,8 +68,8 @@ class AuthController {
         if (error) return res.status(400).json({ message: error.details[0].message });
 
         try {
-            const result = await ResetPassword.execute(req.body);
-            res.json(result);
+            const { user, token } = await ResetPassword.execute(req.body);
+            res.json({ user, token, message: "Password reset successfully"});
         } catch (err) {
             res.status(400).json({ message: err.message });
         }

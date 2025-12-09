@@ -93,5 +93,5 @@ const makeMiddleware = limiter => {
 };
 
 module.exports = {
-    loginRateLimiter: makeMiddleware(loginLimiter)
+    loginLimiter: makeMiddleware(loginLimiter)
 };
