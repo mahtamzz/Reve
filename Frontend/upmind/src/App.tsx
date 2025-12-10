@@ -9,6 +9,7 @@ import Services from "@/components/Services/Services";
 import Contactus from "@/components/ContactUs/Contactus";
 import Dashboardadmin from "./components/Dashboard/Dashboardadmin";
 import ResetPassword from "@/components/ResetPassword/ResetPassword";
+import ProtectedRoute from "./Routes/ProtectedRoute";
 import { Route, Routes } from "react-router-dom";
 import React from "react";
 
@@ -19,13 +20,13 @@ function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/admin/login" element={<LoginAdmin />} />
       <Route path="/verification" element={<VerificationPage />} />
-      <Route path="/dashboard" element={<Dashboard />} />
+      <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/about" element={<About />} />
       <Route path="/services" element={<Services />} />
       <Route path="/contact" element={<Contactus />} />
       <Route path="/reset-password" element={<ResetPassword />} />
-      <Route path="/dashboard-admin" element={<Dashboardadmin />} />
+      <Route path="/dashboard-admin" element={<ProtectedRoute><Dashboardadmin /></ProtectedRoute>} />
     </Routes>
   );
 }

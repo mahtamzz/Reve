@@ -40,7 +40,7 @@ const SignupPage: React.FC = () => {
       console.log("REGISTER RESPONSE:", data);
 
       if (!res.ok) {
-        setError(data.message || String(data));
+        setError(data.error || String(data));
         return;
       }
 
