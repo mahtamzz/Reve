@@ -1,4 +1,6 @@
-const swaggerJsDoc = require("swagger-jsdoc");
+const swaggerJsdoc = require("swagger-jsdoc"); // <-- Fixed variable name
+const path = require("path");
+const projectRoot = path.resolve(__dirname, '..', '..');
 
 const options = {
     definition: {
@@ -10,10 +12,9 @@ const options = {
         },
         servers: [
             {
-                url: "http://localhost:3000",
+                url: "http://localhost:3000", // Note: This adds /api to all paths
             },
         ],
-
         components: {
             securitySchemes: {
                 bearerAuth: {
@@ -25,7 +26,8 @@ const options = {
         },
     },
 
-    apis: ["./routes/*.js"],  
+    apis: [
+        path.join(projectRoot, "interfaces/http/routes/*.js")    ],
 };
 
-module.exports = swaggerJsDoc(options);
+module.exports = swaggerJsdoc(options); 
