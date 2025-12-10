@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import VerificationView from "@/components/Verification/Verification";
 
 const CODE_LENGTH = 6;
-const OTP_DURATION = 10 * 60; // seconds
+const OTP_DURATION = 10 * 60;
 
 const getOtpExpiryKey = (email: string): string => `otpExpiry_${email}`;
 
@@ -66,7 +66,6 @@ const VerificationPage: React.FC = () => {
     };
 
     sendInitialOtp();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [email, from]);
 
   // ------------------ TIMER LOGIC ------------------

@@ -1,3 +1,5 @@
+# Group-Study-Application
+You're no longer alone.
 REVE – Study Group Application
 A modern microservices-based platform for students to study together, track progress, and collaborate.
 This project includes:
@@ -11,11 +13,10 @@ Frontend (React + TS)
         ▼
   API Gateway (8080)
         │
-  ┌───────────────┬
-  ▼               ▼                          
-Auth Service   User and Admin 
-PostgreSQL     PostgreSQL       
-
+  ┌───────────────┬────────────────┬──────────────────┐
+  ▼               ▼                ▼                  ▼
+Auth Service   User Service   Admin Service     Other Services...
+PostgreSQL     PostgreSQL       PostgreSQL
 Redis Cache
 Frontend sends ALL requests only to API Gateway
 Gateway routes requests to the appropriate microservice
@@ -118,4 +119,3 @@ Authors
 Nafas Rezaei – Frontend
 Mahta Mohammadi – Backend
 Reve
-
