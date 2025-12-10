@@ -1,10 +1,14 @@
 import React from "react";
 
-function GoogleButton({
+interface GoogleButtonProps {
+  text?: string;
+  origin?: string;
+}
+
+const GoogleButton: React.FC<GoogleButtonProps> = ({
   text = "Continue with Google",
   origin = "login",
-}) {
-
+}) => {
   const handleGoogleClick = () => {
     window.location.href = `http://localhost:8080/api/auth/google?origin=${origin}`;
   };
@@ -23,6 +27,6 @@ function GoogleButton({
       <span className="text-sm">{text}</span>
     </button>
   );
-}
-export default React.memo(GoogleButton)
+};
 
+export default React.memo(GoogleButton);

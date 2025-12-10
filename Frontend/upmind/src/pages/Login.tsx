@@ -1,16 +1,14 @@
-// src/pages/LoginPage.jsx
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import LoginForm from "@/components/Login page/Login";
-import React from "react";
 
-export default function LoginPage() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+const LoginPage: React.FC = () => {
+  const [email, setEmail] = useState<string>("");
+  const [password, setPassword] = useState<string>("");
 
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [mounted, setMounted] = useState(false);
+  const [error, setError] = useState<string>("");
+  const [loading, setLoading] = useState<boolean>(false);
+  const [mounted, setMounted] = useState<boolean>(false);
 
   const navigate = useNavigate();
 
@@ -18,7 +16,7 @@ export default function LoginPage() {
     setMounted(true);
   }, []);
 
-  async function handleLogin(e) {
+  async function handleLogin(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError("");
 
@@ -33,7 +31,8 @@ export default function LoginPage() {
 
       const text = await res.text();
 
-      let data;
+
+      let data: any;
       try {
         data = JSON.parse(text);
       } catch (err) {
@@ -42,6 +41,11 @@ export default function LoginPage() {
         return;
       }
 
+      console.log("STATUS:", res.status);
+      console.log("TEXT:", text);
+      console.log("PARSED DATA:", data);
+
+
       if (!res.ok) {
         setError(data.error || "Login failed");
         return;
@@ -49,10 +53,10 @@ export default function LoginPage() {
 
       if (data.token) {
         localStorage.setItem("token", data.token);
-        // اینجا هر جا دوست داری بعد از لاگین بری
-        navigate("/dashboard-admin");
+        navigate("/dashboard");
       }
     } catch (err) {
+      console.log("chishod")
       setError("Network error. Please try again.");
     } finally {
       setLoading(false);
@@ -99,18 +103,24 @@ export default function LoginPage() {
         </nav>
       </header>
 
-      {/* فرم UI به‌صورت کامپوننت جدا */}
+      {/* Login Form component */}
       <LoginForm
         mounted={mounted}
         email={email}
         password={password}
         error={error}
         loading={loading}
-        onChangeEmail={(e) => setEmail(e.target.value)}
-        onChangePassword={(e) => setPassword(e.target.value)}
+        onChangeEmail={(e: React.ChangeEvent<HTMLInputElement>) =>
+          setEmail(e.target.value)
+        }
+        onChangePassword={(e: React.ChangeEvent<HTMLInputElement>) =>
+          setPassword(e.target.value)
+        }
         onSubmit={handleLogin}
         onForgotPassword={handleForgotPassword}
       />
     </div>
   );
-}
+};
+
+export default LoginPage;

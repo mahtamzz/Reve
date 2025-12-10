@@ -1,29 +1,32 @@
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import React from "react";
 
-function ForgotPassword() {
-  const [email, setEmail] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
+interface LocationState {
+  role?: "admin" | "user";
+}
 
-  const inputRef = useRef(null);
+const ForgotPassword: React.FC = () => {
+  const [email, setEmail] = useState<string>("");
+  const [loading, setLoading] = useState<boolean>(false);
+  const [message, setMessage] = useState<string>("");
+  const [error, setError] = useState<string>("");
+
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const navigate = useNavigate();
-  const location = useLocation();
 
+  const location = useLocation() as { state: LocationState | null };
   const role = location.state?.role || "user";
 
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
 
-  const validateEmail = (email) => {
+  const validateEmail = (email: string): boolean => {
     const pattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return pattern.test(email);
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError("");
     setMessage("");
@@ -60,7 +63,6 @@ function ForgotPassword() {
           "If this email exists, a reset code has been sent to your inbox."
       );
 
-      // role رو هم برای مرحله بعد می‌بریم
       setTimeout(() => {
         navigate("/reset-password", { state: { email, role } });
       }, 600);
@@ -132,7 +134,9 @@ function ForgotPassword() {
               className="w-full bg-transparent border-b border-brand-text/40 outline-none pb-1 
                          focus:border-niceblue transition"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                setEmail(e.target.value)
+              }
               required
             />
           </div>
@@ -158,13 +162,13 @@ function ForgotPassword() {
 
         <div className="mt-6 text-center text-sm">
           <span className="text-chocolate/70">Remembered your password? </span>
-          <Link to="/login" className="text-niceblue underline">
+          <Link to="/admin/login" className="text-niceblue underline">
             Back to login
           </Link>
         </div>
       </div>
     </div>
   );
-}
+};
 
 export default React.memo(ForgotPassword);

@@ -3,7 +3,9 @@
     "target": "ESNext",
     "module": "ESNext",
     "jsx": "react-jsx",
-    "moduleResolution": "Node",
+
+    "moduleResolution": "bundler",
+
     "strict": false,
     "allowJs": true,
     "noEmit": true,
@@ -11,7 +13,12 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
-    "baseUrl": "./src"
+
+    "baseUrl": "./upmind/src",
+    "paths": {
+      "@/*": ["*"]
+    }
   },
-  "include": ["src"]
+
+  "include": ["upmind/src"]
 }

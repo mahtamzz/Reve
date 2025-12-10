@@ -1,34 +1,40 @@
-import { useRef, useState, useEffect } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import React from "react";
 
 const CODE_LENGTH = 6;
 
-function ResetPassword() {
-  const [code, setCode] = useState(Array(CODE_LENGTH).fill(""));
-  const [newPassword, setNewPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
+interface LocationState {
+  email?: string;
+  role?: "admin" | "user";
+}
 
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-  const [loading, setLoading] = useState(false);
+type Strength = "empty" | "weak" | "medium" | "strong";
 
-  const [showNewPassword, setShowNewPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [passwordStrength, setPasswordStrength] = useState("empty");
+const ResetPassword: React.FC = () => {
+  const [code, setCode] = useState<string[]>(Array(CODE_LENGTH).fill(""));
+  const [newPassword, setNewPassword] = useState<string>("");
+  const [confirm, setConfirm] = useState<string>("");
 
-  const inputsRef = useRef([]);
-  const location = useLocation();
+  const [error, setError] = useState<string>("");
+  const [success, setSuccess] = useState<string>("");
+  const [loading, setLoading] = useState<boolean>(false);
+
+  const [showNewPassword, setShowNewPassword] = useState<boolean>(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState<boolean>(false);
+  const [passwordStrength, setPasswordStrength] = useState<Strength>("empty");
+
+  const inputsRef = useRef<(HTMLInputElement | null)[]>([]);
   const navigate = useNavigate();
 
+  const location = useLocation() as { state: LocationState | null };
   const email = location.state?.email;
-  const role = location.state?.role || "user"; // 👈 نقش را از state می‌گیریم
+  const role = location.state?.role || "user";
 
   useEffect(() => {
     inputsRef.current[0]?.focus();
   }, []);
 
-  const updateCode = (index, value) => {
+  const updateCode = (index: number, value: string) => {
     setCode((prev) => {
       const next = [...prev];
       next[index] = value;
@@ -36,7 +42,10 @@ function ResetPassword() {
     });
   };
 
-  const handleChange = (index, e) => {
+  const handleChange = (
+    index: number,
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
     const value = e.target.value.replace(/[^0-9]/g, "");
 
     if (!value) {
@@ -51,21 +60,22 @@ function ResetPassword() {
     }
   };
 
-  const handleKeyDown = (index, e) => {
+  const handleKeyDown = (
+    index: number,
+    e: React.KeyboardEvent<HTMLInputElement>
+  ) => {
     if (e.key === "Backspace" && !code[index] && index > 0) {
       inputsRef.current[index - 1]?.focus();
     }
-
     if (e.key === "ArrowLeft" && index > 0) {
       inputsRef.current[index - 1]?.focus();
     }
-
     if (e.key === "ArrowRight" && index < CODE_LENGTH - 1) {
       inputsRef.current[index + 1]?.focus();
     }
   };
 
-  const evaluatePasswordStrength = (password) => {
+  const evaluatePasswordStrength = (password: string): Strength => {
     if (!password) return "empty";
 
     let score = 0;
@@ -79,13 +89,13 @@ function ResetPassword() {
     return "strong";
   };
 
-  const handleNewPasswordChange = (e) => {
+  const handleNewPasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setNewPassword(value);
     setPasswordStrength(evaluatePasswordStrength(value));
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError("");
     setSuccess("");
@@ -115,7 +125,6 @@ function ResetPassword() {
     try {
       setLoading(true);
 
-      // 👇 اینجا بر اساس role، endpoint را انتخاب می‌کنیم
       const endpoint =
         role === "admin"
           ? "http://localhost:8080/api/auth/admin/reset-password"
@@ -123,9 +132,7 @@ function ResetPassword() {
 
       const res = await fetch(endpoint, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email,
           otp: finalCode,
@@ -144,7 +151,6 @@ function ResetPassword() {
       setSuccess(data.message || "Password reset successfully.");
 
       setTimeout(() => {
-        // 👇 اگر خواستی اینجا هم می‌تونی بر اساس role به login admin یا user جدا بری
         navigate("/login");
       }, 1000);
     } catch (err) {
@@ -156,27 +162,14 @@ function ResetPassword() {
   };
 
   const goBack = () => {
-    // 👈 نقش را هم برمی‌گردانیم عقب
     navigate("/forgot-password", { state: { role } });
   };
 
   const strengthConfig = {
     empty: { label: "", bar: "w-0", color: "bg-transparent" },
-    weak: {
-      label: "Weak password",
-      bar: "w-1/3",
-      color: "bg-red-400",
-    },
-    medium: {
-      label: "Medium strength",
-      bar: "w-2/3",
-      color: "bg-amber-400",
-    },
-    strong: {
-      label: "Strong password",
-      bar: "w-full",
-      color: "bg-emerald-500",
-    },
+    weak: { label: "Weak password", bar: "w-1/3", color: "bg-red-400" },
+    medium: { label: "Medium strength", bar: "w-2/3", color: "bg-amber-400" },
+    strong: { label: "Strong password", bar: "w-full", color: "bg-emerald-500" },
   };
 
   const { label, bar, color } = strengthConfig[passwordStrength];
@@ -222,19 +215,9 @@ function ResetPassword() {
 
           <hr className="mb-6 border-chocolate/10" />
 
-          <div className="text-sm text-brand-text mb-6 space-y-1 text-center md:text-left">
-            <p>
-              A reset code has been sent to{" "}
-              <span className="font-semibold">
-                {email || "your-email@example.com"}
-              </span>
-            </p>
-            <p>Enter the code and your new password below.</p>
-          </div>
-
           {error && (
             <p className="text-red-600 text-sm mb-3 text-center">
-              {typeof error === "string" ? error : JSON.stringify(error)}
+              {error}
             </p>
           )}
           {success && (
@@ -247,7 +230,10 @@ function ResetPassword() {
               {Array.from({ length: CODE_LENGTH }).map((_, index) => (
                 <input
                   key={index}
-                  ref={(el) => (inputsRef.current[index] = el)}
+                  ref={(el: HTMLInputElement | null) => {
+                    inputsRef.current[index] = el;
+                  }}
+                  
                   type="text"
                   inputMode="numeric"
                   maxLength={1}
@@ -262,7 +248,7 @@ function ResetPassword() {
 
             {/* New password */}
             <div>
-              <div className="flex justify بين items-center mb-2">
+              <div className="flex justify-between items-center mb-2">
                 <label className="block text-sm">New password</label>
                 <button
                   type="button"
@@ -272,6 +258,7 @@ function ResetPassword() {
                   {showNewPassword ? "Hide" : "Show"}
                 </button>
               </div>
+
               <input
                 type={showNewPassword ? "text" : "password"}
                 className="w-full bg-transparent border-b border-brand-text/50 outline-none pb-1"
@@ -279,20 +266,14 @@ function ResetPassword() {
                 onChange={handleNewPasswordChange}
                 required
               />
-              {/* Password strength */}
+
               <div className="mt-2">
                 <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
                   <div
                     className={`h-full ${bar} ${color} transition-all duration-300`}
                   />
                 </div>
-                {label && (
-                  <p className="mt-1 text-xs text-gray-600">{label}</p>
-                )}
-                <p className="mt-1 text-[11px] text-gray-500">
-                  Use at least 8 characters, including uppercase, numbers and
-                  symbols for a stronger password.
-                </p>
+                {label && <p className="mt-1 text-xs text-gray-600">{label}</p>}
               </div>
             </div>
 
@@ -303,13 +284,12 @@ function ResetPassword() {
                 <button
                   type="button"
                   className="text-xs text-niceblue hover:underline"
-                  onClick={() =>
-                    setShowConfirmPassword((prev) => !prev)
-                  }
+                  onClick={() => setShowConfirmPassword((prev) => !prev)}
                 >
                   {showConfirmPassword ? "Hide" : "Show"}
                 </button>
               </div>
+
               <input
                 type={showConfirmPassword ? "text" : "password"}
                 className="w-full bg-transparent border-b border-brand-text/50 outline-none pb-1"
@@ -329,11 +309,7 @@ function ResetPassword() {
           </form>
 
           <div className="mt-6 text-center text-sm">
-            <button
-              onClick={goBack}
-              className="text-niceblue hover:underline"
-              type="button"
-            >
+            <button onClick={goBack} className="text-niceblue hover:underline">
               Back to forgot password
             </button>
           </div>
@@ -341,6 +317,6 @@ function ResetPassword() {
       </main>
     </div>
   );
-}
+};
 
 export default React.memo(ResetPassword);

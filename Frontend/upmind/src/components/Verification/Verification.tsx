@@ -1,6 +1,34 @@
 import React from "react";
 
- function VerificationView({
+interface VerificationViewProps {
+  CODE_LENGTH: number;
+  code: string[];
+  inputsRef: React.MutableRefObject<(HTMLInputElement | null)[]>;
+  minutes: string;
+  seconds: string;
+  isExpired: boolean;
+  error?: string | unknown;
+  success?: string;
+  resendMessage?: string;
+  loading: boolean;
+  resendLoading: boolean;
+  radius: number;
+  circumference: number;
+  strokeDashoffset: number;
+  handleChange: (index: number, e: React.ChangeEvent<HTMLInputElement>) => void;
+  handleKeyDown: (
+    index: number,
+    e: React.KeyboardEvent<HTMLInputElement>
+  ) => void;
+  handleSubmit: (
+    e: React.FormEvent<HTMLFormElement>
+  ) => void | Promise<void>;
+  handleResend: () => void | Promise<void>;
+  goback: (e: React.MouseEvent<HTMLButtonElement>) => void;
+  email?: string | null;
+}
+
+const VerificationView: React.FC<VerificationViewProps> = ({
   CODE_LENGTH,
   code,
   inputsRef,
@@ -21,7 +49,7 @@ import React from "react";
   handleResend,
   goback,
   email,
-}) {
+}) => {
   return (
     <div className="min-h-screen bg-loginbg flex flex-col justify-center items-center px-4">
       <main className="w-full max-w-xl">
@@ -114,21 +142,24 @@ import React from "react";
 
           <form onSubmit={handleSubmit}>
             <div className="flex justify-center gap-2 md:gap-3 mb-6">
-              {Array.from({ length: CODE_LENGTH }).map((_, index) => (
-                <input
-                  key={index}
-                  ref={(el) => (inputsRef.current[index] = el)}
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={1}
-                  value={code[index]}
-                  onChange={(e) => handleChange(index, e)}
-                  onKeyDown={(e) => handleKeyDown(index, e)}
-                  disabled={loading || isExpired}
-                  className="w-10 h-12 md:w-12 md:h-14 border border-chocolate/30 rounded-md text-center text-lg md:text-xl tracking-widest bg-white
-                             focus:outline-none focus:ring-2 focus:ring-niceblue focus:border-niceblue disabled:bg-gray-100"
-                />
-              ))}
+            {Array.from({ length: CODE_LENGTH }).map((_, index) => (
+              <input
+                key={index}
+                ref={(el: HTMLInputElement | null) => {
+                  inputsRef.current[index] = el;
+                }}
+                type="text"
+                inputMode="numeric"
+                maxLength={1}
+                value={code[index]}
+                onChange={(e) => handleChange(index, e)}
+                onKeyDown={(e) => handleKeyDown(index, e)}
+                disabled={loading || isExpired}
+                className="w-10 h-12 md:w-12 md:h-14 border border-chocolate/30 rounded-md text-center text-lg md:text-xl tracking-widest bg-white
+                          focus:outline-none focus:ring-2 focus:ring-niceblue focus:border-niceblue disabled:bg-gray-100"
+              />
+            ))}
+
             </div>
 
             <button
@@ -172,5 +203,6 @@ import React from "react";
       </main>
     </div>
   );
-}
-export default React.memo(VerificationView)
+};
+
+export default React.memo(VerificationView);
