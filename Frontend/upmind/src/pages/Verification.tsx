@@ -1,28 +1,34 @@
-import { useRef, useState, useEffect } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import VerificationView from "@/components/Verification/Verification";
-import React from "react";
 
 const CODE_LENGTH = 6;
-const OTP_DURATION = 10 * 60;
-const getOtpExpiryKey = (email) => `otpExpiry_${email}`;
+const OTP_DURATION = 10 * 60; // seconds
 
- function VerificationPage() {
-  const [code, setCode] = useState(Array(CODE_LENGTH).fill(""));
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [resendLoading, setResendLoading] = useState(false);
-  const [resendMessage, setResendMessage] = useState("");
+const getOtpExpiryKey = (email: string): string => `otpExpiry_${email}`;
 
-  const inputsRef = useRef([]);
+type LocationState = {
+  email?: string;
+  from?: string;
+};
+
+const VerificationPage: React.FC = () => {
+  const [code, setCode] = useState<string[]>(Array(CODE_LENGTH).fill(""));
+  const [error, setError] = useState<string>("");
+  const [success, setSuccess] = useState<string>("");
+  const [loading, setLoading] = useState<boolean>(false);
+  const [resendLoading, setResendLoading] = useState<boolean>(false);
+  const [resendMessage, setResendMessage] = useState<string>("");
+
+  const inputsRef = useRef<(HTMLInputElement | null)[]>([]);
   const navigate = useNavigate();
   const location = useLocation();
+  const state = location.state as LocationState | undefined;
   const email = location.state?.email;
-  const from = location.state?.from; 
+  const from = location.state?.from;
 
-  const [timeLeft, setTimeLeft] = useState(0);
-  const [otpInitialized, setOtpInitialized] = useState(false);
+  const [timeLeft, setTimeLeft] = useState<number>(0);
+  const [otpInitialized, setOtpInitialized] = useState<boolean>(false);
 
   // ------------------ INIT OTP ------------------
   useEffect(() => {
@@ -67,11 +73,11 @@ const getOtpExpiryKey = (email) => `otpExpiry_${email}`;
   useEffect(() => {
     if (timeLeft <= 0) return;
 
-    const interval = setInterval(() => {
+    const interval = window.setInterval(() => {
       setTimeLeft((prev) => prev - 1);
     }, 1000);
 
-    return () => clearInterval(interval);
+    return () => window.clearInterval(interval);
   }, [timeLeft]);
 
   const minutes = String(Math.floor(timeLeft / 60)).padStart(2, "0");
@@ -91,13 +97,13 @@ const getOtpExpiryKey = (email) => `otpExpiry_${email}`;
   const progress = timeLeft / OTP_DURATION;
   const strokeDashoffset = circumference * (1 - progress);
 
-  function goback(e) {
+  function goback(e: React.MouseEvent) {
     e.preventDefault();
     navigate("/");
   }
 
   // ------------------ CODE INPUT HANDLERS ------------------
-  const updateCode = (index, value) => {
+  const updateCode = (index: number, value: string) => {
     setCode((prev) => {
       const next = [...prev];
       next[index] = value;
@@ -105,7 +111,10 @@ const getOtpExpiryKey = (email) => `otpExpiry_${email}`;
     });
   };
 
-  const handleChange = (index, e) => {
+  const handleChange = (
+    index: number,
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
     const value = e.target.value.replace(/[^0-9]/g, "");
 
     if (!value) {
@@ -126,12 +135,15 @@ const getOtpExpiryKey = (email) => `otpExpiry_${email}`;
       const finalCode = newCode.join("");
 
       if (finalCode.length === CODE_LENGTH) {
-        handleSubmit(undefined, finalCode);
+        void handleSubmit(undefined, finalCode);
       }
     }
   };
 
-  const handleKeyDown = (index, e) => {
+  const handleKeyDown = (
+    index: number,
+    e: React.KeyboardEvent<HTMLInputElement>
+  ) => {
     if (e.key === "Backspace" && !code[index] && index > 0) {
       inputsRef.current[index - 1]?.focus();
     }
@@ -146,7 +158,7 @@ const getOtpExpiryKey = (email) => `otpExpiry_${email}`;
   };
 
   // ------------------ RESEND ------------------
-  const handleResend = async () => {
+  const handleResend = async (): Promise<void> => {
     setError("");
     setSuccess("");
     setResendMessage("");
@@ -190,7 +202,10 @@ const getOtpExpiryKey = (email) => `otpExpiry_${email}`;
   };
 
   // ------------------ SUBMIT (VERIFY) ------------------
-  const handleSubmit = async (e, overrideCode) => {
+  const handleSubmit = async (
+    e?: React.FormEvent<HTMLFormElement>,
+    overrideCode?: string
+  ): Promise<void> => {
     if (e) e.preventDefault();
     setError("");
     setSuccess("");
@@ -221,7 +236,7 @@ const getOtpExpiryKey = (email) => `otpExpiry_${email}`;
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          email: email,
+          email,
           otp: finalCode,
         }),
       });
@@ -236,7 +251,7 @@ const getOtpExpiryKey = (email) => `otpExpiry_${email}`;
 
       setSuccess("email validated successfully");
 
-      const token = data.token;
+      const token = data.token as string | undefined;
       if (token) {
         localStorage.setItem("token", token);
       }
@@ -274,5 +289,6 @@ const getOtpExpiryKey = (email) => `otpExpiry_${email}`;
       email={email}
     />
   );
-}
-export default React.memo(VerificationPage)
+};
+
+export default React.memo(VerificationPage);

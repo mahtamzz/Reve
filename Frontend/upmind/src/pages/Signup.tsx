@@ -1,26 +1,26 @@
-// src/pages/SignupPage.jsx
-import { useEffect, useState } from "react";
+// src/pages/SignupPage.tsx
+import React, { useEffect, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import SignupForm from "@/components/SignUp page/Singup";
 
-export default function SignupPage() {
+const SignupPage: React.FC = () => {
   const navigate = useNavigate();
 
-  const [mounted, setMounted] = useState(false);
+  const [mounted, setMounted] = useState<boolean>(false);
 
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [name, setName] = useState<string>("");
+  const [email, setEmail] = useState<string>("");
+  const [password, setPassword] = useState<string>("");
 
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string>("");
+  const [loading, setLoading] = useState<boolean>(false);
 
   useEffect(() => {
     // trigger animation once component mounts
     setMounted(true);
   }, []);
 
-  async function handleSignup(e) {
+  async function handleSignup(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError("");
     setLoading(true);
@@ -40,7 +40,7 @@ export default function SignupPage() {
       console.log("REGISTER RESPONSE:", data);
 
       if (!res.ok) {
-        setError(data.error || data);
+        setError(data.message || String(data));
         return;
       }
 
@@ -93,7 +93,6 @@ export default function SignupPage() {
         </nav>
       </header>
 
-      {/* فرم به عنوان یک کامپوننت UI */}
       <SignupForm
         mounted={mounted}
         name={name}
@@ -101,12 +100,20 @@ export default function SignupPage() {
         password={password}
         error={error}
         loading={loading}
-        onChangeName={(e) => setName(e.target.value)}
-        onChangeEmail={(e) => setEmail(e.target.value)}
-        onChangePassword={(e) => setPassword(e.target.value)}
+        onChangeName={(e: React.ChangeEvent<HTMLInputElement>) =>
+          setName(e.target.value)
+        }
+        onChangeEmail={(e: React.ChangeEvent<HTMLInputElement>) =>
+          setEmail(e.target.value)
+        }
+        onChangePassword={(e: React.ChangeEvent<HTMLInputElement>) =>
+          setPassword(e.target.value)
+        }
         onSubmit={handleSignup}
         onForgotPassword={handleForgotPassword}
       />
     </div>
   );
-}
+};
+
+export default React.memo(SignupPage);
