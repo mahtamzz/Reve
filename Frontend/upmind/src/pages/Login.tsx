@@ -53,8 +53,38 @@ const LoginPage: React.FC = () => {
 
       if (data.token) {
         localStorage.setItem("token", data.token);
-        navigate("/dashboard");
+      
+        try {
+          const meRes = await fetch("http://localhost:8080/api/users/me", {
+            method: "GET",
+            headers: {
+              "Authorization": `Bearer ${data.token}`,
+              "Content-Type": "application/json"
+            }
+          });
+      
+          const meData = await meRes.json();
+          console.log("ME RESPONSE:", meData);
+      
+          if (!meRes.ok) {
+            setError("Could not fetch user info. Token may be invalid.");
+            return;
+          }
+      
+          localStorage.setItem("user", JSON.stringify(meData.user));
+      
+          if (meData.user.role === "admin") {
+            navigate("/dashboard-admin");
+          } else {
+            navigate("/dashboard");
+          }
+      
+        } catch (err) {
+          console.error(err);
+          setError("Network error while verifying token.");
+        }
       }
+      
     } catch (err) {
       console.log("chishod")
       setError("Network error. Please try again.");
