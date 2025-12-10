@@ -1,18 +1,17 @@
+import React, { useEffect, useState, useRef } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import GoogleButton from "../GoogleButton/GoogleButton";
-import { useEffect, useState, useRef } from "react";
-import React from "react";
 
-function LoginAdmin() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
+const LoginAdmin: React.FC = () => {
+  const [email, setEmail] = useState<string>("");
+  const [password, setPassword] = useState<string>("");
+  const [showPassword, setShowPassword] = useState<boolean>(false);
 
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [mounted, setMounted] = useState(false);
+  const [error, setError] = useState<string>("");
+  const [loading, setLoading] = useState<boolean>(false);
+  const [mounted, setMounted] = useState<boolean>(false);
 
-  const inputsRef = useRef([]);
+  const inputsRef = useRef<(HTMLInputElement | null)[]>([]);
 
   const navigate = useNavigate();
 
@@ -20,7 +19,7 @@ function LoginAdmin() {
     setMounted(true);
   }, []);
 
-  async function handleLogin(e) {
+  async function handleLogin(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError("");
 
@@ -108,21 +107,24 @@ function LoginAdmin() {
         `}
       >
         <h1 className="text-center text-3xl text-chocolate mb-5">
-          Login 
+          Login
         </h1>
         <p className="text-center text-gray mb-5">Admin</p>
 
         <form className="space-y-8" onSubmit={handleLogin}>
-
           {/* Email */}
           <div>
             <label className="block text-sm mb-2">Email</label>
-            <input 
-              ref={(el) => (inputsRef.current[0] = el)}
+            <input
+              ref={(el: HTMLInputElement | null) => {
+                inputsRef.current[0] = el;
+              }}
               className="w-full bg-transparent border-b border-brand-text/50 outline-none pb-1"
               type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                setEmail(e.target.value)
+              }
               required
             />
           </div>
@@ -140,15 +142,18 @@ function LoginAdmin() {
               >
                 forgot password?
               </button>
-
             </div>
 
-            <input 
-              ref={(el) => (inputsRef.current[0] = el)}
-              type="password"
+            <input
+              ref={(el: HTMLInputElement | null) => {
+                inputsRef.current[1] = el;
+              }}
+              type={showPassword ? "text" : "password"}
               className="w-full bg-transparent border-b border-brand-text/50 outline-none pb-1"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                setPassword(e.target.value)
+              }
               required
             />
           </div>
@@ -161,10 +166,12 @@ function LoginAdmin() {
           </p>
 
           {/* Error */}
-          {error && <p className="text-red-600 text-sm text-center -mt-2">{error}</p>}
+          {error && (
+            <p className="text-red-600 text-sm text-center -mt-2">{error}</p>
+          )}
 
           {/* Login button */}
-          <button 
+          <button
             className="w-full bg-chocolate text-creamtext py-3 rounded-md mt-4 mb-1 disabled:opacity-60"
             disabled={loading}
           >
@@ -179,12 +186,10 @@ function LoginAdmin() {
           </div>
 
           <GoogleButton text="Continue with Google" origin="login" />
-
-          </form>
-
+        </form>
       </div>
     </div>
   );
-}
+};
 
-export default React.memo(LoginAdmin)
+export default React.memo(LoginAdmin);

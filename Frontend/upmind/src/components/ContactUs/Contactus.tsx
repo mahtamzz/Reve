@@ -1,14 +1,14 @@
-import { useState } from "react";
+import React, { useState } from "react";
 
-export default function Contactus() {
-  const [email, setEmail] = useState("");
-  const [message, setMessage] = useState("");
-  
-  const [loading, setLoading] = useState(false);
-  const [sentMessage, setSentMessage] = useState("");
-  const [error, setError] = useState("");
+const Contactus: React.FC = () => {
+  const [email, setEmail] = useState<string>("");
+  const [message, setMessage] = useState<string>("");
 
-  async function handleSubmit(e) {
+  const [loading, setLoading] = useState<boolean>(false);
+  const [sentMessage, setSentMessage] = useState<string>("");
+  const [error, setError] = useState<string>("");
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setSentMessage("");
     setError("");
@@ -33,7 +33,8 @@ export default function Contactus() {
       }
 
       setSentMessage(
-        data.message || "Your message has been sent. We will get back to you soon!"
+        data.message ||
+          "Your message has been sent. We will get back to you soon!"
       );
 
       setEmail("");
@@ -45,7 +46,7 @@ export default function Contactus() {
     } finally {
       setLoading(false);
     }
-  }
+  };
 
   return (
     <div className="min-h-screen bg-loginbg font-serif text-brand-text flex flex-col items-center">
@@ -72,7 +73,9 @@ export default function Contactus() {
               type="email"
               className="w-full bg-transparent border-b border-brand-text/50 outline-none pb-1"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                setEmail(e.target.value)
+              }
               required
             />
           </div>
@@ -83,7 +86,9 @@ export default function Contactus() {
             <textarea
               className="w-full bg-transparent border-b border-brand-text/50 outline-none pb-1 h-24"
               value={message}
-              onChange={(e) => setMessage(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                setMessage(e.target.value)
+              }
               required
             />
           </div>
@@ -111,4 +116,6 @@ export default function Contactus() {
 
     </div>
   );
-}
+};
+
+export default Contactus;

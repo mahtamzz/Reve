@@ -1,10 +1,22 @@
-// src/components/auth/SignupForm.jsx
-import React from "react";
-import { useRef } from "react";
+import React, { useRef } from "react";
 import { Link } from "react-router-dom";
 import GoogleButton from "../GoogleButton/GoogleButton";
 
-function SignupForm({
+interface SignupFormProps {
+  mounted: boolean;
+  name: string;
+  email: string;
+  password: string;
+  error?: string | unknown;
+  loading: boolean;
+  onChangeName: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onChangeEmail: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onChangePassword: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onSubmit: (e: React.FormEvent<HTMLFormElement>) => void | Promise<void>;
+  onForgotPassword: () => void;
+}
+
+const SignupForm: React.FC<SignupFormProps> = ({
   mounted,
   name,
   email,
@@ -16,8 +28,8 @@ function SignupForm({
   onChangePassword,
   onSubmit,
   onForgotPassword,
-}) {
-  const inputsRef = useRef([]);
+}) => {
+  const inputsRef = useRef<(HTMLInputElement | null)[]>([]);
 
   return (
     <div
@@ -37,7 +49,9 @@ function SignupForm({
         <div>
           <label className="block text-sm mb-2">Name</label>
           <input
-            ref={(el) => (inputsRef.current[0] = el)}
+            ref={(el: HTMLInputElement | null) => {
+              inputsRef.current[0] = el;
+            }}
             className="w-full bg-transparent border-b border-brand-text/50 outline-none pb-1 focus:border-niceblue transition"
             value={name}
             onChange={onChangeName}
@@ -49,7 +63,9 @@ function SignupForm({
         <div>
           <label className="block text-sm mb-2">Email</label>
           <input
-            ref={(el) => (inputsRef.current[1] = el)}
+            ref={(el: HTMLInputElement | null) => {
+              inputsRef.current[1] = el;
+            }}
             type="email"
             className="w-full bg-transparent border-b border-brand-text/50 outline-none pb-1 focus:border-niceblue transition"
             value={email}
@@ -72,7 +88,9 @@ function SignupForm({
           </div>
 
           <input
-            ref={(el) => (inputsRef.current[2] = el)}
+            ref={(el: HTMLInputElement | null) => {
+              inputsRef.current[2] = el;
+            }}
             type="password"
             className="w-full bg-transparent border-b border-brand-text/50 outline-none pb-1 focus:border-niceblue transition"
             value={password}
@@ -124,6 +142,6 @@ function SignupForm({
       </form>
     </div>
   );
-}
+};
 
 export default React.memo(SignupForm);

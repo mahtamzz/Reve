@@ -7,7 +7,7 @@ import ForgotPassword from "@/components/Forgotpass/ForgotPassword";
 import About from "@/components/About/About";
 import Services from "@/components/Services/Services";
 import Contactus from "@/components/ContactUs/Contactus";
-import Dashboardadmin from "@/components/Dashboard/Dashboardadmin";
+import Dashboardadmin from "./components/Dashboard/Dashboardadmin";
 import ResetPassword from "@/components/ResetPassword/ResetPassword";
 import { Route, Routes } from "react-router-dom";
 import React from "react";

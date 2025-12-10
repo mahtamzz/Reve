@@ -44,15 +44,23 @@ class AuthController {
 
     async userLogin(req, res) {
         const { error } = AuthValidator.login(req.body);
-        if (error) return res.status(400).json({ message: error.details[0].message });
-
-        try {
-            const { user, token }= await UserLogin.execute(req.body);
-            res.json(user, token);
-        } catch (err) {
-            res.status(401).json({ message: err.message });
+        if (error) {
+          return res.status(400).json({ message: error.details[0].message });
         }
-    }
+      
+        try {
+          const { user, token } = await UserLogin.execute(req.body);
+          const { password, ...safeUser } = user;
+      
+          return res.json({
+            user: safeUser,
+            token,
+          });
+        } catch (err) {
+          return res.status(401).json({ message: err.message });
+        }
+      }
+      
 
     async forgotPassword(req, res) {
         const { error } = AuthValidator.forgotPassword(req.body);

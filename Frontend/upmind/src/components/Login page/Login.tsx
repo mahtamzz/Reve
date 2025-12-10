@@ -1,10 +1,20 @@
-// src/components/auth/LoginForm.jsx
-import { useRef } from "react";
+import React, { useRef } from "react";
 import { Link } from "react-router-dom";
 import GoogleButton from "../GoogleButton/GoogleButton";
-import React from "react";
 
-function LoginForm({
+interface LoginFormProps {
+  mounted: boolean;
+  email: string;
+  password: string;
+  error?: string;
+  loading: boolean;
+  onChangeEmail: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onChangePassword: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onSubmit: (e: React.FormEvent<HTMLFormElement>) => void | Promise<void>;
+  onForgotPassword: () => void;
+}
+
+const LoginForm: React.FC<LoginFormProps> = ({
   mounted,
   email,
   password,
@@ -14,8 +24,8 @@ function LoginForm({
   onChangePassword,
   onSubmit,
   onForgotPassword,
-}) {
-  const inputsRef = useRef([]);
+}) => {
+  const inputsRef = useRef<(HTMLInputElement | null)[]>([]);
 
   return (
     <div
@@ -26,16 +36,16 @@ function LoginForm({
         ${mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"}
       `}
     >
-      <h1 className="text-center text-3xl text-chocolate mb-10">
-        Login
-      </h1>
+      <h1 className="text-center text-3xl text-chocolate mb-10">Login</h1>
 
       <form className="space-y-8" onSubmit={onSubmit}>
         {/* Email */}
         <div>
           <label className="block text-sm mb-2">Email</label>
           <input
-            ref={(el) => (inputsRef.current[0] = el)}
+            ref={(el: HTMLInputElement | null) => {
+              inputsRef.current[0] = el;
+            }}
             className="w-full bg-transparent border-b border-brand-text/50 outline-none pb-1"
             type="email"
             value={email}
@@ -58,7 +68,9 @@ function LoginForm({
           </div>
 
           <input
-            ref={(el) => (inputsRef.current[1] = el)}
+            ref={(el: HTMLInputElement | null) => {
+              inputsRef.current[1] = el;
+            }}
             type="password"
             className="w-full bg-transparent border-b border-brand-text/50 outline-none pb-1"
             value={password}
@@ -99,6 +111,6 @@ function LoginForm({
       </form>
     </div>
   );
-}
+};
 
-export default React.memo(LoginForm)
+export default React.memo(LoginForm);
