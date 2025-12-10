@@ -151,8 +151,13 @@ const ResetPassword: React.FC = () => {
       setSuccess(data.message || "Password reset successfully.");
 
       setTimeout(() => {
-        navigate("/login");
+        if (role === "admin") {
+          navigate("/dashboard-admin");
+        } else {
+          navigate("/dashboard");
+        }
       }, 1000);
+      
     } catch (err) {
       console.error(err);
       setError("there is a problem");

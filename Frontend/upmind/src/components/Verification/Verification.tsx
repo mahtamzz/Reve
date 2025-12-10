@@ -1,5 +1,4 @@
 import React from "react";
-
 interface VerificationViewProps {
   CODE_LENGTH: number;
   code: string[];
