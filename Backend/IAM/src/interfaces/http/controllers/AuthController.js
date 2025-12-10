@@ -26,8 +26,8 @@ class AuthController {
 
     async verifyOtp(req, res) {
         try {
-        const { user, token } = await VerifyOtp.execute(req.body);
-        res.json({ message: "Email verified", user, token });
+            const { user, token } = await VerifyOtp.execute(req.body);
+            res.json({ message: "Email verified", user, token });
         } catch (err) {
             res.status(400).json({ message: err.message });
         }
@@ -45,22 +45,22 @@ class AuthController {
     async userLogin(req, res) {
         const { error } = AuthValidator.login(req.body);
         if (error) {
-          return res.status(400).json({ message: error.details[0].message });
+            return res.status(400).json({ message: error.details[0].message });
         }
-      
+
         try {
-          const { user, token } = await UserLogin.execute(req.body);
-          const { password, ...safeUser } = user;
-      
-          return res.json({
-            user: safeUser,
-            token,
-          });
+            const { user, token } = await UserLogin.execute(req.body);
+            const { password, ...safeUser } = user;
+
+            return res.json({
+                user: safeUser,
+                token,
+            });
         } catch (err) {
-          return res.status(401).json({ message: err.message });
+            return res.status(401).json({ message: err.message });
         }
-      }
-      
+    }
+
 
     async forgotPassword(req, res) {
         const { error } = AuthValidator.forgotPassword(req.body);
@@ -80,7 +80,7 @@ class AuthController {
 
         try {
             const { user, token } = await ResetPassword.execute(req.body);
-            res.json({ user, token, message: "Password reset successfully"});
+            res.json({ user, token, message: "Password reset successfully" });
         } catch (err) {
             res.status(400).json({ message: err.message });
         }
@@ -104,7 +104,7 @@ class AuthController {
         }
     }
 
-        async adminForgotPassword(req, res) {
+    async adminForgotPassword(req, res) {
         const { error } = AuthValidator.forgotPassword(req.body);
         if (error) return res.status(400).json({ message: error.details[0].message });
 

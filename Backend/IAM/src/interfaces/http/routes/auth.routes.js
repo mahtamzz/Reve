@@ -52,7 +52,7 @@ router.get(
  *                 type: string
  *               password:
  *                 type: string
- *               name:
+ *               username:
  *                 type: string
  *     responses:
  *       201:
@@ -339,7 +339,7 @@ router.get(
  *           schema:
  *             type: object
  *             properties:
- *               token:
+ *               otp:
  *                 type: string
  *               newPassword:
  *                 type: string
