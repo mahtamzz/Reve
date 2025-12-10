@@ -35,13 +35,15 @@ class AdminRepository {
     }
 
     async updatePassword(email, hashedPassword) {
-        await pool.query(
-            "UPDATE admins SET password = $1 WHERE email = $2",
+        const result = await pool.query(
+            "UPDATE admins SET password = $1 WHERE email = $2 RETURNING id, username, email",
             [hashedPassword, email]
         );
 
         // Remove old cached version
         await cache.del(`admin:${email}`);
+
+        return result.rows[0];
     }
 
     async findById(id) {

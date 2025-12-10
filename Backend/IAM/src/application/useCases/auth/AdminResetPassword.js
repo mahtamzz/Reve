@@ -14,13 +14,10 @@ class AdminResetPassword {
         if (!storedOtp) throw new Error("OTP expired");
         if (storedOtp !== otp) throw new Error("Invalid OTP");
 
-        // Hash the new password
         const hashed = await bcrypt.hash(newPassword, 10);
 
-        // Update admin password
         const admin = await adminRepo.updatePassword(email, hashed);
 
-        // Remove OTP from Redis
         await redis.del(`reset_admin:${email}`);
 
         // Generate a JWT for the admin
