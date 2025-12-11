@@ -30,10 +30,10 @@ class AuthController {
 
     async verifyOtp(req, res) {
         try {
-            const { user, token } = await VerifyOtp.execute(req.body);
+            const { user, accessToken, refreshToken } = await VerifyOtp.execute(req.body);
             const { password, ...safeUser } = user;
 
-            setTokenCookie(res, token);
+            setTokenCookie(res, accessToken, refreshToken);
 
             res.json({
                 message: "Email verified",
@@ -60,10 +60,10 @@ class AuthController {
         }
 
         try {
-            const { user, token } = await UserLogin.execute(req.body);
+            const { user, accessToken, refreshToken } = await UserLogin.execute(req.body);
             const { password, ...safeUser } = user;
 
-            setTokenCookie(res, token);
+            setTokenCookie(res, accessToken, refreshToken);
 
             return res.json({
                 user: safeUser
@@ -85,10 +85,10 @@ class AuthController {
 
     async verifyLoginOtp(req, res) {
         try {
-            const { user, token } = await VerifyLoginOtp.execute(req.body);
+            const { user, accessToken, refreshToken } = await VerifyLoginOtp.execute(req.body);
             const { password, ...safeUser } = user;
 
-            setTokenCookie(res, token);
+            setTokenCookie(res, accessToken, refreshToken);
 
             res.json({ user: safeUser });
         } catch (err) {
@@ -113,9 +113,9 @@ class AuthController {
         if (error) return res.status(400).json({ message: error.details[0].message });
 
         try {
-            const { user, token } = await ResetPassword.execute(req.body);
+            const { user, accessToken, refreshToken } = await ResetPassword.execute(req.body);
 
-            setTokenCookie(res, token);
+            setTokenCookie(res, accessToken, refreshToken);
 
             res.json({ 
                 user, 
@@ -141,9 +141,9 @@ class AuthController {
 
     async adminLogin(req, res) {
         try {
-            const { admin, token } = await AdminLogin.execute(req.body);
+            const { admin, accessToken, refreshToken } = await AdminLogin.execute(req.body);
 
-            setTokenCookie(res, token);
+            setTokenCookie(res, accessToken, refreshToken);
 
             return res.json({ admin }); // token is now in cookie
         } catch (err) {
@@ -168,9 +168,9 @@ class AuthController {
         if (error) return res.status(400).json({ message: error.details[0].message });
 
         try {
-            const { admin, token } = await AdminResetPassword.execute(req.body);
+            const { admin, accessToken, refreshToken } = await AdminResetPassword.execute(req.body);
 
-            setTokenCookie(res, token);
+            setTokenCookie(res, accessToken, refreshToken);
 
             res.json({ admin, message: "Admin password reset successfully" });
         } catch (err) {

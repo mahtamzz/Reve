@@ -15,7 +15,6 @@ class RefreshToken {
         const user = await userRepo.findById(payload.user_id);
         if (!user) throw new Error("User not found");
 
-        // Generate new tokens
         const newAccessToken = JwtService.generate({
             user_id: user.id,
             username: user.username

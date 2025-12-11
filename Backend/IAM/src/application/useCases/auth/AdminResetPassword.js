@@ -20,13 +20,19 @@ class AdminResetPassword {
 
         await redis.del(`reset_admin:${email}`);
 
-        // Generate a JWT for the admin
-        const token = JwtService.generate({
+        const accessToken = JwtService.generate({
             admin_id: admin.id,
             username: admin.username,
+            role: "admin",
         });
 
-        return { admin, token };
+        const refreshToken = JwtService.generateRefreshToken({
+            admin_id: admin.id,
+            username: admin.username,
+            role: "admin",
+        });
+
+        return { admin, accessToken, refreshToken };
     }
 }
 

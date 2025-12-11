@@ -5,14 +5,13 @@ const JwtService = require("../../../infrastructure/auth/JwtService");
 const cache = require("../../../infrastructure/cache/CacheService");
 
 class UserLogin {
-async execute({ email, password }) {
+    async execute({ email, password }) {
         const fails = await cache.get(`login_fails:${email}`) || 0;
         if (fails >= 5) {
-            throw new Error("Too many attempts (fail). Try again later.");
+            throw new Error("Too many attempts. Try again later.");
         }
 
         const user = await userRepo.findByEmail(email);
-
         if (!user) throw new Error("Invalid credentials");
 
         const valid = await bcrypt.compare(password, user.password);
@@ -21,15 +20,19 @@ async execute({ email, password }) {
             throw new Error("Invalid credentials");
         }
 
-        // Reset fails
         await cache.del(`login_fails:${email}`);
 
-        const token = JwtService.generate({
+        const accessToken = JwtService.generate({
             user_id: user.id,
             username: user.username,
         });
 
-        return { user, token };
+        const refreshToken = JwtService.generateRefreshToken({
+            user_id: user.id,
+            username: user.username,
+        });
+
+        return { user, accessToken, refreshToken };
     }
 }
 

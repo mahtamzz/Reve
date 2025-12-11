@@ -18,12 +18,17 @@ class VerifyOtp {
         await redis.del(`pending_user:${email}`);
         await redis.del(`otp:${email}`);
 
-        const token = JwtService.generate({
+        const accessToken = JwtService.generate({
             user_id: user.id,
             username: user.username,
         });
 
-        return { user, token };
+        const refreshToken = JwtService.generateRefreshToken({
+            user_id: user.id,
+            username: user.username,
+        });
+
+        return { user, accessToken, refreshToken };
     }
 }
 

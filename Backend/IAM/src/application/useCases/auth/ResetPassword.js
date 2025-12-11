@@ -18,13 +18,17 @@ class ResetPassword {
 
         await redis.del(`reset:${email}`);
 
-        // Generate a new JWT for the user
-        const token = JwtService.generate({
+        const accessToken = JwtService.generate({
             user_id: user.id,
             username: user.username,
         });
 
-        return { user, token };
+        const refreshToken = JwtService.generateRefreshToken({
+            user_id: user.id,
+            username: user.username,
+        });
+
+        return { user, accessToken, refreshToken };
     }
 }
 

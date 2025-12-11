@@ -10,13 +10,19 @@ class AdminLogin {
         const valid = await bcrypt.compare(password, admin.password);
         if (!valid) throw new Error("Invalid credentials");
 
-        const token = JwtService.generate({
+        const accessToken = JwtService.generate({
             admin_id: admin.id,
             username: admin.username,
-            role: 'admin',
+            role: "admin",
         });
 
-        return { admin, token };
+        const refreshToken = JwtService.generateRefreshToken({
+            admin_id: admin.id,
+            username: admin.username,
+            role: "admin",
+        });
+
+        return { admin, accessToken, refreshToken };
     }
 }
 

@@ -5,7 +5,6 @@ const JwtService = require("../../../infrastructure/auth/JwtService");
 class VerifyLoginOtp {
     async execute({ email, otp }) {
         const storedOtp = await redis.get(`login_otp:${email}`);
-
         if (!storedOtp) throw new Error("OTP expired or not found");
         if (storedOtp !== otp) throw new Error("Invalid OTP");
 
@@ -14,12 +13,17 @@ class VerifyLoginOtp {
 
         await redis.del(`login_otp:${email}`);
 
-        const token = JwtService.generate({
+        const accessToken = JwtService.generate({
             user_id: user.id,
             username: user.username,
         });
 
-        return { user, token };
+        const refreshToken = JwtService.generateRefreshToken({
+            user_id: user.id,
+            username: user.username,
+        });
+
+        return { user, accessToken, refreshToken };
     }
 }
 
