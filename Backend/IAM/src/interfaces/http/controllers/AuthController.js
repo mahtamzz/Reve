@@ -12,6 +12,7 @@ const AdminResetPassword = require("../../../application/useCases/auth/AdminRese
 const SendLoginOtp = require("../../../application/useCases/auth/SendLoginOtp");
 const VerifyLoginOtp = require("../../../application/useCases/auth/VerifyLoginOtp");
 const setTokenCookie = require("../helpers/setTokenCookie")
+const RefreshTokenUseCase = require("../../../application/useCases/auth/RefreshToken");
 
 class AuthController {
 
@@ -170,6 +171,19 @@ class AuthController {
             res.json({ admin, message: "Admin password reset successfully" });
         } catch (err) {
             res.status(400).json({ message: err.message });
+        }
+    }
+
+    async refreshToken(req, res) {
+        try {
+            const refreshToken = req.cookies.refreshToken;
+            const { user, accessToken, refreshToken: newRefreshToken } = await RefreshTokenUseCase.execute(refreshToken);
+
+            setTokenCookie(res, accessToken, newRefreshToken);
+
+            res.json({ message: "Token refreshed", user });
+        } catch (err) {
+            res.status(401).json({ message: err.message });
         }
     }
 

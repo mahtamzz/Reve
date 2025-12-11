@@ -19,6 +19,8 @@ router.post("/admin/login", auditMiddleware('ADMIN_LOGIN_ATTEMPT'), (req, res) =
 router.post("/admin/forgot-password", (req, res) => AuthController.adminForgotPassword(req, res));
 router.post("/admin/reset-password", (req, res) => AuthController.adminResetPassword(req, res));
 
+router.post("/refresh-token", (req, res) => AuthController.refreshToken(req, res));
+
 
 /* ---------------- GOOGLE AUTH ROUTES ---------------- */
 router.get(
@@ -412,6 +414,37 @@ router.get(
  *         description: Redirect to dashboard after successful login
  *       500:
  *         description: Google authentication failed
+ */
+
+/**
+ * @swagger
+ * /api/auth/refresh-token:
+ *   post:
+ *     summary: Refresh JWT using refresh token cookie
+ *     tags: [Auth]
+ *     security:
+ *       - cookieAuth: []
+ *     responses:
+ *       200:
+ *         description: New access (and refresh) tokens issued
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 user:
+ *                   type: object
+ *                   properties:
+ *                     user_id:
+ *                       type: string
+ *                     username:
+ *                       type: string
+ *                     email:
+ *                       type: string
+ *       401:
+ *         description: Invalid or expired refresh token
  */
 
 module.exports = router;
