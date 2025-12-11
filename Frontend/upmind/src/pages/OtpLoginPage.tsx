@@ -105,6 +105,7 @@ const OtpLoginPage: React.FC = () => {
     }
   };
 
+
   const handleOtpKeyDown = (
     index: number,
     e: React.KeyboardEvent<HTMLInputElement>
@@ -112,13 +113,19 @@ const OtpLoginPage: React.FC = () => {
     if (e.key === "Backspace" && !code[index] && index > 0) {
       inputsRef.current[index - 1]?.focus();
     }
-
+  
     if (e.key === "ArrowLeft" && index > 0) {
       inputsRef.current[index - 1]?.focus();
     }
-
+  
     if (e.key === "ArrowRight" && index < CODE_LENGTH - 1) {
       inputsRef.current[index + 1]?.focus();
+    }
+  
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const form = e.currentTarget.form as HTMLFormElement | null;
+      form?.requestSubmit();
     }
   };
 

@@ -86,15 +86,29 @@ const AdminOtpLoginPage: React.FC = () => {
     }
   };
 
-  const handleOtpKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleOtpKeyDown = (
+    index: number,
+    e: React.KeyboardEvent<HTMLInputElement>
+  ) => {
     if (e.key === "Backspace" && !code[index] && index > 0) {
       inputsRef.current[index - 1]?.focus();
     }
-
-    if (e.key === "ArrowLeft" && index > 0) inputsRef.current[index - 1]?.focus();
-    if (e.key === "ArrowRight" && index < CODE_LENGTH - 1)
+  
+    if (e.key === "ArrowLeft" && index > 0) {
+      inputsRef.current[index - 1]?.focus();
+    }
+  
+    if (e.key === "ArrowRight" && index < CODE_LENGTH - 1) {
       inputsRef.current[index + 1]?.focus();
+    }
+  
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const form = e.currentTarget.form as HTMLFormElement | null;
+      form?.requestSubmit();
+    }
   };
+  
 
   // ------------------ VERIFY OTP ------------------
   const handleVerifyOtp = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -207,38 +221,43 @@ const AdminOtpLoginPage: React.FC = () => {
 
         {/* STEP 2: verify OTP */}
         {step === "verify" && (
-          <form onSubmit={handleVerifyOtp} className="space-y-6">
+        <form
+            id="otpVerifyForm"
+            onSubmit={handleVerifyOtp}
+            className="space-y-6"
+        >
             <p className="text-sm text-chocolate/80">
-              Enter the 6-digit code sent to <strong>{email}</strong>
+            Enter the 6-digit code sent to <strong>{email}</strong>
             </p>
 
             <div className="flex justify-center gap-2">
-              {Array.from({ length: CODE_LENGTH }).map((_, index) => (
+            {Array.from({ length: CODE_LENGTH }).map((_, index) => (
                 <input
-                  key={index}
-                  ref={(el: HTMLInputElement | null) => {
+                key={index}
+                ref={(el: HTMLInputElement | null) => {
                     inputsRef.current[index] = el;
-                  }}
-                  type="text"
-                  maxLength={1}
-                  inputMode="numeric"
-                  value={code[index]}
-                  onChange={(e) => handleOtpChange(index, e)}
-                  onKeyDown={(e) => handleOtpKeyDown(index, e)}
-                  className="w-10 h-12 border border-chocolate/30 rounded-md text-center text-xl"
+                }}
+                type="text"
+                maxLength={1}
+                inputMode="numeric"
+                value={code[index]}
+                onChange={(e) => handleOtpChange(index, e)}
+                onKeyDown={(e) => handleOtpKeyDown(index, e)}
+                className="w-10 h-12 border border-chocolate/30 rounded-md text-center text-xl"
                 />
-              ))}
+            ))}
             </div>
 
             <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-chocolate text-creamtext py-3 rounded-md disabled:opacity-60"
+            type="submit"
+            disabled={loading}
+            className="w-full bg-chocolate text-creamtext py-3 rounded-md disabled:opacity-60"
             >
-              {loading ? "Verifying..." : "Verify OTP & Login"}
+            {loading ? "Verifying..." : "Verify OTP & Login"}
             </button>
-          </form>
+        </form>
         )}
+
 
         <div className="mt-6 text-center text-sm">
           <button
