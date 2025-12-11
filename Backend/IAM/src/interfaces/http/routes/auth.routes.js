@@ -279,10 +279,20 @@ router.get(
  *                 description: New password (min 6 characters)
  *     responses:
  *       200:
- *         description: Password reset successfully
+ *         description: Password reset successfully, token is set in HTTP-only cookie
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 user:
+ *                   type: object
+ *                 message:
+ *                   type: string
  *       400:
- *         description: Invalid token or password
+ *         description: Invalid OTP or password
  */
+
 
 /**
  * @swagger

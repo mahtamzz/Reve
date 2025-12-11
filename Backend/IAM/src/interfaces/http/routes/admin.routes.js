@@ -10,9 +10,10 @@ router.get("/me", adminAuthMiddleware, (req, res) => AdminController.me(req, res
  * /api/admins/me:
  *   get:
  *     summary: Get current logged-in admin info
- *     tags: [Users]
+ *     tags: [Admins]
+ *     description: Returns the profile of the logged-in admin. Uses token cookie for authentication.
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []      # <-- note: updated from bearerAuth
  *     responses:
  *       200:
  *         description: Current admin retrieved successfully
@@ -27,6 +28,8 @@ router.get("/me", adminAuthMiddleware, (req, res) => AdminController.me(req, res
  *                   type: string
  *                 email:
  *                   type: string
+ *       401:
+ *         description: Unauthorized
  *       404:
  *         description: Admin not found
  */

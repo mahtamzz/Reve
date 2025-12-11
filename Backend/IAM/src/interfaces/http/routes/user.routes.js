@@ -11,7 +11,7 @@ router.get("/me", authMiddleware, (req, res) => UserController.me(req, res));
  *     summary: Get current logged-in user info
  *     tags: [Users]
  *     security:
- *       - bearerAuth: []
+ *      - cookieAuth: []
  *     responses:
  *       200:
  *         description: Current user retrieved successfully

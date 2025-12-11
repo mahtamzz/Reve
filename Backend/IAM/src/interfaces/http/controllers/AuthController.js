@@ -113,7 +113,13 @@ class AuthController {
 
         try {
             const { user, token } = await ResetPassword.execute(req.body);
-            res.json({ user, token, message: "Password reset successfully" });
+
+            setTokenCookie(res, token);
+
+            res.json({ 
+                user, 
+                message: "Password reset successfully" 
+            });
         } catch (err) {
             res.status(400).json({ message: err.message });
         }
@@ -131,7 +137,10 @@ class AuthController {
     async adminLogin(req, res) {
         try {
             const { admin, token } = await AdminLogin.execute(req.body);
-            res.json({ admin, token });
+
+            setTokenCookie(res, token);
+
+            return res.json({ admin }); // token is now in cookie
         } catch (err) {
             res.status(401).json({ message: err.message });
         }
@@ -155,7 +164,10 @@ class AuthController {
 
         try {
             const { admin, token } = await AdminResetPassword.execute(req.body);
-            res.json({ admin, token, message: "Admin password reset successfully" });
+
+            setTokenCookie(res, token);
+
+            res.json({ admin, message: "Admin password reset successfully" });
         } catch (err) {
             res.status(400).json({ message: err.message });
         }

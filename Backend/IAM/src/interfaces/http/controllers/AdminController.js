@@ -1,4 +1,4 @@
-const GetCurrentAdmin = require("../../../application/useCases/admins/GetCurrentAdmin");
+const GetCurrentAdmin = require("../../../application/useCases/users/GetCurrentAdmin");
 
 class AdminController {
     async me(req, res) {

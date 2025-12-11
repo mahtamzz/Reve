@@ -1,13 +1,12 @@
 const JwtService = require("../../../infrastructure/auth/JwtService");
 
 const authMiddleware = (req, res, next) => {
-    const authHeader = req.headers.authorization;
+    // Read token from cookie
+    const token = req.cookies?.token;
 
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    if (!token) {
         return res.status(401).json({ message: "Authorization token required" });
     }
-
-    const token = authHeader.split(" ")[1];
 
     try {
         const decoded = JwtService.verify(token);
