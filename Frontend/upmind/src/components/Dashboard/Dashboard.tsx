@@ -1,5 +1,7 @@
-import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+// src/pages/Dashboard.tsx
+import React, { useEffect, useState, useRef } from "react";
+import { fetchWithAuth } from "@/utils/fetchWithAuth";
+import { logout } from "@/utils/authToken";
 
 interface User {
   id: number;
@@ -8,45 +10,38 @@ interface User {
 }
 
 const Dashboard: React.FC = () => {
-  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
+  const fetchedRef = useRef(false);
 
   useEffect(() => {
+    if (fetchedRef.current) return;
+    fetchedRef.current = true;
+
     const fetchMe = async () => {
       try {
-        const res = await fetch("http://localhost:8080/api/users/me", {
-          method: "GET",
-          credentials: "include", 
-        });
+        const res = await fetchWithAuth("http://localhost:8080/api/users/me");
 
         if (!res.ok) {
           console.error("ME ERROR STATUS:", res.status);
-
-          if (res.status === 401 || res.status === 403) {
-            navigate("/login", { replace: true });
-          }
+          await logout();
           return;
         }
 
         const data = await res.json();
         console.log("ME RESPONSE (user dashboard):", data);
 
-        // بسته به اینکه بک‌اند چی برمی‌گردونه:
-        // اگر { id, username, email }:
-        // setUser(data);
-        // اگر { user: {...} }:
         setUser(data.user ?? data);
       } catch (err) {
         console.error("ME REQUEST FAILED:", err);
-        navigate("/login", { replace: true });
+        await logout();
       } finally {
         setLoading(false);
       }
     };
 
     fetchMe();
-  }, [navigate]);
+  }, []);
 
   if (loading) {
     return (
@@ -71,6 +66,13 @@ const Dashboard: React.FC = () => {
       <h1 className="mt-10 text-2xl text-creamtext">
         inja masalan Dashboard hast
       </h1>
+
+      <button
+        onClick={logout}
+        className="mt-4 px-4 py-2 bg-red-500 text-white rounded"
+      >
+        Logout
+      </button>
 
       <div className="mt-6 bg-creamtext text-chocolate rounded-lg px-6 py-4 shadow">
         <p className="text-lg">

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink, useNavigate, useSearchParams } from "react-router-dom";
 import LoginForm from "@/components/Login page/Login";
 
 const LoginPage: React.FC = () => {
@@ -10,7 +10,41 @@ const LoginPage: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const [mounted, setMounted] = useState<boolean>(false);
 
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [showLogoutMessage, setShowLogoutMessage] = useState(false);
+
+
   const navigate = useNavigate();
+
+  const timer = setTimeout(() => {
+    setShowLogoutMessage(false);
+  }, 2000); 
+  
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+  
+  useEffect(() => {
+    const loggedOut = searchParams.get("loggedOut") === "true";
+  
+    if (loggedOut) {
+      setShowLogoutMessage(true);
+  
+      // بعد از چند ثانیه پیام رو ببند
+      const timer = setTimeout(() => {
+        setShowLogoutMessage(false);
+      }, 3000); // 3 ثانیه
+  
+      // اختیاری: پاک کردن پارامتر از آدرس (که اگر رفرش کرد، دوباره پیام نیاد)
+      const sp = new URLSearchParams(searchParams);
+      sp.delete("loggedOut");
+      setSearchParams(sp, { replace: true });
+  
+      return () => clearTimeout(timer);
+    }
+  }, [searchParams, setSearchParams]);
+  
 
   useEffect(() => {
     setMounted(true);
@@ -70,12 +104,19 @@ const LoginPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-loginbg font-serif text-brand-text flex flex-col items-center">
-      {/* Header */}
-      <header
-        className={`w-full max-w-6xl flex justify-between items-center px-10 pt-10 text-white transition-all duration-700 ${
-          mounted ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-3"
-        }`}
-      >
+    {/* پیام لاگ‌اوت */}
+    {showLogoutMessage && (
+      <div className="fixed top-4 right-4 z-50 px-4 py-2 rounded-md bg-emerald-600 text-white shadow-lg">
+        شما با موفقیت خارج شدید.
+      </div>
+    )}
+
+    {/* Header */}
+    <header
+      className={`w-full max-w-6xl flex justify-between items-center px-10 pt-10 text-white transition-all duration-700 ${
+        mounted ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-3"
+      }`}
+    >
         <div className="text-3xl tracking-widest text-creamtext">
           <span className="inline-block origin-left transition-transform duration-700 ease-out hover:scale-105">
             REVE
