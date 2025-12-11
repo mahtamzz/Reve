@@ -9,6 +9,9 @@ const AuthValidator = require("../validators/AuthValidator");
 const AdminLogin = require("../../../application/useCases/auth/AdminLogin");
 const AdminForgotPassword = require("../../../application/useCases/auth/AdminForgotPassword");
 const AdminResetPassword = require("../../../application/useCases/auth/AdminResetPassword");
+const SendLoginOtp = require("../../../application/useCases/auth/SendLoginOtp");
+const VerifyLoginOtp = require("../../../application/useCases/auth/VerifyLoginOtp");
+const setTokenCookie = require("../helpers/setTokenCookie")
 
 class AuthController {
 
@@ -27,7 +30,14 @@ class AuthController {
     async verifyOtp(req, res) {
         try {
             const { user, token } = await VerifyOtp.execute(req.body);
-            res.json({ message: "Email verified", user, token });
+            const { password, ...safeUser } = user;
+
+            setTokenCookie(res, token);
+
+            res.json({
+                message: "Email verified",
+                user: safeUser
+            });
         } catch (err) {
             res.status(400).json({ message: err.message });
         }
@@ -52,15 +62,38 @@ class AuthController {
             const { user, token } = await UserLogin.execute(req.body);
             const { password, ...safeUser } = user;
 
+            setTokenCookie(res, token);
+
             return res.json({
-                user: safeUser,
-                token,
+                user: safeUser
             });
         } catch (err) {
             return res.status(401).json({ message: err.message });
         }
     }
 
+
+    async sendLoginOtp(req, res) {
+        try {
+            const result = await SendLoginOtp.execute(req.body);
+            res.json(result);
+        } catch (err) {
+            res.status(400).json({ message: err.message });
+        }
+    }
+
+    async verifyLoginOtp(req, res) {
+        try {
+            const { user, token } = await VerifyLoginOtp.execute(req.body);
+            const { password, ...safeUser } = user;
+
+            setTokenCookie(res, token);
+
+            res.json({ user: safeUser });
+        } catch (err) {
+            res.status(400).json({ message: err.message });
+        }
+    }   
 
     async forgotPassword(req, res) {
         const { error } = AuthValidator.forgotPassword(req.body);
