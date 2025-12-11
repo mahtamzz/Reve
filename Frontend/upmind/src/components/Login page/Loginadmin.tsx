@@ -165,6 +165,12 @@ const LoginAdmin: React.FC = () => {
             </Link>
           </p>
 
+          <p className="text-sm text-chocolate/70 mb-6">
+          <Link to="/admin/login-otp" className="text-niceblue underline">
+            login with OTP
+          </Link>
+        </p>         
+
           {/* Error */}
           {error && (
             <p className="text-red-600 text-sm text-center -mt-2">{error}</p>

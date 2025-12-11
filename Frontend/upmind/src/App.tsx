@@ -19,7 +19,8 @@ function App() {
       <Route path="/" element={<SignupPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/admin/login" element={<LoginAdmin />} />
-      <Route path="login-otp" element={<OtpLoginPage/>}/>
+      <Route path="/login-otp" element={<OtpLoginPage/>}/>
+      <Route path="/admin/login-otp" element={<OtpLoginPage/>}/>
       <Route path="/verification" element={<VerificationPage />} />
       <Route path="/dashboard" element={<Dashboard />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />

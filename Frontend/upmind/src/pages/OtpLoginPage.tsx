@@ -21,13 +21,11 @@ const OtpLoginPage: React.FC = () => {
     }
   }, [step]);
 
-  // -------------- Email validation --------------
   const isValidEmail = (value: string): boolean => {
     const pattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return pattern.test(value);
   };
 
-  // -------------- Request OTP (مرحله اول) --------------
   const handleRequestOtp = async (
     e: React.FormEvent<HTMLFormElement>
   ): Promise<void> => {
@@ -78,7 +76,6 @@ const OtpLoginPage: React.FC = () => {
     }
   };
 
-  // -------------- OTP input handlers --------------
   const updateCode = (index: number, value: string) => {
     setCode((prev) => {
       const next = [...prev];
@@ -125,7 +122,6 @@ const OtpLoginPage: React.FC = () => {
     }
   };
 
-  // -------------- Verify OTP (مرحله دوم) --------------
   const handleVerifyOtp = async (
     e: React.FormEvent<HTMLFormElement>
   ): Promise<void> => {
@@ -166,9 +162,6 @@ const OtpLoginPage: React.FC = () => {
         return;
       }
 
-      // اگر accessToken هم برمی‌گرده و بعداً خواستی تو Context نگه‌داری، اینجا بگیرش
-      // const accessToken = data.accessToken;
-
       try {
         console.log("OTP verified, checking session via /users/me");
 
@@ -184,9 +177,6 @@ const OtpLoginPage: React.FC = () => {
 
         const meData = await meRes.json();
         console.log("ME RESPONSE:", meData);
-
-        // اگر خواستی user رو نگه داری (اختیاری)
-        // localStorage.setItem("user", JSON.stringify(meData.user ?? meData));
 
         navigate("/dashboard");
       } catch (err) {
