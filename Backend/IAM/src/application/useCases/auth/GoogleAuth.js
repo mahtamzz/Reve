@@ -3,12 +3,10 @@ const JwtService = require("../../../infrastructure/auth/JwtService");
 
 class GoogleAuth {
     async execute(profile) {
-        const existing = await userRepo.findByGoogleIdOrEmail(
+        let user = await userRepo.findByGoogleIdOrEmail(
             profile.id,
             profile.emails[0].value
         );
-
-        let user = existing;
 
         if (!user) {
             const username =
@@ -23,12 +21,17 @@ class GoogleAuth {
             });
         }
 
-        const token = JwtService.generate({
+        const accessToken = JwtService.generate({
             user_id: user.id,
             username: user.username,
         });
 
-        return { user, token };
+        const refreshToken = JwtService.generateRefreshToken({
+            user_id: user.id,
+            username: user.username,
+        });
+
+        return { user, accessToken, refreshToken };
     }
 }
 
