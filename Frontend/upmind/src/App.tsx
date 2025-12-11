@@ -9,6 +9,7 @@ import Services from "@/components/Services/Services";
 import Contactus from "@/components/ContactUs/Contactus";
 import Dashboardadmin from "./components/Dashboard/Dashboardadmin";
 import ResetPassword from "@/components/ResetPassword/ResetPassword";
+import OtpLoginPage from "./pages/OtpLoginPage";
 import { Route, Routes } from "react-router-dom";
 import React from "react";
 
@@ -18,6 +19,7 @@ function App() {
       <Route path="/" element={<SignupPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/admin/login" element={<LoginAdmin />} />
+      <Route path="login-otp" element={<OtpLoginPage/>}/>
       <Route path="/verification" element={<VerificationPage />} />
       <Route path="/dashboard" element={<Dashboard />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />

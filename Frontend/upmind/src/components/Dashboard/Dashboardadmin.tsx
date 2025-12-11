@@ -74,12 +74,6 @@ const DashboardAdmin: React.FC = () => {
       <h1 className="mt-10 text-2xl text-creamtext">
         inja masalan Dashboard admin hast
       </h1>
-
-      <p className="text-creamtext mt-4">
-        Admin logged in as{" "}
-        <span className="font-semibold">{user.username}</span>{" "}
-        (<span>{user.email}</span>)
-      </p>
     </div>
   );
 };

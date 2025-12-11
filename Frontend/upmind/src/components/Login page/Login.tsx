@@ -79,12 +79,19 @@ const LoginForm: React.FC<LoginFormProps> = ({
           />
         </div>
 
-        <p className="text-sm text-chocolate/70 -mt-4">
+        <p className="text-sm text-chocolate/70 -mt-4 mb-6">
           Don’t have an account?{" "}
           <Link to="/" className="text-niceblue underline">
             Sign up
           </Link>
         </p>
+
+        <p className="text-sm text-chocolate/70 mb-6">
+          <Link to="/login-otp" className="text-niceblue underline">
+            login with OTP
+          </Link>
+        </p>
+
 
         {/* Error */}
         {error && (
