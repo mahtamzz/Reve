@@ -36,7 +36,6 @@ const LoginPage: React.FC = () => {
         setShowLogoutMessage(false);
       }, 3000); // 3 ثانیه
   
-      // اختیاری: پاک کردن پارامتر از آدرس (که اگر رفرش کرد، دوباره پیام نیاد)
       const sp = new URLSearchParams(searchParams);
       sp.delete("loggedOut");
       setSearchParams(sp, { replace: true });
@@ -53,50 +52,59 @@ const LoginPage: React.FC = () => {
   async function handleLogin(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError("");
-
+  
+    if (!email || !password) {
+      setError("Email and password are required.");
+      return;
+    }
+  
     try {
       setLoading(true);
-
+  
       const res = await fetch("http://localhost:8080/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include", 
         body: JSON.stringify({ email, password }),
       });
-
+  
       const text = await res.text();
-
-
-      let data: any;
+  
+      let data: any = null;
       try {
-        data = JSON.parse(text);
-      } catch (err) {
-        console.error("Server did NOT return JSON:", text);
-        setError("Server error: invalid response format.");
-        return;
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        if (!res.ok) {
+          setError("Login failed (invalid server response).");
+          return;
+        }
       }
-
-      console.log("STATUS:", res.status);
-      console.log("TEXT:", text);
-      console.log("PARSED DATA:", data);
-
-
+  
       if (!res.ok) {
-        setError(data.error || "Login failed");
+        setError(data?.error || data?.message || "Login failed");
         return;
       }
-      console.log("TOKEN:", data.token);
 
-      if (data.token) {
-        localStorage.setItem("token", data.token);
-        navigate("/dashboard");
+      const meRes = await fetch("http://localhost:8080/api/users/me", {
+        method: "GET",
+        credentials: "include", 
+      });
+  
+      if (!meRes.ok) {
+        setError("Session invalid. Please try again.");
+        return;
       }
+  
+  
+      navigate("/dashboard");
     } catch (err) {
-      console.log("chishod")
+      console.error(err);
       setError("Network error. Please try again.");
     } finally {
       setLoading(false);
     }
   }
+  
 
   function handleForgotPassword() {
     navigate("/forgot-password");

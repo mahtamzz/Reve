@@ -173,9 +173,10 @@ const VerificationPage: React.FC = () => {
       const res = await fetch("http://localhost:8080/api/auth/resend-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include", 
         body: JSON.stringify({ email }),
       });
-
+      
       const data = await res.json();
       console.log("RESEND OTP RESPONSE:", data);
 
@@ -208,86 +209,68 @@ const VerificationPage: React.FC = () => {
     if (e) e.preventDefault();
     setError("");
     setSuccess("");
-
+  
     if (isExpired) {
       setError("code has expired, please resend a new one.");
       return;
     }
-
+  
     const finalCode = overrideCode ?? code.join("");
-
+  
     if (!email) {
       setError("no such email found");
       return;
     }
-
+  
     if (finalCode.length !== CODE_LENGTH) {
       setError("it has to be 6 digits!");
       return;
     }
-
+  
     try {
       setLoading(true);
-
+  
+      // 1) Verify OTP (cookie-based)
       const res = await fetch("http://localhost:8080/api/auth/verify-otp", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          email,
-          otp: finalCode,
-        }),
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email, otp: finalCode }),
       });
-
+  
       const data = await res.json();
       console.log("VERIFY RESPONSE:", data);
-
+  
       if (!res.ok) {
-        setError(data.message || "invalid code");
+        setError(data.message || data.error || "invalid code");
         return;
       }
-
+  
       setSuccess("email validated successfully");
-
-      const token = data.token as string | undefined;
-      if (token) {
-        localStorage.setItem("token", token);
+  
+      // 2) Verify session (no Bearer token)
+      const meRes = await fetch("http://localhost:8080/api/users/me", {
+        method: "GET",
+        credentials: "include",
+      });
+  
+      if (!meRes.ok) {
+        setError("Session invalid. Please try again.");
+        return;
       }
-
-      try {
-        const meRes = await fetch("http://localhost:8080/api/users/me", {
-          method: "GET",
-          headers: {
-            "Authorization": `Bearer ${data.token}`,
-            "Content-Type": "application/json"
-          }
-        });
-    
-        const meData = await meRes.json();
-        console.log("ME RESPONSE:", meData);
-    
-        if (!meRes.ok) {
-          setError("Could not fetch user info. Token may be invalid.");
-          return;
-        }
-    
-        localStorage.setItem("user", JSON.stringify(meData.user));
-    
-        navigate("/dashboard");
-
-    
-      } catch (err) {
-        console.error(err);
-        setError("Network error while verifying token.");
-      }
+  
+      const meData = await meRes.json();
+      console.log("ME RESPONSE:", meData);
+  
+      navigate("/dashboard");
     } catch (err) {
       console.error(err);
-      setError("there is a problem");
+      setError("Network error. Please try again.");
     } finally {
       setLoading(false);
     }
   };
+  
 
   return (
     <VerificationView

@@ -16,7 +16,6 @@ const SignupPage: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(false);
 
   useEffect(() => {
-    // trigger animation once component mounts
     setMounted(true);
   }, []);
 
@@ -24,26 +23,38 @@ const SignupPage: React.FC = () => {
     e.preventDefault();
     setError("");
     setLoading(true);
-
+  
     try {
       const res = await fetch("http://localhost:8080/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include", 
         body: JSON.stringify({
           username: name,
-          email: email,
-          password: password,
+          email,
+          password,
         }),
       });
-
-      const data = await res.json();
+  
+      const text = await res.text();
+  
+      let data: any = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        if (!res.ok) {
+          setError("Server error: invalid response format.");
+          return;
+        }
+      }
+  
       console.log("REGISTER RESPONSE:", data);
-
+  
       if (!res.ok) {
-        setError(data.message || String(data));
+        setError(data?.error || data?.message || "Signup failed");
         return;
       }
-
+    
       navigate("/verification", { state: { email, from: "signup" } });
     } catch (err) {
       console.error(err);
@@ -52,7 +63,7 @@ const SignupPage: React.FC = () => {
       setLoading(false);
     }
   }
-
+  
   function handleForgotPassword() {
     navigate("/forgot-password");
   }

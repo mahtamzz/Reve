@@ -2,7 +2,7 @@ import SignupPage from "@/pages/Signup";
 import LoginPage from "@/pages/Login";
 import LoginAdmin from "@/components/Login page/Loginadmin";
 import VerificationPage from "@/pages/Verification";
-import Dashboard from "@/components/Dashboard/Dashboard";
+import Dashboard from "./pages/Dashboard";
 import ForgotPassword from "@/components/Forgotpass/ForgotPassword";
 import About from "@/components/About/About";
 import Services from "@/components/Services/Services";
