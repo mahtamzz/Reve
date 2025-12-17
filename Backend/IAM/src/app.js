@@ -26,9 +26,6 @@ app.use(express.json());
 app.use(passport.initialize());
 
 app.use("/api/auth", require("./interfaces/http/routes/auth.routes"));
-app.use("/api/users", require("./interfaces/http/routes/user.routes"));
-app.use("/api/admins", require("./interfaces/http/routes/admin.routes"));
-
 
 app.get("/api/docs/swagger.json", (req, res) => {
     res.setHeader("Content-Type", "application/json");
