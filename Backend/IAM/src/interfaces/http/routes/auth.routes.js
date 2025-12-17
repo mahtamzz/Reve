@@ -4,7 +4,8 @@ const passport = require("passport");
 const AuthController = require("../controllers/AuthController");
 const { loginLimiter } = require("../middleware/rateLimiter");
 const auditMiddleware = require('../middleware/audit');
-
+const authMiddleware = require("../middleware/authMiddleware");
+const adminAuthMiddleware = require("../middleware/adminAuthMiddleware");
 
 router.post("/register", auditMiddleware('REGISTER_ATTEMPT'), (req, res) => AuthController.register(req, res));
 router.post("/verify-otp", auditMiddleware('VERIFY_OTP'), (req, res) => AuthController.verifyOtp(req, res));
@@ -37,6 +38,8 @@ router.get(
     (req, res) => AuthController.googleCallback(req, res)
 );
 
+router.get("/me", authMiddleware, (req, res) => AuthController.me(req, res));
+router.get("/admin/me", adminAuthMiddleware, (req, res) => AuthController.adminMe(req, res));
 
 
 
@@ -445,6 +448,54 @@ router.get(
  *                       type: string
  *       401:
  *         description: Invalid or expired refresh token
+ */
+
+/**
+ * @swagger
+ * /api/auth/me:
+ * get:
+ *   summary: Get User's authenticated identity
+ *   tags: [Auth]
+ *   security:
+ *     - cookieAuth: []
+ *   responses:
+ *     200:
+ *       description: Authenticated identity
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               uid:
+ *                 type: string
+ *               email:
+ *                 type: string
+ *               role:
+ *                 type: string
+ */
+
+/**
+ * @swagger
+ * /api/auth/admin/me:
+ * get:
+ *   summary: Get Admin's authenticated identity
+ *   tags: [Auth]
+ *   security:
+ *     - cookieAuth: []
+ *   responses:
+ *     200:
+ *       description: Authenticated identity
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               uid:
+ *                 type: string
+ *               email:
+ *                 type: string
+ *               role:
+ *                 type: string
  */
 
 module.exports = router;

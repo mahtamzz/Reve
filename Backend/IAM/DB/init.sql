@@ -1,13 +1,9 @@
 CREATE TABLE Users (
     id            SERIAL PRIMARY KEY,
+    email          VARCHAR(100) UNIQUE NOT NULL,
 	googleid     TEXT,
     username     VARCHAR(50),
-    email          VARCHAR(100) UNIQUE NOT NULL,
-	password    VARCHAR(255),
-    -- pic            TEXT,
-    weekly_goal    INT,
-    xp             INT DEFAULT 0,
-    streak         INT DEFAULT 0
+	password    VARCHAR(255)
 );
 
 CREATE TABLE Subject (

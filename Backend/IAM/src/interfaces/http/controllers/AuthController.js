@@ -191,6 +191,22 @@ class AuthController {
         }
     }
 
+        async me(req, res) {
+        res.json({
+            uid: req.user.uid,
+            email: req.user.email,
+            role: req.user.role
+        });
+    }
+
+    async adminMe(req, res) {
+        res.json({
+            id: req.admin.id,
+            email: req.admin.email,
+            role: "admin"
+        });
+    }
+
 }
 
 module.exports = new AuthController();

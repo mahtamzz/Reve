@@ -1,0 +1,20 @@
+require("dotenv").config();
+
+const env = {
+    // Service
+    PORT: process.env.PORT || 3001,
+    SERVICE_NAME: 'user-profile-service',
+
+    // JWT (verification only)
+    JWT_KEY: process.env.JWT_KEY || 'dev_secret',
+    JWT_ISSUER: process.env.JWT_ISSUER || 'iam-service',
+
+    // Database (owned by this service)
+    PGUSER: process.env.PGUSER || 'postgres',
+    PGPASSWORD: process.env.PGPASSWORD || 'postgres',
+    PGHOST: process.env.PGHOST || 'localhost',
+    PGDATABASE: process.env.PGDATABASE || 'user_profile_db',
+    PGPORT: process.env.PGPORT || 5432,
+};
+
+module.exports = env;

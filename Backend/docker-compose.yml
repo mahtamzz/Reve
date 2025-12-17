@@ -1,11 +1,12 @@
 version: "3.8"
 
 services:
-  backend:
+
+  iam_service:
     build:
       context: ./IAM
       dockerfile: Dockerfile
-    container_name: backend_service
+    container_name: iam_service
     restart: always
     env_file:
       - ./IAM/.env
@@ -16,13 +17,28 @@ services:
         condition: service_healthy
     ports:
       - "3000:3000"
+
+  profile_service:
+    build:
+      context: ./UserProfile
+      dockerfile: Dockerfile
+    container_name: profile_service
+    restart: always
+    env_file:
+      - ./UserProfile/.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "3001:3001"
+
   postgres:
     image: postgres:15
     container_name: postgres_db
     restart: always
     environment:
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=mydb
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: mydb
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./IAM/DB/init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -49,8 +65,10 @@ services:
       - "8080:80"
     volumes:
       - ./gateway.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./proxy_common.conf:/etc/nginx/conf.d/proxy_common.conf:ro
     depends_on:
-      - backend
+      - iam_service
+      - profile_service
 
 volumes:
   pgdata:
