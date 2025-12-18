@@ -172,7 +172,7 @@ const OtpLoginPage: React.FC = () => {
       try {
         console.log("OTP verified, checking session via /users/me");
 
-        const meRes = await fetch("http://localhost:8080/api/users/me", {
+        const meRes = await fetch("http://localhost:8080/api/auth/me", {
           method: "GET",
           credentials: "include",
         });

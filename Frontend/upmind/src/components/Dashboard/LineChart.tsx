@@ -1,102 +1,105 @@
-import React, { useMemo } from "react";
+import React from "react";
+import {
+  ResponsiveContainer,
+  LineChart as RLineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+} from "recharts";
+import { format, parseISO } from "date-fns";
 
-type Point = { d: string; h: number };
+export type WeeklyPoint = {
+  date: string;   // "YYYY-MM-DD"
+  hours: number;
+};
 
-interface LineChartProps {
-  data: Point[];
+function formatHours(v: number) {
+  const fixed = Number.isInteger(v) ? v.toString() : v.toFixed(1);
+  return `${fixed}h`;
 }
 
-export const LineChart: React.FC<LineChartProps> = ({ data }) => {
-  const { points, labels } = useMemo(() => {
-    const w = 640;
-    const h = 220;
-    const pad = 28;
+const CustomTooltip = ({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean;
+  payload?: readonly any[];
+  label?: string;
+}) => {
+  if (!active || !payload?.length) return null;
 
-    const maxY = Math.max(...data.map((x) => x.h), 10);
-    const minY = 0;
-
-    const xStep = data.length > 1 ? (w - pad * 2) / (data.length - 1) : 0;
-    const yScale = (val: number) =>
-      pad + (h - pad * 2) * (1 - (val - minY) / (maxY - minY));
-
-    const pts = data
-      .map((p, i) => `${pad + i * xStep},${yScale(p.h)}`)
-      .join(" ");
-
-    return { points: pts, labels: { w, h, pad, xStep, yScale } };
-  }, [data]);
-
-  const w = 640;
-  const h = 220;
-  const pad = 28;
-  const gridLines = 4;
+  const hours = payload[0]?.value ?? 0;
 
   return (
-    <div className="w-full overflow-x-auto">
-      <svg
-        viewBox={`0 0 ${w} ${h}`}
-        className="w-full min-w-[520px]"
-        role="img"
-        aria-label="Weekly study chart"
-      >
-        {/* grid */}
-        {Array.from({ length: gridLines + 1 }).map((_, idx) => {
-          const y = pad + ((h - pad * 2) / gridLines) * idx;
-          return (
-            <line
-              key={idx}
-              x1={pad}
-              x2={w - pad}
-              y1={y}
-              y2={y}
-              stroke="rgba(0,0,0,0.12)"
-              strokeWidth="1"
-            />
-          );
-        })}
+    <div className="rounded-xl border border-zinc-200 bg-white/95 px-3 py-2 shadow-lg backdrop-blur">
+      <p className="text-xs font-medium text-zinc-500">{label ?? ""}</p>
+      <p className="mt-0.5 text-sm font-semibold text-zinc-900">
+        {formatHours(hours)}
+        <span className="ml-1 text-xs font-medium text-zinc-500">studied</span>
+      </p>
+    </div>
+  );
+};
 
-        {/* line */}
-        <polyline
-          points={points}
-          fill="none"
-          stroke="rgba(37,99,235,0.85)"
-          strokeWidth="2.5"
-          strokeLinejoin="round"
-          strokeLinecap="round"
-        />
 
-        {/* dots */}
-        {data.map((p, i) => {
-          const cx = pad + i * (data.length > 1 ? (w - pad * 2) / (data.length - 1) : 0);
-          // recreate yScale (cheap & safe)
-          const maxY = Math.max(...data.map((x) => x.h), 10);
-          const cy =
-            pad + (h - pad * 2) * (1 - (p.h - 0) / (maxY - 0));
-          return (
-            <g key={`${p.d}-${i}`}>
-              <circle cx={cx} cy={cy} r="4" fill="rgba(37,99,235,0.9)" />
-              <circle cx={cx} cy={cy} r="8" fill="rgba(37,99,235,0.12)" />
-            </g>
-          );
-        })}
+export const WeeklyStudyChart: React.FC<{ data: WeeklyPoint[] }> = ({ data }) => {
+  const chartData = data.map((d) => ({
+    ...d,
+    day: format(parseISO(d.date), "EEE"),          // Mon
+    full: format(parseISO(d.date), "MMM d, yyyy"), // Dec 17, 2025
+  }));
 
-        {/* x labels */}
-        {data.map((p, i) => {
-          const x = pad + i * (data.length > 1 ? (w - pad * 2) / (data.length - 1) : 0);
-          return (
-            <text
-              key={`${p.d}-label`}
-              x={x}
-              y={h - 8}
-              textAnchor="middle"
-              fontSize="11"
-              fill="rgba(0,0,0,0.55)"
-            >
-              {p.d.toLowerCase()}
-            </text>
-          );
-        })}
-      </svg>
+  const maxHours = Math.max(1, ...chartData.map((d) => d.hours));
+  const yMax = Math.ceil(maxHours + 1);
+
+  return (
+    <div className="h-[260px] w-full">
+      <ResponsiveContainer width="100%" height="100%">
+        <RLineChart data={chartData} margin={{ top: 8, right: 14, left: 0, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="4 8" />
+          <XAxis dataKey="day" tickLine={false} axisLine={false} tickMargin={10} fontSize={12} />
+          <YAxis
+            domain={[0, yMax]}
+            tickLine={false}
+            axisLine={false}
+            tickMargin={10}
+            fontSize={12}
+            tickFormatter={(v) => (v === 0 ? "0" : formatHours(v))}
+          />
+
+          <Tooltip
+            cursor={{ strokeDasharray: "4 6" }}
+            content={(props) => {
+              const p = (props.payload?.[0] as any)?.payload;
+              return (
+                <CustomTooltip
+                  active={props.active}
+                  payload={props.payload as readonly any[]}
+                  label={p?.full}
+                />
+              );
+            }}
+          />
+
+
+          <Legend verticalAlign="top" align="right" iconType="circle" wrapperStyle={{ fontSize: 12 }} />
+
+          <Line
+            type="monotone"
+            dataKey="hours"
+            name="Study hours"
+            strokeWidth={3}
+            dot={false}
+            isAnimationActive
+            animationDuration={900}
+            activeDot={{ r: 6, strokeWidth: 3 }}
+          />
+        </RLineChart>
+      </ResponsiveContainer>
     </div>
   );
 };

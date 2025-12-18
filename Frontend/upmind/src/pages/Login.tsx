@@ -85,7 +85,7 @@ const LoginPage: React.FC = () => {
         return;
       }
 
-      const meRes = await fetch("http://localhost:8080/api/users/me", {
+      const meRes = await fetch("http://localhost:8080/api/auth/me", {
         method: "GET",
         credentials: "include", 
       });

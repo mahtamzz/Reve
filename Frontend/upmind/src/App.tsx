@@ -10,8 +10,10 @@ import Contactus from "@/components/ContactUs/Contactus";
 import Dashboardadmin from "./components/Dashboard/Dashboardadmin";
 import ResetPassword from "@/components/ResetPassword/ResetPassword";
 import OtpLoginPage from "./pages/OtpLoginPage";
+import FocusPage from "./pages/FocusPage";
 import { Route, Routes } from "react-router-dom";
 import React from "react";
+
 
 function App() {
   return (
@@ -29,6 +31,7 @@ function App() {
       <Route path="/contact" element={<Contactus />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/dashboard-admin" element={<Dashboardadmin />} />
+      <Route path="/focus" element={<FocusPage />} />
     </Routes>
   );
 }

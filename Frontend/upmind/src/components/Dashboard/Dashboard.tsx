@@ -20,7 +20,7 @@ const Dashboard: React.FC = () => {
 
     const fetchMe = async () => {
       try {
-        const res = await fetchWithAuth("http://localhost:8080/api/users/me");
+        const res = await fetchWithAuth("http://localhost:8080/api/auth/me");
 
         if (!res.ok) {
           console.error("ME ERROR STATUS:", res.status);

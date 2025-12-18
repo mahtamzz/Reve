@@ -21,7 +21,7 @@ const DashboardAdmin: React.FC = () => {
 
     const fetchMe = async () => {
       try {
-        const res = await fetchWithAuth("http://localhost:8080/api/users/me");
+        const res = await fetchWithAuth("http://localhost:8080/api/auth/admin/me");
 
         if (!res.ok) {
           console.error("ME ERROR STATUS (admin):", res.status);

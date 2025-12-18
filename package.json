@@ -12,6 +12,7 @@
     "vite": "^6.4.1"
   },
   "dependencies": {
+    "framer-motion": "^12.23.26",
     "react-router-dom": "^7.10.1"
   }
 }
