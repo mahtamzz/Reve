@@ -1,39 +1,36 @@
-const bcrypt = require("bcrypt");
-const redis = require("../../../infrastructure/db/redis");
-const adminRepo = require("../../../infrastructure/repositories/AdminRepository");
-const JwtService = require("../../../infrastructure/auth/JwtService");
-
 class AdminResetPassword {
+    constructor({ adminRepo, cache, hasher, tokenService }) {
+        this.adminRepo = adminRepo;
+        this.cache = cache;
+        this.hasher = hasher;
+        this.tokenService = tokenService;
+    }
+
     async execute({ email, otp, newPassword }) {
         if (!newPassword || newPassword.length < 6) {
             throw new Error("Password must be at least 6 characters");
         }
 
-        // Use a separate Redis key for admins
-        const storedOtp = await redis.get(`reset_admin:${email}`);
+        const storedOtp = await this.cache.get(`reset_admin:${email}`);
         if (!storedOtp) throw new Error("OTP expired");
         if (storedOtp !== otp) throw new Error("Invalid OTP");
 
-        const hashed = await bcrypt.hash(newPassword, 10);
+        const hashedPassword = await this.hasher.hash(newPassword);
+        const admin = await this.adminRepo.updatePassword(email, hashedPassword);
 
-        const admin = await adminRepo.updatePassword(email, hashed);
+        await this.cache.del(`reset_admin:${email}`);
 
-        await redis.del(`reset_admin:${email}`);
-
-        const accessToken = JwtService.generate({
+        const payload = {
             admin_id: admin.id,
             username: admin.username,
-            role: "admin",
-        });
+            role: "admin"
+        };
 
-        const refreshToken = JwtService.generateRefreshToken({
-            admin_id: admin.id,
-            username: admin.username,
-            role: "admin",
-        });
+        const accessToken = this.tokenService.generate(payload);
+        const refreshToken = this.tokenService.generateRefresh(payload);
 
         return { admin, accessToken, refreshToken };
     }
 }
 
-module.exports = new AdminResetPassword();
+module.exports = AdminResetPassword;

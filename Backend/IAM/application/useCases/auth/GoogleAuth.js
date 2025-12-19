@@ -1,9 +1,11 @@
-const userRepo = require("../../../infrastructure/repositories/UserRepository");
-const JwtService = require("../../../infrastructure/auth/JwtService");
-
 class GoogleAuth {
+    constructor(userRepository, jwtService) {
+        this.userRepository = userRepository;
+        this.jwtService = jwtService;
+    }
+
     async execute(profile) {
-        let user = await userRepo.findByGoogleIdOrEmail(
+        let user = await this.userRepository.findByGoogleIdOrEmail(
             profile.id,
             profile.emails[0].value
         );
@@ -14,25 +16,27 @@ class GoogleAuth {
                     profile.emails[0].value.split("@")[0]) +
                 Math.floor(Math.random() * 10000);
 
-            user = await userRepo.createGoogleUser({
+            user = await this.userRepository.createGoogleUser({
                 googleid: profile.id,
                 email: profile.emails[0].value,
                 username,
             });
         }
 
-        const accessToken = JwtService.generate({
+        const accessToken = this.jwtService.generate({
             user_id: user.id,
             username: user.username,
+            role: "user"
         });
 
-        const refreshToken = JwtService.generateRefreshToken({
+        const refreshToken = this.jwtService.generateRefreshToken({
             user_id: user.id,
             username: user.username,
+            role: "user"
         });
 
         return { user, accessToken, refreshToken };
     }
 }
 
-module.exports = new GoogleAuth();
+module.exports = GoogleAuth;

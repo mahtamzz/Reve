@@ -1,11 +1,15 @@
-const adminRepo = require("../../../infrastructure/repositories/AdminRepository");
-
 class GetCurrentAdmin {
+    constructor({ adminRepo }) {
+        this.adminRepo = adminRepo;
+    }
+
     async execute(adminId) {
-        const admin = await adminRepo.findById(adminId);
-        if (!admin) throw new Error("Admin not found");
+        const admin = await this.adminRepo.findById(adminId);
+        if (!admin) {
+            throw new Error("Admin not found");
+        }
         return admin;
     }
 }
 
-module.exports = new GetCurrentAdmin();
+module.exports = GetCurrentAdmin;

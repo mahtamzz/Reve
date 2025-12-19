@@ -1,212 +1,227 @@
-const Register = require("../../../application/useCases/auth/Register");
-const VerifyOtp = require("../../../application/useCases/auth/VerifyOtp");
-const ResendOtp = require("../../../application/useCases/auth/ResendOtp");
-const UserLogin = require("../../../application/useCases/auth/UserLogin");
-const ForgotPassword = require("../../../application/useCases/auth/ForgotPassword");
-const ResetPassword = require("../../../application/useCases/auth/ResetPassword");
-const GoogleAuth = require("../../../application/useCases/auth/GoogleAuth");
 const AuthValidator = require("../validators/AuthValidator");
-const AdminLogin = require("../../../application/useCases/auth/AdminLogin");
-const AdminForgotPassword = require("../../../application/useCases/auth/AdminForgotPassword");
-const AdminResetPassword = require("../../../application/useCases/auth/AdminResetPassword");
-const SendLoginOtp = require("../../../application/useCases/auth/SendLoginOtp");
-const VerifyLoginOtp = require("../../../application/useCases/auth/VerifyLoginOtp");
-const setTokenCookie = require("../helpers/setTokenCookie")
-const RefreshTokenUseCase = require("../../../application/useCases/auth/RefreshToken");
+const setTokenCookie = require("../helpers/setTokenCookie");
 
 class AuthController {
+    constructor(deps) {
+        // user auth
+        this.registerUC = deps.register;
+        this.verifyOtpUC = deps.verifyOtp;
+        this.resendOtpUC = deps.resendOtp;
+        this.userLoginUC = deps.userLogin;
+        this.sendLoginOtpUC = deps.sendLoginOtp;
+        this.verifyLoginOtpUC = deps.verifyLoginOtp;
+        this.forgotPasswordUC = deps.forgotPassword;
+        this.resetPasswordUC = deps.resetPassword;
+        this.refreshTokenUC = deps.refreshToken;
+        this.googleAuthUC = deps.googleAuth;
 
-    async register(req, res) {
+        // admin auth
+        this.adminLoginUC = deps.adminLogin;
+        this.adminForgotPasswordUC = deps.adminForgotPassword;
+        this.adminResetPasswordUC = deps.adminResetPassword;
+
+        // identity
+        this.getCurrentUserUC = deps.getCurrentUser;
+        this.getCurrentAdminUC = deps.getCurrentAdmin;
+
+        // bind methods
+        this.refreshToken = this.refreshToken.bind(this);
+        this.me = this.me.bind(this);
+        this.adminMe = this.adminMe.bind(this);
+    }
+
+    /* ---------------- USER AUTH ---------------- */
+
+    register = async (req, res) => {
         const { error } = AuthValidator.register(req.body);
-        if (error) return res.status(400).json({ message: error.details[0].message });
+        if (error) {
+            return res.status(400).json({ message: error.details[0].message });
+        }
 
         try {
-            const result = await Register.execute(req.body);
+            const result = await this.registerUC.execute(req.body);
             res.status(201).json(result);
         } catch (err) {
             res.status(400).json({ message: err.message });
         }
-    }
+    };
 
-    async verifyOtp(req, res) {
+    verifyOtp = async (req, res) => {
         try {
-            const { user, accessToken, refreshToken } = await VerifyOtp.execute(req.body);
-            const { password, ...safeUser } = user;
+            const { user, accessToken, refreshToken } =
+                await this.verifyOtpUC.execute(req.body);
 
+            const { password, ...safeUser } = user;
             setTokenCookie(res, accessToken, refreshToken);
 
-            res.json({
-                message: "Email verified",
-                user: safeUser
-            });
+            res.json({ message: "Email verified", user: safeUser });
         } catch (err) {
             res.status(400).json({ message: err.message });
         }
-    }
+    };
 
-    async resendOtp(req, res) {
+    resendOtp = async (req, res) => {
         try {
-            const result = await ResendOtp.execute(req.body);
+            const result = await this.resendOtpUC.execute(req.body);
             res.json(result);
         } catch (err) {
             res.status(400).json({ message: err.message });
         }
-    }
+    };
 
-    async userLogin(req, res) {
+    userLogin = async (req, res) => {
         const { error } = AuthValidator.login(req.body);
         if (error) {
             return res.status(400).json({ message: error.details[0].message });
         }
 
         try {
-            const { user, accessToken, refreshToken } = await UserLogin.execute(req.body);
-            const { password, ...safeUser } = user;
+            const { user, accessToken, refreshToken } =
+                await this.userLoginUC.execute(req.body);
 
+            const { password, ...safeUser } = user;
             setTokenCookie(res, accessToken, refreshToken);
 
-            return res.json({
-                user: safeUser
-            });
+            res.json({ user: safeUser });
         } catch (err) {
-            return res.status(401).json({ message: err.message });
+            res.status(401).json({ message: err.message });
         }
-    }
+    };
 
-
-    async sendLoginOtp(req, res) {
+    sendLoginOtp = async (req, res) => {
         try {
-            const result = await SendLoginOtp.execute(req.body);
+            const result = await this.sendLoginOtpUC.execute(req.body);
             res.json(result);
         } catch (err) {
             res.status(400).json({ message: err.message });
         }
-    }
+    };
 
-    async verifyLoginOtp(req, res) {
+    verifyLoginOtp = async (req, res) => {
         try {
-            const { user, accessToken, refreshToken } = await VerifyLoginOtp.execute(req.body);
-            const { password, ...safeUser } = user;
+            const { user, accessToken, refreshToken } =
+                await this.verifyLoginOtpUC.execute(req.body);
 
+            const { password, ...safeUser } = user;
             setTokenCookie(res, accessToken, refreshToken);
 
             res.json({ user: safeUser });
         } catch (err) {
             res.status(400).json({ message: err.message });
         }
-    }   
+    };
 
-    async forgotPassword(req, res) {
+    forgotPassword = async (req, res) => {
         const { error } = AuthValidator.forgotPassword(req.body);
-        if (error) return res.status(400).json({ message: error.details[0].message });
+        if (error) {
+            return res.status(400).json({ message: error.details[0].message });
+        }
 
         try {
-            const result = await ForgotPassword.execute(req.body);
+            const result = await this.forgotPasswordUC.execute(req.body);
             res.json(result);
         } catch (err) {
             res.status(400).json({ message: err.message });
         }
-    }
+    };
 
-    async resetPassword(req, res) {
+    resetPassword = async (req, res) => {
         const { error } = AuthValidator.resetPassword(req.body);
-        if (error) return res.status(400).json({ message: error.details[0].message });
+        if (error) {
+            return res.status(400).json({ message: error.details[0].message });
+        }
 
         try {
-            const { user, accessToken, refreshToken } = await ResetPassword.execute(req.body);
+            const { user, accessToken, refreshToken } =
+                await this.resetPasswordUC.execute(req.body);
 
             setTokenCookie(res, accessToken, refreshToken);
-
-            res.json({ 
-                user, 
-                message: "Password reset successfully" 
-            });
+            res.json({ user, message: "Password reset successfully" });
         } catch (err) {
             res.status(400).json({ message: err.message });
         }
-    }
+    };
 
-    async googleCallback(req, res) {
+    refreshToken = async (req, res) => {
         try {
-            const { user, accessToken, refreshToken } = await GoogleAuth.execute(req.user);
+            const token = req.cookies.refreshToken;
+            const { user, accessToken, refreshToken } =
+                await this.refreshTokenUC.execute(token);
 
             setTokenCookie(res, accessToken, refreshToken);
-
-            res.redirect("http://localhost:5173/dashboard");
+            res.json({ user });
         } catch (err) {
-            console.error(err);
+            res.status(401).json({ message: err.message });
+        }
+    };
+
+    googleCallback = async (req, res) => {
+        try {
+            const { accessToken, refreshToken } =
+                await this.googleAuthUC.execute(req.user);
+
+            setTokenCookie(res, accessToken, refreshToken);
+            res.redirect("http://localhost:5173/dashboard");
+        } catch {
             res.status(500).json({ message: "Google auth failed" });
         }
-    }
+    };
 
-    async adminLogin(req, res) {
+    /* ---------------- ADMIN AUTH ---------------- */
+
+    adminLogin = async (req, res) => {
         try {
-            const { admin, accessToken, refreshToken } = await AdminLogin.execute(req.body);
+            const { admin, accessToken, refreshToken } =
+                await this.adminLoginUC.execute(req.body);
 
             setTokenCookie(res, accessToken, refreshToken);
-
-            return res.json({ admin }); // token is now in cookie
+            res.json({ admin });
         } catch (err) {
             res.status(401).json({ message: err.message });
         }
-    }
+    };
 
-    async adminForgotPassword(req, res) {
-        const { error } = AuthValidator.forgotPassword(req.body);
-        if (error) return res.status(400).json({ message: error.details[0].message });
-
+    adminForgotPassword = async (req, res) => {
         try {
-            const result = await AdminForgotPassword.execute(req.body);
+            const result = await this.adminForgotPasswordUC.execute(req.body);
             res.json(result);
         } catch (err) {
             res.status(400).json({ message: err.message });
         }
-    }
+    };
 
-    async adminResetPassword(req, res) {
-        const { error } = AuthValidator.resetPassword(req.body);
-        if (error) return res.status(400).json({ message: error.details[0].message });
-
+    adminResetPassword = async (req, res) => {
         try {
-            const { admin, accessToken, refreshToken } = await AdminResetPassword.execute(req.body);
+            const { admin, accessToken, refreshToken } =
+                await this.adminResetPasswordUC.execute(req.body);
 
             setTokenCookie(res, accessToken, refreshToken);
-
-            res.json({ admin, message: "Admin password reset successfully" });
+            res.json({ admin });
         } catch (err) {
             res.status(400).json({ message: err.message });
         }
-    }
+    };
 
-    async refreshToken(req, res) {
+    /* ---------------- IDENTITY ---------------- */
+
+    me = async (req, res) => {
         try {
-            const refreshToken = req.cookies.refreshToken;
-            const { user, accessToken, refreshToken: newRefreshToken } = await RefreshTokenUseCase.execute(refreshToken);
-
-            setTokenCookie(res, accessToken, newRefreshToken);
-
-            res.json({ message: "Token refreshed", user });
+            const user = await this.getCurrentUserUC.execute(req.user.uid);
+            const { password, ...safeUser } = user;
+            res.json({ user: safeUser });
         } catch (err) {
-            res.status(401).json({ message: err.message });
+            res.status(404).json({ message: err.message });
         }
-    }
+    };
 
-        async me(req, res) {
-        res.json({
-            uid: req.user.uid,
-            email: req.user.email,
-            role: req.user.role
-        });
-    }
-
-    async adminMe(req, res) {
-        res.json({
-            id: req.admin.id,
-            email: req.admin.email,
-            role: "admin"
-        });
-    }
-
+    adminMe = async (req, res) => {
+        try {
+            const admin = await this.getCurrentAdminUC.execute(req.user.uid);
+            res.json({ admin });
+        } catch (err) {
+            res.status(404).json({ message: err.message });
+        }
+    };
 }
 
-module.exports = new AuthController();
+module.exports = AuthController;

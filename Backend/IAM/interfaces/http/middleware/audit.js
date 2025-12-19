@@ -1,4 +1,4 @@
-const AuditRepo = require('../../../infrastructure/repositories/AuditRepository');
+const AuditRepo = require('../../../infrastructure/repositories/AuditRepositoryPg');
 
 function auditMiddleware(action) {
     return async (req, res, next) => {

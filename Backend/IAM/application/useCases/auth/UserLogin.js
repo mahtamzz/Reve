@@ -1,39 +1,41 @@
-const bcrypt = require("bcrypt");
-const redis = require("../../../infrastructure/db/redis");
-const userRepo = require("../../../infrastructure/repositories/UserRepository");
-const JwtService = require("../../../infrastructure/auth/JwtService");
-const cache = require("../../../infrastructure/cache/CacheService");
-
 class UserLogin {
+    constructor({ userRepo, cache, tokenService, hasher }) {
+        this.userRepo = userRepo;
+        this.cache = cache;
+        this.tokenService = tokenService;
+        this.hasher = hasher;
+    }
+
     async execute({ email, password }) {
-        const fails = await cache.get(`login_fails:${email}`) || 0;
+        const fails = Number(await this.cache.get(`login_fails:${email}`)) || 0;
+
         if (fails >= 5) {
             throw new Error("Too many attempts. Try again later.");
         }
 
-        const user = await userRepo.findByEmail(email);
+        const user = await this.userRepo.findByEmail(email);
         if (!user) throw new Error("Invalid credentials");
 
-        const valid = await bcrypt.compare(password, user.password);
+        const valid = await this.hasher.compare(password, user.password);
         if (!valid) {
-            await cache.set(`login_fails:${email}`, fails + 1, 300);
+            await this.cache.set(`login_fails:${email}`, fails + 1, 300);
             throw new Error("Invalid credentials");
         }
 
-        await cache.del(`login_fails:${email}`);
+        await this.cache.del(`login_fails:${email}`);
 
-        const accessToken = JwtService.generate({
+        const accessToken = this.tokenService.generate({
             user_id: user.id,
-            username: user.username,
+            username: user.username
         });
 
-        const refreshToken = JwtService.generateRefreshToken({
+        const refreshToken = this.tokenService.generateRefresh({
             user_id: user.id,
-            username: user.username,
+            username: user.username
         });
 
         return { user, accessToken, refreshToken };
     }
 }
 
-module.exports = new UserLogin();
+module.exports = UserLogin;

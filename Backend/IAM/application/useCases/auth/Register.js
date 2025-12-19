@@ -1,27 +1,30 @@
-const bcrypt = require("bcrypt");
-const redis = require("../../../infrastructure/db/redis");
-const userRepo = require("../../../infrastructure/repositories/UserRepository");
-const EmailService = require("../../../infrastructure/mail/EmailService");
-
 class Register {
+    constructor({ userRepo, cache, emailService, hasher }) {
+        this.userRepo = userRepo;
+        this.cache = cache;
+        this.emailService = emailService;
+        this.hasher = hasher;
+    }
+
     async execute({ username, email, password }) {
-        const existing = await userRepo.findByEmail(email);
+        const existing = await this.userRepo.findByEmail(email);
         if (existing) throw new Error("User already exists");
 
-        const hashed = await bcrypt.hash(password, 10);
+        const hashedPassword = await this.hasher.hash(password);
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-        await redis.set(`pending_user:${email}`,
-            JSON.stringify({ username, email, password: hashed }),
-            { EX: 600 }
+        await this.cache.set(
+            `pending_user:${email}`,
+            JSON.stringify({ username, email, password: hashedPassword }),
+            600
         );
 
-        await redis.set(`otp:${email}`, otp, { EX: 600 });
-        
-        await EmailService.send(email, "Your OTP", otp);
+        await this.cache.set(`otp:${email}`, otp, 600);
+
+        await this.emailService.send(email, "Your OTP", otp);
 
         return { message: "OTP sent to email" };
     }
 }
 
-module.exports = new Register();
+module.exports = Register;

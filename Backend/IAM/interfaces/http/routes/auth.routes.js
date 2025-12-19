@@ -2,26 +2,28 @@ const express = require("express");
 const router = express.Router();
 const passport = require("passport");
 const AuthController = require("../controllers/AuthController");
+const container = require("../../../container");
 const { loginLimiter } = require("../middleware/rateLimiter");
 const auditMiddleware = require('../middleware/audit');
 const authMiddleware = require("../middleware/authMiddleware");
 const adminAuthMiddleware = require("../middleware/adminAuthMiddleware");
 
-router.post("/register", auditMiddleware('REGISTER_ATTEMPT'), (req, res) => AuthController.register(req, res));
-router.post("/verify-otp", auditMiddleware('VERIFY_OTP'), (req, res) => AuthController.verifyOtp(req, res));
-router.post("/resend-otp", auditMiddleware('RESEND_OTP'), (req, res) => AuthController.resendOtp(req, res));
-router.post("/login", auditMiddleware('LOGIN_ATTEMPT'), (req, res) => AuthController.userLogin(req, res));
-router.post("/login/send-otp", auditMiddleware("SEND_LOGIN_OTP"), (req, res) => AuthController.sendLoginOtp(req, res));
-router.post("/login/verify-otp", auditMiddleware("VERIFY_LOGIN_OTP"), (req, res) => AuthController.verifyLoginOtp(req, res));
-router.post("/forgot-password", (req, res) => AuthController.forgotPassword(req, res));
-router.post("/reset-password", (req, res) => AuthController.resetPassword(req, res));
+const authController = new AuthController(container);
+
+router.post("/register", auditMiddleware('REGISTER_ATTEMPT'), authController.register);
+router.post("/verify-otp", auditMiddleware('VERIFY_OTP'), authController.verifyOtp);
+router.post("/resend-otp", auditMiddleware('RESEND_OTP'), authController.resendOtp);
+router.post("/login", auditMiddleware('LOGIN_ATTEMPT'), authController.userLogin);
+router.post("/login/send-otp", auditMiddleware("SEND_LOGIN_OTP"), authController.sendLoginOtp);
+router.post("/login/verify-otp", auditMiddleware("VERIFY_LOGIN_OTP"), authController.verifyLoginOtp);
+router.post("/forgot-password", authController.forgotPassword);
+router.post("/reset-password", authController.resetPassword);
 // Admin Routes
-router.post("/admin/login", auditMiddleware('ADMIN_LOGIN_ATTEMPT'), (req, res) => AuthController.adminLogin(req, res));
-router.post("/admin/forgot-password", (req, res) => AuthController.adminForgotPassword(req, res));
-router.post("/admin/reset-password", (req, res) => AuthController.adminResetPassword(req, res));
+router.post("/admin/login", auditMiddleware('ADMIN_LOGIN_ATTEMPT'), authController.adminLogin);
+router.post("/admin/forgot-password", authController.adminForgotPassword);
+router.post("/admin/reset-password", authController.adminResetPassword);
 
-router.post("/refresh-token", (req, res) => AuthController.refreshToken(req, res));
-
+router.post("/refresh-token", authController.refreshToken);
 
 /* ---------------- GOOGLE AUTH ROUTES ---------------- */
 router.get(
@@ -38,8 +40,8 @@ router.get(
     (req, res) => AuthController.googleCallback(req, res)
 );
 
-router.get("/me", authMiddleware, (req, res) => AuthController.me(req, res));
-router.get("/admin/me", adminAuthMiddleware, (req, res) => AuthController.adminMe(req, res));
+router.get("/me", authMiddleware, authController.me);
+router.get("/admin/me", adminAuthMiddleware, authController.adminMe);
 
 
 

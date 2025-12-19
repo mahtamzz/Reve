@@ -1,32 +1,44 @@
-const JwtService = require("../../../infrastructure/auth/JwtService");
-const userRepo = require("../../../infrastructure/repositories/UserRepository");
-
 class RefreshToken {
+    constructor(jwtService, userRepository) {
+        this.jwtService = jwtService;
+        this.userRepository = userRepository;
+    }
+
     async execute(refreshToken) {
-        if (!refreshToken) throw new Error("No refresh token provided");
+        if (!refreshToken) {
+            throw new Error("No refresh token provided");
+        }
 
         let payload;
         try {
-            payload = JwtService.verifyRefresh(refreshToken);
+            payload = this.jwtService.verifyRefresh(refreshToken);
         } catch (err) {
             throw new Error("Invalid or expired refresh token");
         }
 
-        const user = await userRepo.findById(payload.user_id);
-        if (!user) throw new Error("User not found");
+        const user = await this.userRepository.findById(payload.user_id);
+        if (!user) {
+            throw new Error("User not found");
+        }
 
-        const newAccessToken = JwtService.generate({
+        const newAccessToken = this.jwtService.generate({
             user_id: user.id,
-            username: user.username
+            username: user.username,
+            role: "user"
         });
 
-        const newRefreshToken = JwtService.generateRefreshToken({
+        const newRefreshToken = this.jwtService.generateRefreshToken({
             user_id: user.id,
-            username: user.username
+            username: user.username,
+            role: "user"
         });
 
-        return { user, accessToken: newAccessToken, refreshToken: newRefreshToken };
+        return {
+            user,
+            accessToken: newAccessToken,
+            refreshToken: newRefreshToken
+        };
     }
 }
 
-module.exports = new RefreshToken();
+module.exports = RefreshToken;
