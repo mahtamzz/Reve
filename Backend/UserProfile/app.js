@@ -1,6 +1,8 @@
 const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
+const swaggerUI = require("swagger-ui-express");
+const swaggerSpec = require("./infrastructure/docs/swagger"); 
 
 const profileRoutes = require('./interfaces/http/routes/profile.routes');
 
@@ -21,6 +23,8 @@ app.use(express.json());
 
 // Routes
 app.use('/api/profile', profileRoutes);
+
+app.use("/api/docs", swaggerUI.serve, swaggerUI.setup(swaggerSpec));
 
 // Health check (important for orchestration)
 app.get('/health', (req, res) => {

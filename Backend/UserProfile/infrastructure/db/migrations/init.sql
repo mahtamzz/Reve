@@ -1,5 +1,5 @@
 CREATE TABLE user_profiles (
-    uid UUID PRIMARY KEY,       -- same ID as IAM user
+    uid INT PRIMARY KEY,       -- same ID as IAM user
     display_name VARCHAR(50),
     avatar_media_id TEXT,
     weekly_goal INT,
