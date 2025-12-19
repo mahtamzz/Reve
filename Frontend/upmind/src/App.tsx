@@ -12,6 +12,8 @@ import ResetPassword from "@/components/ResetPassword/ResetPassword";
 import OtpLoginPage from "./pages/OtpLoginPage";
 import FocusPage from "./pages/FocusPage";
 import LandingPage from "./pages/LandingPage";
+import Groups from "./pages/Groups";
+import GroupDetails from "./pages/GroupDetails";
 import { Route, Routes } from "react-router-dom";
 import React from "react";
 
@@ -34,6 +36,8 @@ function App() {
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/dashboard-admin" element={<Dashboardadmin />} />
       <Route path="/focus" element={<FocusPage />} />
+      <Route path="/groups" element={<Groups />} />
+      <Route path="/groups/:groupId" element={<GroupDetails />} />
     </Routes>
   );
 }

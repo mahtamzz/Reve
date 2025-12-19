@@ -13,6 +13,7 @@ import { WeeklyStudyChart } from "@/components/Dashboard/LineChart";
 import type { WeeklyPoint } from "@/components/Dashboard/LineChart";
 import { SubjectCard } from "@/components/Dashboard/SubjectCard";
 import { ChallengeCard } from "@/components/Dashboard/ChallengeCard";
+import LookAtBuddy from "@/components/LookAtBuddy";
 
 interface User {
   id: number;
@@ -184,20 +185,6 @@ export default function Dashboard() {
                       </p>
                     </div>
 
-                    <button
-                      onClick={logout}
-                      className="
-                        group relative overflow-hidden rounded-xl
-                        border border-zinc-200 bg-white
-                        px-3 py-2 text-xs font-semibold text-zinc-700
-                        shadow-sm transition-all duration-300
-                        hover:-translate-y-0.5 hover:shadow-md
-                        hover:border-yellow-300 hover:text-zinc-900
-                      "
-                    >
-                      <span className="pointer-events-none absolute inset-0 translate-x-[-120%] group-hover:translate-x-[120%] transition-transform duration-700 ease-in-out bg-[linear-gradient(90deg,transparent,rgba(250,204,21,0.22),transparent)]" />
-                      <span className="relative">Sign out</span>
-                    </button>
                   </div>
 
                   {/* stats */}
@@ -228,10 +215,13 @@ export default function Dashboard() {
                   </div>
 
                   {/* small info card */}
+                  {/* Study Buddy */}
+                  <div className="relative mt-5">
+                    <LookAtBuddy label="Study buddy" />
+                  </div>
+
                   <div className="relative mt-5 rounded-2xl border border-zinc-200 bg-gradient-to-br from-yellow-50 to-white p-4">
-                    <p className="text-sm font-semibold text-zinc-900">
-                      StudyBuddy
-                    </p>
+
                     <p className="mt-1 text-xs text-zinc-600">
                       Find people to study with and stay accountable.
                     </p>
