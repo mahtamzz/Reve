@@ -11,6 +11,7 @@ import Dashboardadmin from "./components/Dashboard/Dashboardadmin";
 import ResetPassword from "@/components/ResetPassword/ResetPassword";
 import OtpLoginPage from "./pages/OtpLoginPage";
 import FocusPage from "./pages/FocusPage";
+import LandingPage from "./pages/LandingPage";
 import { Route, Routes } from "react-router-dom";
 import React from "react";
 
@@ -18,7 +19,8 @@ import React from "react";
 function App() {
   return (
     <Routes>
-      <Route path="/" element={<SignupPage />} />
+      <Route path="/" element={<LandingPage />} />
+      <Route path="/signup" element={<SignupPage/>}/>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/admin/login" element={<LoginAdmin />} />
       <Route path="/login-otp" element={<OtpLoginPage/>}/>
