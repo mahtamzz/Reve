@@ -98,7 +98,6 @@ const LoginPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-creamtext text-zinc-900 relative overflow-hidden">
-      {/* background accents (خیلی نرم، مثل داشبورد) */}
       <div className="pointer-events-none absolute -top-24 -right-28 h-[520px] w-[520px] rounded-full bg-yellow-200/35 blur-3xl" />
       <div className="pointer-events-none absolute -bottom-32 -left-32 h-[620px] w-[620px] rounded-full bg-yellow-100/60 blur-3xl" />
 

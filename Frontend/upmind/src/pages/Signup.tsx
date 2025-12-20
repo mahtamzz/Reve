@@ -97,14 +97,14 @@ const SignupPage: React.FC = () => {
           animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{ duration: 0.55, ease: EASE_OUT }}
           className="
-            relative
-            grid grid-cols-12
-            overflow-hidden
-            rounded-[32px]
-            border border-yellow-200/70
-            bg-gradient-to-b from-yellow-50/70 to-white
-            shadow-[0_30px_90px_-60px_rgba(0,0,0,0.45)]
-          "
+          relative
+          grid grid-cols-12
+          rounded-[32px]
+          border border-zinc-200
+          bg-white
+          shadow-2xl
+          overflow-hidden
+        "        
         >
           {/* Left – Buddy */}
           <section
@@ -119,7 +119,7 @@ const SignupPage: React.FC = () => {
           >
             {/* accents */}
             <div className="pointer-events-none absolute -top-20 -left-20 h-72 w-72 rounded-full bg-orange-400/25 blur-3xl" />
-            <div className="pointer-events-none absolute -bottom-24 -right-24 h-80 w-80 rounded-full bg-purple-500/15 blur-3xl" />
+            <div className="pointer-events-none absolute -left-24 -top-24 h-[420px] w-[420px] rounded-full bg-yellow-200/40 blur-3xl" />
 
             <div className="relative flex flex-col items-center">
               <FullBodyBuddy label="Let’s study ✏️" />

@@ -116,7 +116,7 @@ const LoginForm: React.FC<LoginFormProps> = ({
             <p className="text-xs text-zinc-600">
               Don’t have an account?{" "}
               <Link
-                to="/"
+                to="/signup"
                 className="font-semibold text-zinc-900 hover:text-yellow-800 transition-colors"
               >
                 Sign up
