@@ -1,24 +1,29 @@
 const { createClient } = require("redis");
 
-const redisClient = createClient({
-    url: `redis://${process.env.REDIS_HOST || "redis"}:6379`,
-    socket: {
-        reconnectStrategy(retries) {
-            console.log(`Redis reconnect attempt #${retries}`);
-            return Math.min(retries * 100, 3000); // max 3s delay
-        }
+class RedisClient {
+    constructor({ host = "redis", port = 6379 } = {}) {
+        this.client = createClient({
+            url: `redis://${host}:${port}`,
+            socket: {
+                reconnectStrategy(retries) {
+                    console.log(`Redis reconnect attempt #${retries}`);
+                    return Math.min(retries * 100, 3000);
+                }
+            }
+        });
+
+        this.client.on("connect", () => console.log("Redis connected!"));
+        this.client.on("error", (err) => console.error("Redis Error:", err));
     }
-});
 
-redisClient.on("connect", () => {
-    console.log("Redis connected!");
-});
+    async connect() {
+        if (!this.client.isOpen) await this.client.connect();
+        return this.client;
+    }
 
-redisClient.on("error", (err) => {
-    console.error("Redis Error:", err);
-});
+    getClient() {
+        return this.client;
+    }
+}
 
-// Only one connect call
-redisClient.connect();
-
-module.exports = redisClient;
+module.exports = RedisClient;

@@ -22,9 +22,9 @@ class AuthController {
 
         // identity
         this.getCurrentUserUC = deps.getCurrentUser;
-        this.getCurrentAdminUC = deps.getCurrentAdmin;
+        this.getCurrentCurrentAdminUC = deps.getCurrentAdmin;
 
-        // bind methods
+        // bind non–arrow methods
         this.refreshToken = this.refreshToken.bind(this);
         this.me = this.me.bind(this);
         this.adminMe = this.adminMe.bind(this);
@@ -155,6 +155,8 @@ class AuthController {
         }
     };
 
+    /* ---------------- GOOGLE AUTH ---------------- */
+
     googleCallback = async (req, res) => {
         try {
             const { accessToken, refreshToken } =
@@ -162,7 +164,8 @@ class AuthController {
 
             setTokenCookie(res, accessToken, refreshToken);
             res.redirect("http://localhost:5173/dashboard");
-        } catch {
+        } catch (err) {
+            console.error(err);
             res.status(500).json({ message: "Google auth failed" });
         }
     };
@@ -216,7 +219,7 @@ class AuthController {
 
     adminMe = async (req, res) => {
         try {
-            const admin = await this.getCurrentAdminUC.execute(req.user.uid);
+            const admin = await this.getCurrentCurrentAdminUC.execute(req.user.uid);
             res.json({ admin });
         } catch (err) {
             res.status(404).json({ message: err.message });

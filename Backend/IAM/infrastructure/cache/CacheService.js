@@ -1,30 +1,26 @@
-const redis = require("../db/redis");
-const CircuitBreaker = require("opossum");
-
 class CacheService {
-    constructor() {
-        // Circuit breaker options
+    constructor(redisClient) {
+        this.redis = redisClient;
+        const CircuitBreaker = require("opossum");
         const options = {
-            timeout: 2000,                // 2s max per operation
-            errorThresholdPercentage: 50, // open if 50% of calls fail
-            resetTimeout: 10000           // try again after 10s
+            timeout: 2000,
+            errorThresholdPercentage: 50,
+            resetTimeout: 10000
         };
 
-        // Wrap Redis methods in circuit breakers
         this.getBreaker = new CircuitBreaker(async (key) => {
-            const data = await redis.get(key);
+            const data = await this.redis.get(key);
             return data ? JSON.parse(data) : null;
         }, options);
 
         this.setBreaker = new CircuitBreaker(async (key, value, ttlSeconds) => {
-            await redis.set(key, JSON.stringify(value), { EX: ttlSeconds });
+            await this.redis.set(key, JSON.stringify(value), { EX: ttlSeconds });
         }, options);
 
         this.delBreaker = new CircuitBreaker(async (key) => {
-            await redis.del(key);
+            await this.redis.del(key);
         }, options);
 
-        // Optional: log breaker events
         [this.getBreaker, this.setBreaker, this.delBreaker].forEach(b => {
             b.on("open", () => console.warn("Redis breaker opened"));
             b.on("halfOpen", () => console.info("Redis breaker half-open"));
@@ -33,30 +29,9 @@ class CacheService {
         });
     }
 
-    async get(key) {
-        try {
-            return await this.getBreaker.fire(key);
-        } catch (err) {
-            console.error("CACHE GET ERROR:", err.message);
-            return null; // fallback
-        }
-    }
-
-    async set(key, value, ttlSeconds = 300) {
-        try {
-            await this.setBreaker.fire(key, value, ttlSeconds);
-        } catch (err) {
-            console.error("CACHE SET ERROR:", err.message);
-        }
-    }
-
-    async del(key) {
-        try {
-            await this.delBreaker.fire(key);
-        } catch (err) {
-            console.error("CACHE DEL ERROR:", err.message);
-        }
-    }
+    async get(key) { return this.getBreaker.fire(key).catch(() => null); }
+    async set(key, value, ttlSeconds = 300) { return this.setBreaker.fire(key, value, ttlSeconds).catch(console.error); }
+    async del(key) { return this.delBreaker.fire(key).catch(console.error); }
 }
 
-module.exports = new CacheService();
+module.exports = CacheService;

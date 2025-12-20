@@ -1,25 +1,28 @@
 const nodemailer = require("nodemailer");
-const env = require("../../config/env");
 
 class EmailService {
-    constructor() {
+    constructor({ user, pass, service = "gmail" }) {
         this.transporter = nodemailer.createTransport({
-            service: "gmail",
-            auth: {
-                user: env.EMAIL_USER,
-                pass: env.EMAIL_PASS,
-            },
+            service,
+            auth: { user, pass },
+            connectionTimeout: 10_000,
+            greetingTimeout: 10_000,
+            socketTimeout: 10_000
         });
     }
 
     async send(to, subject, text) {
-        await this.transporter.sendMail({
-            from: env.EMAIL_USER,
+        console.log("📧 Sending email to:", to);
+
+        const info = await this.transporter.sendMail({
+            from: this.transporter.options.auth.user,
             to,
             subject,
-            text,
+            text
         });
+
+        console.log("✅ Email sent:", info.messageId);
     }
 }
 
-module.exports = new EmailService();
+module.exports = EmailService;

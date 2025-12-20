@@ -11,7 +11,7 @@ class SendLoginOtp {
 
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-        await this.cache.set(`login_otp:${email}`, otp, 120);
+        await this.cache.set(`login_otp:${email}`, otp, 'EX', 120);
         await this.emailService.send(email, "Your OTP", otp);
 
         return { message: "OTP sent successfully" };
