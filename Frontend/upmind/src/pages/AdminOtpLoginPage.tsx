@@ -204,7 +204,7 @@ const AdminOtpLoginPage: React.FC = () => {
 
       // Get admin info
       try {
-        const meRes = await fetch("http://localhost:8080/api/users/me", {
+        const meRes = await fetch("http://localhost:8080/api/auth/me", {
           method: "GET",
           headers: { Authorization: `Bearer ${token}` },
         });

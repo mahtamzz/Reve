@@ -16,19 +16,19 @@ class RefreshToken {
             throw new Error("Invalid or expired refresh token");
         }
 
-        const user = await this.userRepository.findById(payload.user_id);
+        const user = await this.userRepository.findById(payload.uid);
         if (!user) {
             throw new Error("User not found");
         }
 
         const newAccessToken = this.jwtService.generate({
-            user_id: user.id,
+            uid: user.id,
             username: user.username,
             role: "user"
         });
 
         const newRefreshToken = this.jwtService.generateRefreshToken({
-            user_id: user.id,
+            uid: user.id,
             username: user.username,
             role: "user"
         });

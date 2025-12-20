@@ -25,12 +25,12 @@ class UserLogin {
         await this.cache.del(`login_fails:${email}`);
 
         const accessToken = this.tokenService.generate({
-            user_id: user.id,
+            uid: user.id,
             username: user.username
         });
 
-        const refreshToken = this.tokenService.generateRefresh({
-            user_id: user.id,
+        const refreshToken = this.tokenService.generateRefreshToken({
+            uid: user.id,
             username: user.username
         });
 

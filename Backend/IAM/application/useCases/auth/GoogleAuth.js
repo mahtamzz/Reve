@@ -24,13 +24,13 @@ class GoogleAuth {
         }
 
         const accessToken = this.jwtService.generate({
-            user_id: user.id,
+            uid: user.id,
             username: user.username,
             role: "user"
         });
 
         const refreshToken = this.jwtService.generateRefreshToken({
-            user_id: user.id,
+            uid: user.id,
             username: user.username,
             role: "user"
         });

@@ -249,7 +249,7 @@ const VerificationPage: React.FC = () => {
       setSuccess("email validated successfully");
   
       // 2) Verify session (no Bearer token)
-      const meRes = await fetch("http://localhost:8080/api/users/me", {
+      const meRes = await fetch("http://localhost:8080/api/auth/me", {
         method: "GET",
         credentials: "include",
       });

@@ -25,12 +25,12 @@ class VerifyLoginOtp {
         await this.cache.del(key);
 
         const accessToken = this.tokenService.generate({
-            user_id: user.id,
+            uid: user.id,
             username: user.username
         });
 
         const refreshToken = this.tokenService.generateRefreshToken({
-            user_id: user.id,
+            uid: user.id,
             username: user.username
         });
 

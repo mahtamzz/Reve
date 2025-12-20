@@ -19,7 +19,7 @@ class AdminLogin {
         };
 
         const accessToken = this.tokenService.generate(payload);
-        const refreshToken = this.tokenService.generateRefresh(payload);
+        const refreshToken = this.tokenService.generateRefreshToken(payload);
 
         return { admin, accessToken, refreshToken };
     }
