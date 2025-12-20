@@ -1,23 +1,20 @@
-const JwtService = require("../../../infrastructure/auth/JwtService");
+const createAuthMiddleware = (jwtService) => {
+    return (req, res, next) => {
+        const token = req.cookies?.accessToken; // match setTokenCookie
 
-const authMiddleware = (req, res, next) => {
-    // Read token from cookie
-    const token = req.cookies?.token;
+        if (!token) return res.status(401).json({ message: "Authorization token required" });
 
-    if (!token) {
-        return res.status(401).json({ message: "Authorization token required" });
-    }
-
-    try {
-        const decoded = JwtService.verify(token);
-        req.user = decoded;
-        next();
-    } catch (err) {
-        if (err.name === "TokenExpiredError") {
-            return res.status(401).json({ message: "Token expired" });
+        try {
+            const decoded = jwtService.verify(token);
+            req.user = decoded;
+            next();
+        } catch (err) {
+            if (err.name === "TokenExpiredError") {
+                return res.status(401).json({ message: "Token expired" });
+            }
+            return res.status(401).json({ message: "Invalid token" });
         }
-        return res.status(401).json({ message: "Invalid token" });
-    }
+    };
 };
 
-module.exports = authMiddleware;
+module.exports = createAuthMiddleware;

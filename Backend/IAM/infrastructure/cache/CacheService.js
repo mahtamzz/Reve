@@ -29,7 +29,14 @@ class CacheService {
         });
     }
 
-    async get(key) { return this.getBreaker.fire(key).catch(() => null); }
+    async get(key) {
+        const value = await this.getBreaker.fire(key).catch(err => {
+            console.error("Redis GET failed:", err);
+            return null;
+        });
+        console.log("Cache GET", key, value);
+        return value;
+    }
     async set(key, value, ttlSeconds = 300) { return this.setBreaker.fire(key, value, ttlSeconds).catch(console.error); }
     async del(key) { return this.delBreaker.fire(key).catch(console.error); }
 }

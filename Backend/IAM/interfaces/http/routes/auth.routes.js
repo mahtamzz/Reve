@@ -2,8 +2,8 @@ const express = require("express");
 const passport = require("passport");
 const AuthController = require("../controllers/AuthController");
 const auditMiddleware = require("../middleware/audit");
-const authMiddleware = require("../middleware/authMiddleware");
-const adminAuthMiddleware = require("../middleware/adminAuthMiddleware");
+const createAuthMiddleware = require("../middleware/authMiddleware");
+const createAdminAuthMiddleware = require("../middleware/adminAuthMiddleware");
 
 module.exports = function createAuthRoutes(container) {
     const router = express.Router();
@@ -78,6 +78,10 @@ module.exports = function createAuthRoutes(container) {
         }),
         authController.googleCallback
     );
+
+    
+    const authMiddleware = createAuthMiddleware(container.jwtService);
+    const adminAuthMiddleware = createAdminAuthMiddleware(container.jwtService);
 
     router.get("/me", authMiddleware, authController.me);
     router.get("/admin/me", adminAuthMiddleware, authController.adminMe);

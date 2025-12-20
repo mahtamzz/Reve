@@ -1,17 +1,17 @@
+const isProduction = process.env.NODE_ENV === "production";
+
 module.exports = function setTokens(res, accessToken, refreshToken) {
-    // Short-lived access token
-    res.cookie("token", accessToken, {
+    res.cookie("accessToken", accessToken, {
         httpOnly: true,
-        secure: true,
-        sameSite: "none",
-        maxAge: 1000 * 60 * 15 // 15 minutes
+        secure: isProduction,        // only true in prod
+        sameSite: isProduction ? "none" : "lax",
+        maxAge: 1000 * 60 * 15
     });
 
-    // Long-lived refresh token
     res.cookie("refreshToken", refreshToken, {
         httpOnly: true,
-        secure: true,
-        sameSite: "none",
-        maxAge: 1000 * 60 * 60 * 24 * 7 // 7 days
+        secure: isProduction,
+        sameSite: isProduction ? "none" : "lax",
+        maxAge: 1000 * 60 * 60 * 24 * 7
     });
 };

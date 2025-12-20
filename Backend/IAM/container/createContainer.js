@@ -47,6 +47,8 @@ async function createContainer() {
 
     const redisClient = new RedisClient({ host: process.env.REDIS_HOST });
     await redisClient.connect();
+    console.log("Redis connected?", redisClient.getClient().isOpen);
+    
     const cacheService = new CacheService(redisClient.getClient());
 
     const emailService = new EmailService({
