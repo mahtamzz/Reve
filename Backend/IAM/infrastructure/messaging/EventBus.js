@@ -30,9 +30,26 @@ class EventBus {
         if (!this.channel) {
             throw new Error("RabbitMQ channel not initialized");
         }
+
+        console.log("[EVENT PUBLISHED]", routingKey, payload);
+
         const buffer = Buffer.from(JSON.stringify(payload));
-        this.channel.publish("iam.events", routingKey, buffer, { persistent: true });
+        this.channel.publish(
+            "iam.events",
+            routingKey,
+            buffer,
+            { persistent: true }
+        );
     }
+
+
+    // async publish(routingKey, payload) {
+    //     if (!this.channel) {
+    //         throw new Error("RabbitMQ channel not initialized");
+    //     }
+    //     const buffer = Buffer.from(JSON.stringify(payload));
+    //     this.channel.publish("iam.events", routingKey, buffer, { persistent: true });
+    // }
 }
 
 module.exports = EventBus;

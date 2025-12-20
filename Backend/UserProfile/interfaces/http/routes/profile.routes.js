@@ -1,31 +1,16 @@
-const express = require('express');
-const authMiddleware = require('../middleware/authMiddleware');
-const UserProfileController = require('../controllers/UserProfileController');
-const profileRepo = require('../../../infrastructure/repositories/PgUserProfileRepo');
-const prefsRepo = require('../../../infrastructure/repositories/PgPreferencesRepo');
-const dailyRepo = require('../../../infrastructure/repositories/PgUserDSTRepo');
-const auditRepo = require('../../../infrastructure/repositories/PgAuditRepo');
+const express = require("express");
+const authMiddleware = require("../middleware/authMiddleware");
 
-const GetUserProfile = require('../../../application/useCases/GetUserProfile');
-const UpdateUserProfile = require('../../../application/useCases/UpdateUserProfile');
-const UpdateUserPreferences = require('../../../application/useCases/UpdateUserPreferences');
-const GetDashboard = require('../../../application/useCases/GetDashboard');
+module.exports = function createProfileRouter(userProfileController) {
+    const router = express.Router();
 
-const controller = new UserProfileController({
-    getProfile: new GetUserProfile(profileRepo, prefsRepo),
-    updateProfile: new UpdateUserProfile(profileRepo, auditRepo),
-    updatePreferences: new UpdateUserPreferences(prefsRepo, auditRepo),
-    getDashboard: new GetDashboard(profileRepo, dailyRepo)
-});
+    router.get("/me", authMiddleware, userProfileController.getMe);
+    router.get("/dashboard", authMiddleware, userProfileController.dashboard);
+    router.patch("/me", authMiddleware, userProfileController.updateProfileInfo);
+    router.patch("/preferences", authMiddleware, userProfileController.updatePreferencesInfo);
 
-const router = express.Router();
-
-router.get('/me', authMiddleware, controller.getMe);
-router.get('/dashboard', authMiddleware, controller.dashboard);
-router.patch('/me', authMiddleware, controller.updateProfileInfo);
-router.patch('/preferences', authMiddleware, controller.updatePreferencesInfo);
-
-module.exports = router;
+    return router;
+};
 
 
 

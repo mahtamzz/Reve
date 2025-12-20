@@ -1,34 +1,32 @@
-const express = require('express');
-const cors = require('cors');
-const cookieParser = require('cookie-parser');
-const swaggerUI = require("swagger-ui-express");
-const swaggerSpec = require("./infrastructure/docs/swagger"); 
+const express = require("express");
+const cors = require("cors");
+const cookieParser = require("cookie-parser");
 
-const profileRoutes = require('./interfaces/http/routes/profile.routes');
+const createProfileRouter = require("./interfaces/http/routes/profile.routes");
 
-const app = express();
+function createApp(container) {
+    const app = express();
 
-app.set('trust proxy', 1);
+    app.set("trust proxy", 1);
 
-// CORS (adjust origin later when using gateway)
-app.use(cors({
-    origin: 'http://localhost:5173',
-    credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    exposedHeaders: ['Set-Cookie']
-}));
+    app.use(cors({
+        origin: "http://localhost:5173",
+        credentials: true
+    }));
 
-app.use(cookieParser());
-app.use(express.json());
+    app.use(cookieParser());
+    app.use(express.json());
 
-// Routes
-app.use('/api/profile', profileRoutes);
+    app.use(
+        "/api/profile",
+        createProfileRouter(container.controllers.userProfileController)
+    );
 
-app.use("/api/docs", swaggerUI.serve, swaggerUI.setup(swaggerSpec));
+    app.get("/health", (req, res) => {
+        res.json({ status: "ok" });
+    });
 
-// Health check (important for orchestration)
-app.get('/health', (req, res) => {
-    res.json({ status: 'ok' });
-});
+    return app;
+}
 
-module.exports = app;
+module.exports = createApp;

@@ -12,14 +12,14 @@ CREATE TABLE user_profiles (
 
 CREATE TABLE user_DST (
     id SERIAL PRIMARY KEY,
-    uid UUID NOT NULL,
+    uid INT NOT NULL,
     study_date DATE NOT NULL,
     total_duration_minutes INT NOT NULL,
     UNIQUE (uid, study_date)
 );
 
 CREATE TABLE user_preferences (
-    uid UUID PRIMARY KEY,
+    uid INT PRIMARY KEY,
     is_profile_public BOOLEAN DEFAULT TRUE,
     show_streak BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT now(),
@@ -28,7 +28,7 @@ CREATE TABLE user_preferences (
 
 CREATE TABLE user_profile_audit_log (
     id SERIAL PRIMARY KEY,
-    uid UUID,
+    uid INT,
     action VARCHAR(100) NOT NULL,
     details JSONB,
     created_at TIMESTAMPTZ DEFAULT now()
