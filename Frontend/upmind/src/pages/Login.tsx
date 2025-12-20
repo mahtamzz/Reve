@@ -1,6 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { NavLink, useNavigate, useSearchParams } from "react-router-dom";
-import LoginForm from "@/components/Login page/Login";
+import { AnimatePresence, motion } from "framer-motion";
+
+import LoginForm from "@/components/Login page/Login"
+import FullBodyBuddy from "@/components/FullBodyBuddy";
+
+const EASE_OUT: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
 const LoginPage: React.FC = () => {
   const [email, setEmail] = useState<string>("");
@@ -11,66 +16,48 @@ const LoginPage: React.FC = () => {
   const [mounted, setMounted] = useState<boolean>(false);
 
   const [searchParams, setSearchParams] = useSearchParams();
-  const [showLogoutMessage, setShowLogoutMessage] = useState(false);
-
+  const [showLogoutMessage, setShowLogoutMessage] = useState<boolean>(false);
 
   const navigate = useNavigate();
 
-  const timer = setTimeout(() => {
-    setShowLogoutMessage(false);
-  }, 2000); 
-  
+  useEffect(() => setMounted(true), []);
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-  
   useEffect(() => {
     const loggedOut = searchParams.get("loggedOut") === "true";
-  
-    if (loggedOut) {
-      setShowLogoutMessage(true);
-  
-      // بعد از چند ثانیه پیام رو ببند
-      const timer = setTimeout(() => {
-        setShowLogoutMessage(false);
-      }, 3000); // 3 ثانیه
-  
-      const sp = new URLSearchParams(searchParams);
-      sp.delete("loggedOut");
-      setSearchParams(sp, { replace: true });
-  
-      return () => clearTimeout(timer);
-    }
-  }, [searchParams, setSearchParams]);
-  
+    if (!loggedOut) return;
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+    setShowLogoutMessage(true);
+    const timer = window.setTimeout(() => setShowLogoutMessage(false), 2500);
+
+    const sp = new URLSearchParams(searchParams);
+    sp.delete("loggedOut");
+    setSearchParams(sp, { replace: true });
+
+    return () => window.clearTimeout(timer);
+  }, [searchParams, setSearchParams]);
 
   async function handleLogin(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError("");
-  
+
     if (!email || !password) {
       setError("Email and password are required.");
       return;
     }
-  
+
     try {
       setLoading(true);
-  
+
       const res = await fetch("http://localhost:8080/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include", 
+        credentials: "include",
         body: JSON.stringify({ email, password }),
       });
-  
+
       const text = await res.text();
-  
-      let data: any = null;
+
+      let data: unknown = null;
       try {
         data = text ? JSON.parse(text) : null;
       } catch {
@@ -79,23 +66,23 @@ const LoginPage: React.FC = () => {
           return;
         }
       }
-  
+
       if (!res.ok) {
-        setError(data?.error || data?.message || "Login failed");
+        const d = data as any;
+        setError(d?.error || d?.message || "Login failed");
         return;
       }
 
       const meRes = await fetch("http://localhost:8080/api/auth/me", {
         method: "GET",
-        credentials: "include", 
+        credentials: "include",
       });
-  
+
       if (!meRes.ok) {
         setError("Session invalid. Please try again.");
         return;
       }
-  
-  
+
       navigate("/dashboard");
     } catch (err) {
       console.error(err);
@@ -104,70 +91,117 @@ const LoginPage: React.FC = () => {
       setLoading(false);
     }
   }
-  
 
   function handleForgotPassword() {
     navigate("/forgot-password");
   }
 
   return (
-    <div className="min-h-screen bg-loginbg font-serif text-brand-text flex flex-col items-center">
-    {showLogoutMessage && (
-      <div className="fixed top-4 right-4 z-50 px-4 py-2 rounded-md bg-emerald-600 text-white shadow-lg">
-        you logged out successfully
-      </div>
-    )}
+    <div className="min-h-screen bg-creamtext text-zinc-900 relative overflow-hidden">
+      {/* background accents (خیلی نرم، مثل داشبورد) */}
+      <div className="pointer-events-none absolute -top-24 -right-28 h-[520px] w-[520px] rounded-full bg-yellow-200/35 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-32 -left-32 h-[620px] w-[620px] rounded-full bg-yellow-100/60 blur-3xl" />
 
-    {/* Header */}
-    <header
-      className={`w-full max-w-6xl flex justify-between items-center px-10 pt-10 text-white transition-all duration-700 ${
-        mounted ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-3"
-      }`}
-    >
-        <div className="text-3xl tracking-widest text-creamtext">
-          <span className="inline-block origin-left transition-transform duration-700 ease-out hover:scale-105">
+      {/* toast */}
+      <AnimatePresence>
+        {showLogoutMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: 14, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 14, scale: 0.98 }}
+            transition={{ duration: 0.25, ease: EASE_OUT }}
+            className="
+              fixed right-5 top-5 z-50
+              rounded-2xl border border-zinc-200 bg-white
+              px-4 py-3 shadow-lg
+            "
+          >
+            <p className="text-sm font-semibold text-emerald-700">
+              You logged out successfully
+            </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* header ساده */}
+      <header className="mx-auto max-w-6xl px-4 pt-8 relative z-10">
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={mounted ? { opacity: 1, y: 0 } : { opacity: 0, y: -10 }}
+          transition={{ duration: 0.45, ease: EASE_OUT }}
+          className="flex items-center justify-between"
+        >
+          <div className="text-[18px] font-semibold tracking-[0.12em] text-zinc-900">
             REVE
-          </span>
-        </div>
+            <div className="mt-1 h-[2px] w-12 rounded-full bg-yellow-400" />
+          </div>
 
-        <nav className="flex gap-12 text-lg">
-          <NavLink
-            to="/about"
-            className="cursor-pointer hover:opacity-80 text-creamtext transition-colors"
-          >
-            About
-          </NavLink>
-          <NavLink
-            to="/services"
-            className="cursor-pointer hover:opacity-80 text-creamtext transition-colors"
-          >
-            Services
-          </NavLink>
-          <NavLink
-            to="/contact"
-            className="cursor-pointer hover:opacity-80 text-creamtext transition-colors"
-          >
-            Contact us
-          </NavLink>
-        </nav>
+          <nav className="hidden sm:flex items-center gap-6 text-sm">
+            {["about", "services", "contact"].map((p) => (
+              <NavLink
+                key={p}
+                to={`/${p}`}
+                className={({ isActive }) =>
+                  `transition-colors ${
+                    isActive
+                      ? "text-zinc-900 font-semibold"
+                      : "text-zinc-600 hover:text-zinc-900"
+                  }`
+                }
+              >
+                {p === "contact" ? "Contact" : p[0].toUpperCase() + p.slice(1)}
+              </NavLink>
+            ))}
+          </nav>
+        </motion.div>
       </header>
 
-      {/* Login Form component */}
-      <LoginForm
-        mounted={mounted}
-        email={email}
-        password={password}
-        error={error}
-        loading={loading}
-        onChangeEmail={(e: React.ChangeEvent<HTMLInputElement>) =>
-          setEmail(e.target.value)
-        }
-        onChangePassword={(e: React.ChangeEvent<HTMLInputElement>) =>
-          setPassword(e.target.value)
-        }
-        onSubmit={handleLogin}
-        onForgotPassword={handleForgotPassword}
-      />
+      <main className="mx-auto max-w-6xl px-4 py-12 relative z-10">
+        <motion.div
+          initial={{ opacity: 0, y: 14, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.5, ease: EASE_OUT }}
+          className="
+            relative
+            grid grid-cols-12
+            rounded-[32px]
+            border border-zinc-200
+            bg-white
+            shadow-2xl
+            overflow-hidden
+          "
+        >
+          {/* soft yellow accent */}
+          <div className="pointer-events-none absolute -left-24 -top-24 h-[420px] w-[420px] rounded-full bg-yellow-200/40 blur-3xl" />
+
+          {/* LEFT – buddy */}
+          <section className="col-span-12 md:col-span-5 flex items-center justify-center bg-gradient-to-b from-yellow-50 to-white">
+            <FullBodyBuddy />
+          </section>
+
+          {/* RIGHT – login */}
+          <section className="col-span-12 md:col-span-7 p-10 flex items-center">
+            <div className="w-full max-w-[440px] mx-auto">
+              <LoginForm
+                mounted={mounted}
+                email={email}
+                password={password}
+                error={error}
+                loading={loading}
+                onChangeEmail={(e) => setEmail(e.target.value)}
+                onChangePassword={(e) => setPassword(e.target.value)}
+                onSubmit={handleLogin}
+                onForgotPassword={handleForgotPassword}
+              />
+            </div>
+          </section>
+        </motion.div>
+      </main>
+
+
+      <footer className="pb-8 text-center text-xs text-zinc-400 relative z-10">
+        REVE · Study dashboard
+      </footer>
     </div>
   );
 };
