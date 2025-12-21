@@ -15,6 +15,7 @@ import LandingPage from "./pages/LandingPage";
 import Groups from "./pages/Groups";
 import GroupDetails from "./pages/GroupDetails";
 import Analytics from "./pages/Analytics";
+import Settings from "./pages/Settings";
 import { Route, Routes } from "react-router-dom";
 import React from "react";
 
@@ -40,6 +41,7 @@ function App() {
       <Route path="/groups" element={<Groups />} />
       <Route path="/groups/:groupId" element={<GroupDetails />} />
       <Route path="/analytics" element={<Analytics />} />
+      <Route path="/settings" element={<Settings />} />
     </Routes>
   );
 }

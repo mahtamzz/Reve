@@ -9,11 +9,7 @@ function clamp(n: number, a: number, b: number) {
 
 type EyeOffset = { x: number; y: number };
 
-export default function LookAtBuddy({
-  label = "Study buddy",
-}: {
-  label?: string;
-}) {
+export default function LookAtBuddy({ label = "Study buddy" }: { label?: string }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [left, setLeft] = useState<EyeOffset>({ x: 0, y: 0 });
   const [right, setRight] = useState<EyeOffset>({ x: 0, y: 0 });
@@ -29,14 +25,12 @@ export default function LookAtBuddy({
     const onMove = (e: MouseEvent) => {
       const r = el.getBoundingClientRect();
 
-      // normalized [-1..1]
       const nx = ((e.clientX - (r.left + r.width / 2)) / (r.width / 2)) || 0;
       const ny = ((e.clientY - (r.top + r.height / 2)) / (r.height / 2)) || 0;
 
       const tx = clamp(nx, -1, 1) * max.x;
       const ty = clamp(ny, -1, 1) * max.y;
 
-      // کمی تفاوت بین دو چشم برای طبیعی‌تر شدن
       const l = { x: tx * 0.95, y: ty * 0.95 };
       const rr = { x: tx * 1.05, y: ty * 1.0 };
 
@@ -74,15 +68,14 @@ export default function LookAtBuddy({
       <div className="relative flex items-center justify-between gap-4">
         <div className="min-w-0">
           <p className="text-sm font-semibold text-zinc-900">{label}</p>
-          <p className="mt-1 text-xs text-zinc-500">
-            I’m watching 👀
-          </p>
+          <p className="mt-1 text-xs text-zinc-500">I’m watching 👀</p>
         </div>
 
         {/* Buddy face */}
         <div className="relative">
           <div
             className="
+              relative
               h-14 w-20
               rounded-2xl
               border border-yellow-200
@@ -91,8 +84,13 @@ export default function LookAtBuddy({
               flex items-center justify-center
               gap-3
               px-3
+              overflow-hidden
             "
           >
+            {/* cheeks */}
+            <div className="pointer-events-none absolute left-2 bottom-2 h-3 w-4 rounded-full bg-rose-300/45 blur-[0.2px]" />
+            <div className="pointer-events-none absolute right-2 bottom-2 h-3 w-4 rounded-full bg-rose-300/45 blur-[0.2px]" />
+
             {/* left eye */}
             <div className="relative h-8 w-8 rounded-full bg-white border border-zinc-200 shadow-inner">
               <motion.div
@@ -112,9 +110,14 @@ export default function LookAtBuddy({
               />
               <div className="absolute left-[58%] top-[38%] h-1.5 w-1.5 rounded-full bg-white/90" />
             </div>
+
+            {/* small mouth */}
+            <div className="pointer-events-none absolute left-1/2 bottom-[7px] -translate-x-1/2">
+              <div className="h-[6px] w-[14px] rounded-b-full border-b-2 border-rose-400/70" />
+            </div>
           </div>
 
-          {/* tiny smile */}
+          {/* tiny smile (existing) */}
           <div className="mx-auto mt-1 h-1.5 w-8 rounded-full bg-yellow-300/70" />
         </div>
       </div>

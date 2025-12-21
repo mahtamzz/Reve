@@ -36,9 +36,7 @@ function StatCard({
   return (
     <div className="rounded-2xl border border-zinc-200 bg-zinc-50/70 p-4 shadow-sm">
       <p className="text-[11px] font-semibold text-zinc-500">{label}</p>
-      <p
-        className={`mt-1 text-3xl font-semibold tabular-nums tracking-tight ${valueClassName}`}
-      >
+      <p className={`mt-1 text-3xl font-semibold tabular-nums tracking-tight ${valueClassName}`}>
         {value}
       </p>
       {suffix ? <p className="mt-1 text-[11px] text-zinc-500">{suffix}</p> : null}
@@ -46,6 +44,29 @@ function StatCard({
   );
 }
 
+function MiniSectionTitle({
+  title,
+  subtitle,
+  right,
+}: {
+  title: string;
+  subtitle?: string;
+  right?: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-4">
+      <div>
+        <p className="text-sm font-semibold text-zinc-900">{title}</p>
+        {subtitle ? <p className="mt-0.5 text-xs text-zinc-500">{subtitle}</p> : null}
+      </div>
+      {right ? (
+        <div className="shrink-0 inline-flex items-center rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1 text-[11px] font-semibold text-zinc-600">
+          {right}
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 export default function GroupDetails() {
   const { groupId } = useParams<{ groupId: string }>();
@@ -53,16 +74,13 @@ export default function GroupDetails() {
   const location = useLocation();
 
   const groupNameFromState = (location.state as { groupName?: string } | null)?.groupName;
-
   const [membersOpen, setMembersOpen] = useState<boolean>(false);
 
   useEffect(() => {
     if (!membersOpen) return;
-
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setMembersOpen(false);
     };
-
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [membersOpen]);
@@ -150,10 +168,7 @@ export default function GroupDetails() {
   const previewMembers = useMemo(() => data.members.slice(0, 4), [data.members]);
 
   const goToChat = () => {
-    // مسیر چت رو اگر متفاوت است همینجا تغییر بده
-    navigate(`/groups/${data.id}/chat`, {
-      state: { groupName: data.name },
-    });
+    navigate(`/groups/${data.id}/chat`, { state: { groupName: data.name } });
   };
 
   return (
@@ -170,37 +185,10 @@ export default function GroupDetails() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.35, ease: EASE_OUT }}
-              className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4"
+              className="relative"
             >
-              <div>
-                <p className="text-sm text-zinc-500">Groups / Details</p>
-                <h1 className="mt-1 text-2xl sm:text-3xl font-semibold tracking-tight text-zinc-900">
-                  {data.name}
-                </h1>
-                <p className="mt-1 text-sm text-zinc-600 max-w-2xl">{data.description}</p>
-              </div>
-
-              <div className="flex items-center gap-2">
-                {/* Chat button */}
-                <button
-                  type="button"
-                  onClick={goToChat}
-                  className="
-                    group relative overflow-hidden
-                    rounded-xl border border-zinc-200 bg-white
-                    px-3 py-2 text-xs font-semibold text-zinc-700
-                    shadow-sm transition-all duration-300
-                    hover:-translate-y-0.5 hover:shadow-md
-                    hover:border-yellow-300 hover:text-zinc-900
-                    flex items-center gap-2 w-fit
-                  "
-                >
-                  <span className="pointer-events-none absolute inset-0 translate-x-[-120%] group-hover:translate-x-[120%] transition-transform duration-700 ease-in-out bg-[linear-gradient(90deg,transparent,rgba(250,204,21,0.18),transparent)]" />
-                  <MessageCircle className="h-4 w-4 relative" />
-                  <span className="relative">Open Group Chat</span>
-                </button>
-
-                {/* Back button */}
+              {/* Back on LEFT (requested) */}
+              <div className="flex items-center justify-between gap-3">
                 <button
                   type="button"
                   onClick={() => navigate("/groups")}
@@ -218,12 +206,41 @@ export default function GroupDetails() {
                   <ArrowLeft className="h-4 w-4 relative" />
                   <span className="relative">Back</span>
                 </button>
+
+                {/* Chat on RIGHT */}
+                <button
+                  type="button"
+                  onClick={goToChat}
+                  className="
+                    group relative overflow-hidden
+                    rounded-xl border border-zinc-200 bg-white
+                    px-3 py-2 text-xs font-semibold text-zinc-700
+                    shadow-sm transition-all duration-300
+                    hover:-translate-y-0.5 hover:shadow-md
+                    hover:border-yellow-300 hover:text-zinc-900
+                    flex items-center gap-2 w-fit
+                  "
+                >
+                  <span className="pointer-events-none absolute inset-0 translate-x-[-120%] group-hover:translate-x-[120%] transition-transform duration-700 ease-in-out bg-[linear-gradient(90deg,transparent,rgba(250,204,21,0.18),transparent)]" />
+                  <MessageCircle className="h-4 w-4 relative" />
+                  <span className="relative">Open Group Chat</span>
+                </button>
+              </div>
+
+              <div className="mt-4">
+                <p className="text-sm text-zinc-500">Groups / Details</p>
+                <h1 className="mt-1 text-2xl sm:text-3xl font-semibold tracking-tight text-zinc-900">
+                  {data.name}
+                </h1>
+                <p className="mt-1 text-sm text-zinc-600 max-w-2xl">{data.description}</p>
               </div>
             </motion.div>
 
-            {/* buddy */}
-            <div className="mt-6">
-              <LookAtBuddy label="Your study buddy" />
+            {/* buddy (smaller wrapper + tighter spacing) */}
+            <div className="mt-5 max-w-md">
+              <div className="rounded-3xl border border-zinc-200 bg-white/60 backdrop-blur p-1 shadow-sm">
+                <LookAtBuddy label="Your study buddy" />
+              </div>
             </div>
 
             {/* main */}
@@ -233,49 +250,59 @@ export default function GroupDetails() {
               transition={{ duration: 0.35, ease: EASE_OUT }}
               className="relative mt-6 rounded-3xl bg-white p-6 shadow-sm border border-zinc-200 overflow-hidden"
             >
-              <div className="pointer-events-none absolute -top-16 -right-20 h-56 w-56 rounded-full bg-yellow-200/35 blur-3xl" />
-              <div className="pointer-events-none absolute -bottom-24 -left-20 h-64 w-64 rounded-full bg-yellow-100/55 blur-3xl" />
+              {/* accents */}
+              <div className="pointer-events-none absolute -top-16 -right-20 h-56 w-56 rounded-full bg-yellow-200/30 blur-3xl" />
+              <div className="pointer-events-none absolute -bottom-24 -left-20 h-64 w-64 rounded-full bg-yellow-100/50 blur-3xl" />
 
               <div className="relative grid grid-cols-12 gap-6">
                 {/* left */}
                 <div className="col-span-12 lg:col-span-7">
                   <div className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <p className="text-xs font-semibold text-zinc-500">Overview</p>
-                        <p className="mt-1 text-sm text-zinc-600">
-                          Quick snapshot of your group progress.
-                        </p>
-                      </div>
-
-                      <span className="inline-flex items-center rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1 text-[11px] font-semibold text-zinc-600">
-                        Live
-                      </span>
-                    </div>
+                    <MiniSectionTitle
+                      title="Overview"
+                      subtitle="Quick snapshot of your group progress."
+                      right="Live"
+                    />
 
                     <div className="mt-4 grid grid-cols-2 gap-4">
                       <StatCard
                         label="Streak"
                         value={data.streak}
                         suffix="days"
-                        valueClassName="text-amber-500"
+                        valueClassName="text-amber-600"
                       />
                       <StatCard
                         label="XP"
                         value={data.xp}
                         suffix="total"
-                        valueClassName="text-sky-500"
+                        valueClassName="text-sky-600"
                       />
                     </div>
 
+                    {/* Minimum daily study - now structured + colored number */}
                     <div className="mt-5 rounded-2xl border border-zinc-200 bg-gradient-to-br from-yellow-50/70 to-white p-4">
-                      <p className="text-xs font-semibold text-zinc-900">Minimum daily study time</p>
-                      <p className="mt-1 text-base font-semibold text-zinc-800 tabular-nums">
-                        {data.minimumDailyStudy}
-                      </p>
-                      <p className="mt-1 text-[11px] text-zinc-500">
-                        Keep it realistic; consistency beats intensity.
-                      </p>
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-xs font-semibold text-zinc-900">
+                            Minimum daily study time
+                          </p>
+                          <p className="mt-1 text-[11px] text-zinc-500">
+                            Keep it realistic; consistency beats intensity.
+                          </p>
+                        </div>
+
+                        <span className="inline-flex items-center rounded-full border border-yellow-200 bg-yellow-100/60 px-2.5 py-1 text-[11px] font-semibold text-yellow-800">
+                          Goal
+                        </span>
+                      </div>
+
+                      <div className="mt-3 flex items-baseline gap-2">
+                        {/* colored number */}
+                        <span className="text-2xl font-semibold tabular-nums tracking-tight bg-gradient-to-r from-amber-600 via-yellow-600 to-rose-500 bg-clip-text text-transparent">
+                          {data.minimumDailyStudy}
+                        </span>
+                        <span className="text-xs font-medium text-zinc-500">per day</span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -284,10 +311,11 @@ export default function GroupDetails() {
                 <div className="col-span-12 lg:col-span-5 space-y-6">
                   {/* Members */}
                   <div className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
-                    <p className="text-sm font-semibold text-zinc-900">Members</p>
-                    <p className="mt-0.5 text-xs text-zinc-500">
-                      {data.members.length} members · live status
-                    </p>
+                    <MiniSectionTitle
+                      title="Members"
+                      subtitle={`${data.members.length} members · live status`}
+                      right="Online"
+                    />
 
                     <div className="mt-4 rounded-3xl border border-zinc-200 bg-[#FFFBF2] p-5">
                       <div className="grid grid-cols-2 gap-x-4 gap-y-8">
@@ -312,18 +340,11 @@ export default function GroupDetails() {
 
                   {/* Group Chat */}
                   <div className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <p className="text-sm font-semibold text-zinc-900">Group Chat</p>
-                        <p className="mt-0.5 text-xs text-zinc-500">
-                          Discuss goals, share progress, stay accountable.
-                        </p>
-                      </div>
-
-                      <span className="inline-flex items-center rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1 text-[11px] font-semibold text-zinc-600">
-                        Chat
-                      </span>
-                    </div>
+                    <MiniSectionTitle
+                      title="Group Chat"
+                      subtitle="Discuss goals, share progress, stay accountable."
+                      right="Chat"
+                    />
 
                     <button
                       type="button"
@@ -379,8 +400,8 @@ export default function GroupDetails() {
                     onClick={(e) => e.stopPropagation()}
                   >
                     <div className="relative p-6 border-b border-zinc-200">
-                      <div className="pointer-events-none absolute -top-16 -right-20 h-56 w-56 rounded-full bg-yellow-200/35 blur-3xl" />
-                      <div className="pointer-events-none absolute -bottom-24 -left-20 h-64 w-64 rounded-full bg-yellow-100/55 blur-3xl" />
+                      <div className="pointer-events-none absolute -top-16 -right-20 h-56 w-56 rounded-full bg-yellow-200/30 blur-3xl" />
+                      <div className="pointer-events-none absolute -bottom-24 -left-20 h-64 w-64 rounded-full bg-yellow-100/50 blur-3xl" />
 
                       <div className="relative flex items-start justify-between gap-4">
                         <div>
