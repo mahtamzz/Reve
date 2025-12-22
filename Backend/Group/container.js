@@ -1,137 +1,142 @@
+require("dotenv").config();
+
 const PgClient = require("./infrastructure/db/postgres");
+
+/* SHARED */
+const JwtVerifier = require("../shared/auth/JwtVerifier");
+const authMiddleware = require("../shared/auth/authMiddleware");
+const auditMiddleware = require("../shared/audit/auditMiddleware");
 
 /* REPOSITORIES */
 const PgGroupRepo = require("./infrastructure/repositories/PgGroupRepo");
 const PgGroupMemberRepo = require("./infrastructure/repositories/PgGroupMemberRepo");
-const PgGroupJoinRequestRepo = require("./infrastructure/repositories/PgGroupJoinRequestRepo");
-const PgGroupBanRepo = require("./infrastructure/repositories/PgGroupBanRepo");
-const PgGroupAuditRepo = require("./infrastructure/repositories/PgGroupAuditRepo");
+const PgJoinRequestRepo = require("./infrastructure/repositories/PgGroupJoinRequestRepo");
+const PgBanRepo = require("./infrastructure/repositories/PgGroupBanRepo");
+const PgAuditRepo = require("./infrastructure/repositories/PgGroupAuditRepo");
 
 /* USE CASES – Details */
-const CreateGroup = require("./application/useCases/DetailsRelated/CreateGroup.js");
-const GetGroupDetails = require("./application/useCases/DetailsRelated/GetGroupDetails");
-const UpdateGroup = require("./application/useCases/DetailsRelated/UpdateGroup");
+const CreateGroup = require("./application/useCases/DetailsRelated/CreateGroup");
 const DeleteGroup = require("./application/useCases/DetailsRelated/DeleteGroup");
+const GetGroupDetails = require("./application/useCases/DetailsRelated/GetGroupDetails");
 const JoinGroup = require("./application/useCases/DetailsRelated/JoinGroup");
 const LeaveGroup = require("./application/useCases/DetailsRelated/LeaveGroup");
+const UpdateGroup = require("./application/useCases/DetailsRelated/UpdateGroup");
 
 /* USE CASES – Members */
 const ApproveJoinRequest = require("./application/useCases/MemberRelated/ApproveJoinRequest");
 const RejectJoinRequest = require("./application/useCases/MemberRelated/RejectJoinRequest");
 const ChangeMemberRole = require("./application/useCases/MemberRelated/ChangeMemberRole");
-// const PromoteMember = require("./application/useCases/MemberRelated/PromoteMember");
-// const DemoteMember = require("./application/useCases/MemberRelated/DemoteMember");
 const KickMember = require("./application/useCases/MemberRelated/KickMember");
 
-/* CONTROLLERS */
-const GroupController = require("./interfaces/http/controllers/GroupController");
-const GroupMemberController = require("./interfaces/http/controllers/GroupMemberController");
+/* CONTROLLER + ROUTES */
+const createGroupController = require("./interfaces/http/controllers/groupController");
+const createGroupRoutes = require("./interfaces/http/routes/groupRoutes");
 
 async function createContainer() {
-
+    /* DB */
     const db = new PgClient({
         host: process.env.PGHOST,
         user: process.env.PGUSER,
         password: process.env.PGPASSWORD,
-        database: process.env.PGDATABASE
+        database: process.env.PGDATABASE,
+        port: process.env.PGPORT || 5432
     });
 
     /* REPOSITORIES */
     const groupRepo = new PgGroupRepo({ pool: db });
     const groupMemberRepo = new PgGroupMemberRepo({ pool: db });
-    const joinRequestRepo = new PgGroupJoinRequestRepo({ pool: db });
-    const banRepo = new PgGroupBanRepo({ pool: db });
-    const auditRepo = new PgGroupAuditRepo({ pool: db });
+    const joinRequestRepo = new PgJoinRequestRepo({ pool: db });
+    const banRepo = new PgBanRepo({ pool: db });
+    const auditRepo = new PgAuditRepo({ pool: db });
 
-    /* USE CASES – Details */
-    const createGroupUC = new CreateGroup(
+    /* JWT */
+    const jwtVerifier = new JwtVerifier({
+        secret: process.env.JWT_SECRET
+    });
+
+    const auth = authMiddleware(jwtVerifier);
+
+    /* USE CASES */
+    const createGroup = new CreateGroup({
+        groupRepo,
+        membershipRepo: groupMemberRepo,
+        auditRepo
+    });
+
+    const deleteGroup = new DeleteGroup(
         groupRepo,
         groupMemberRepo,
         auditRepo
     );
 
-    const getGroupDetailsUC = new GetGroupDetails(
+    const getGroupDetails = new GetGroupDetails(
         groupRepo,
         groupMemberRepo
     );
 
-    const updateGroupUC = new UpdateGroup(
-        groupRepo,
-        groupMemberRepo,
-        auditRepo
-    );
-
-    const deleteGroupUC = new DeleteGroup(
-        groupRepo,
-        groupMemberRepo,
-        auditRepo
-    );
-
-    const joinGroupUC = new JoinGroup(
+    const joinGroup = new JoinGroup(
         groupRepo,
         groupMemberRepo,
         joinRequestRepo,
         banRepo
     );
 
-    const leaveGroupUC = new LeaveGroup(groupMemberRepo);
+    const leaveGroup = new LeaveGroup(
+        groupMemberRepo,
+        groupRepo
+    );
 
-    /* USE CASES – Members */
-    const approveJoinRequestUC = new ApproveJoinRequest(
+    const updateGroup = new UpdateGroup(
+        groupRepo,
+        groupMemberRepo,
+        auditRepo
+    );
+
+    const approveJoinRequest = new ApproveJoinRequest(
         groupMemberRepo,
         joinRequestRepo,
         auditRepo
     );
 
-    const rejectJoinRequestUC = new RejectJoinRequest(
+    const rejectJoinRequest = new RejectJoinRequest(
         joinRequestRepo,
         groupMemberRepo,
         auditRepo
     );
 
-    const changeMemberRoleUC = new ChangeMemberRole(
+    const changeMemberRole = new ChangeMemberRole(
         groupMemberRepo,
         auditRepo
     );
 
-    // const promoteMemberUC = new PromoteMember(
-    //     groupMemberRepo,
-    //     auditRepo
-    // );
-
-    // const demoteMemberUC = new DemoteMember(
-    //     groupMemberRepo,
-    //     auditRepo
-    // );
-
-    const kickMemberUC = new KickMember(
+    const kickMember = new KickMember(
         groupMemberRepo,
         auditRepo
     );
 
-    /* CONTROLLERS */
-    const groupController = new GroupController({
-        createGroup: createGroupUC,
-        getGroupDetails: getGroupDetailsUC,
-        updateGroup: updateGroupUC,
-        deleteGroup: deleteGroupUC,
-        joinGroup: joinGroupUC,
-        leaveGroup: leaveGroupUC
+    /* CONTROLLER */
+    const controller = createGroupController({
+        createGroup,
+        deleteGroup,
+        getGroupDetails,
+        joinGroup,
+        leaveGroup,
+        updateGroup,
+        approveJoinRequest,
+        rejectJoinRequest,
+        changeMemberRole,
+        kickMember
     });
 
-    const groupMemberController = new GroupMemberController({
-        approveJoinRequest: approveJoinRequestUC,
-        rejectJoinRequest: rejectJoinRequestUC,
-        changeMemberRole: changeMemberRoleUC,
-        promoteMember: promoteMemberUC,
-        demoteMember: demoteMemberUC,
-        kickMember: kickMemberUC
+    /* ROUTER */
+    const groupRouter = createGroupRoutes({
+        controller,
+        auth
     });
 
     return {
-        controllers: {
-            groupController,
-            groupMemberController
+        routers: {
+            groupRouter
         }
     };
 }

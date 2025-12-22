@@ -1,23 +1,67 @@
 const express = require("express");
-const bodyParser = require("body-parser");
+const cors = require("cors");
+const cookieParser = require("cookie-parser");
 
-const groupRoutes = require("./interfaces/http/routes/groupRoutes");
-const groupMemberRoutes = require("./interfaces/http/routes/groupMemberRoutes");
+const swaggerUi = require("swagger-ui-express");
+const swaggerJsdoc = require("swagger-jsdoc");
 
-function createApp({ controllers }) {
+function createApp(container) {
     const app = express();
 
-    app.use(bodyParser.json());
+    app.set("trust proxy", 1);
 
-    app.use("/groups", groupRoutes(controllers.groupController));
+    app.use(cors({
+        origin: [
+            "http://localhost:5173",
+            "http://localhost:3001"
+        ],
+        credentials: true
+    }));
+
+    app.use(cookieParser());
+    app.use(express.json());
+
+    const swaggerOptions = {
+        definition: {
+            openapi: "3.0.0",
+            info: {
+                title: "Group Service API",
+                version: "1.0.0",
+                description: "Groups, members, and join requests"
+            },
+            servers: [
+                {
+                    url: "http://localhost:3002/api/groups"
+                }
+            ],
+            components: {
+                securitySchemes: {
+                    bearerAuth: {
+                        type: "http",
+                        scheme: "bearer",
+                        bearerFormat: "JWT"
+                    }
+                }
+            },
+            security: [{ bearerAuth: [] }]
+        },
+        apis: [
+            "./interfaces/http/routes/*.js"
+        ]
+    };
+
+    const swaggerSpec = swaggerJsdoc(swaggerOptions);
+
     app.use(
-        "/groups/:groupId/members",
-        groupMemberRoutes(controllers.groupMemberController)
+        "/api/groups/docs",
+        swaggerUi.serve,
+        swaggerUi.setup(swaggerSpec)
     );
 
-    app.use((err, req, res, next) => {
-        console.error(err);
-        res.status(400).json({ error: err.message });
+    app.use("/api/groups", container.routers.groupRouter);
+
+    app.get("/health", (req, res) => {
+        res.json({ status: "ok" });
     });
 
     return app;

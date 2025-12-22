@@ -42,6 +42,22 @@ services:
     ports:
       - "3001:3001"
 
+  group_service:
+    build:
+      context: .
+      dockerfile: Group/Dockerfile
+    container_name: group_service
+    restart: always
+    env_file:
+      - ./Group/.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+    ports:
+      - "3002:3002"
+
   postgres:
     image: postgres:15
     container_name: postgres_db
@@ -78,6 +94,7 @@ services:
     depends_on:
       - iam_service
       - profile_service
+      - group_service
 
 volumes:
   pgdata:
