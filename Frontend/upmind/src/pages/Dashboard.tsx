@@ -19,7 +19,11 @@ interface User {
   id: number;
   username: string;
   email: string;
+  fullName?: string;
+  avatarUrl?: string | null;
+  role?: string;
 }
+
 
 function isoDate(d: Date) {
   return d.toISOString().slice(0, 10); // YYYY-MM-DD
@@ -162,7 +166,17 @@ export default function Dashboard() {
 
         {/* چون Sidebar fixed است */}
         <div className="flex-1 min-w-0 md:ml-64">
-          <Topbar username={user.username} />
+        <Topbar
+          username={user.username}
+          profile={{
+            username: user.username,
+            email: user.email,
+            fullName: user.fullName ?? user.username,
+            role: "Student",
+            avatarUrl: user.avatarUrl,
+          }}
+        />
+
 
           <div className="mx-auto max-w-6xl px-4 py-6">
             {/* ROW 1 */}

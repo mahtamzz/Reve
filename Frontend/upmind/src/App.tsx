@@ -16,6 +16,8 @@ import Groups from "./pages/Groups";
 import GroupDetails from "./pages/GroupDetails";
 import Analytics from "./pages/Analytics";
 import Settings from "./pages/Settings";
+import GroupChat from "./pages/GroupChat";
+import Notifications from "./pages/Notifications";
 import { Route, Routes } from "react-router-dom";
 import React from "react";
 
@@ -42,6 +44,9 @@ function App() {
       <Route path="/groups/:groupId" element={<GroupDetails />} />
       <Route path="/analytics" element={<Analytics />} />
       <Route path="/settings" element={<Settings />} />
+      <Route path="/groups/:groupId/chat" element={<GroupChat />} />
+      <Route path="/notifications" element={<Notifications />} />
+
     </Routes>
   );
 }
