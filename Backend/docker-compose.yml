@@ -30,8 +30,8 @@ services:
 
   profile_service:
     build:
-      context: ./UserProfile
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: UserProfile/Dockerfile
     container_name: profile_service
     restart: always
     env_file:
@@ -48,10 +48,9 @@ services:
     restart: always
     environment:
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: mydb
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./IAM/DB/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./db/postgres-init:/docker-entrypoint-initdb.d
     ports:
       - "5433:5432"
     healthcheck:

@@ -2,8 +2,6 @@ const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
 
-const createProfileRouter = require("./interfaces/http/routes/profile.routes");
-
 function createApp(container) {
     const app = express();
 
@@ -17,10 +15,7 @@ function createApp(container) {
     app.use(cookieParser());
     app.use(express.json());
 
-    app.use(
-        "/api/profile",
-        createProfileRouter(container.controllers.userProfileController)
-    );
+    app.use("/api/profile", container.routers.profileRouter);
 
     app.get("/health", (req, res) => {
         res.json({ status: "ok" });

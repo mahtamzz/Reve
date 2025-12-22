@@ -5,13 +5,6 @@ class CreateUserProfile {
         this.auditRepo = auditRepo;
     }
 
-    /**
-     * @param {Object} event
-     * @param {string|number} event.uid
-     * @param {string} event.displayName
-     * @param {string} event.timezone
-     * @param {Object} [meta]
-     */
     async execute(event, meta = {}) {
         const { uid, displayName, timezone } = event;
 

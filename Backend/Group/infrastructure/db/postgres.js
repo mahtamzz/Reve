@@ -5,7 +5,7 @@ class PostgresClient {
         this.pool = new Pool({
             user: config.user || process.env.PGUSER || "postgres",
             host: config.host || process.env.PGHOST || "postgres",
-            database: config.database || process.env.PGDATABASE || "user_profile_db",
+            database: config.database || process.env.PGDATABASE || "mydb",
             password: config.password || process.env.PGPASSWORD || "postgres",
             port: config.port || process.env.PGPORT || 5432,
         });

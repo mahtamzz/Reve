@@ -1,16 +1,20 @@
 const express = require("express");
-const authMiddleware = require("../middleware/authMiddleware");
 
-module.exports = function createProfileRouter(userProfileController) {
+module.exports = function createProfileRouter({
+    auth, audit, controller }) {
     const router = express.Router();
 
-    router.get("/me", authMiddleware, userProfileController.getMe);
-    router.get("/dashboard", authMiddleware, userProfileController.dashboard);
-    router.patch("/me", authMiddleware, userProfileController.updateProfileInfo);
-    router.patch("/preferences", authMiddleware, userProfileController.updatePreferencesInfo);
+    router.get("/me", auth, controller.getMe);
+
+    router.get("/dashboard", auth, controller.dashboard);
+
+    router.patch("/me",auth, audit('profile.updated'), controller.updateProfileInfo);
+
+    router.patch("/preferences", auth, audit('preferences.updated'), controller.updatePreferencesInfo);
 
     return router;
 };
+
 
 
 

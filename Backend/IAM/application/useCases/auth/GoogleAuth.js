@@ -1,7 +1,8 @@
 class GoogleAuth {
-    constructor(userRepository, jwtService) {
+    constructor({ userRepository, jwtService, eventBus }) {
         this.userRepository = userRepository;
         this.jwtService = jwtService;
+        this.eventBus = eventBus;
     }
 
     async execute(profile) {
@@ -9,6 +10,8 @@ class GoogleAuth {
             profile.id,
             profile.emails[0].value
         );
+
+        let isNewUser = false;
 
         if (!user) {
             const username =
@@ -20,6 +23,19 @@ class GoogleAuth {
                 googleid: profile.id,
                 email: profile.emails[0].value,
                 username,
+            });
+
+            isNewUser = true;
+        }
+
+        if (isNewUser) {
+            if (!this.eventBus || typeof this.eventBus.publish !== "function") {
+                throw new Error("EventBus.publish not available");
+            }
+            await this.eventBus.publish("user.created", {
+                uid: user.id,
+                email: user.email,
+                username: user.username
             });
         }
 
