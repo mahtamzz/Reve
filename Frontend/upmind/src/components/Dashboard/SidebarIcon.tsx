@@ -100,15 +100,19 @@ export default function Sidebar({
   const { quick, main, bottom } = useMemo(() => {
     const quick: NavItem[] = [
       { key: "focus", label: "Start Focus", icon: <PlayCircle className="h-4 w-4" />, to: "/focus" },
-      { key: "streak", label: "View streak", icon: <Flame className="h-4 w-4" />, to: "/streak" },
+      { key: "progress", label: "View progress", icon: <Flame className="h-4 w-4" />, to: "/progress" },
     ];
 
     const main: NavItem[] = [
       { key: "dashboard", label: "Dashboard", icon: <LayoutDashboard className="h-4 w-4" />, to: "/dashboard" },
       { key: "groups", label: "Groups", icon: <UsersRound className="h-4 w-4" />, to: "/groups" },
-      { key: "analytics", label: "Analytics", icon: <BarChart3 className="h-4 w-4" />, to: "/analytics", badge: "New" },
-      { key: "commerce", label: "Commerce", icon: <ShoppingBag className="h-4 w-4" />, to: "/commerce" },
-      { key: "users", label: "Users", icon: <Users className="h-4 w-4" />, to: "/users", badge: "12" },
+      { key: "analytics", label: "Subject Analytics", icon: <BarChart3 className="h-4 w-4" />, to: "/analytics", badge: "New" },
+      { 
+        key: "connections",
+        label: "Connections",
+        icon: <Users className="h-4 w-4" />,
+        to: "/connections",
+      }    
     ];
 
     const bottom: NavItem[] = [

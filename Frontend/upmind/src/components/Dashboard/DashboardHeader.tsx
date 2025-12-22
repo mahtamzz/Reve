@@ -130,7 +130,7 @@ export default function Topbar({
               >
                 <button
                   type="button"
-                  onClick={() => navigate("/settings")}
+                  onClick={() => navigate("/profile")}
                   className="
                     group flex items-center gap-2
                     rounded-xl border border-zinc-200 bg-white
@@ -228,14 +228,14 @@ export default function Topbar({
                           <div className="rounded-2xl border border-zinc-200 bg-[#FFFBF2] p-3">
                             <p className="text-xs font-semibold text-zinc-900">Tip</p>
                             <p className="mt-1 text-xs text-zinc-600">
-                              Click your profile to open settings.
+                              Click your profile to open profile.
                             </p>
                           </div>
                         </div>
 
                         <button
                           type="button"
-                          onClick={() => navigate("/settings")}
+                          onClick={() => navigate("/profile")}
                           className="
                             mt-3 w-full
                             rounded-2xl border border-zinc-200 bg-white
@@ -243,7 +243,7 @@ export default function Topbar({
                             hover:border-yellow-300 hover:bg-yellow-50 transition-colors
                           "
                         >
-                          Open Settings →
+                          Open profile →
                         </button>
                       </div>
                     </motion.div>
