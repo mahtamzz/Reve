@@ -45,20 +45,37 @@ module.exports = function createProfileRouter({
  * @swagger
  * /me:
  *   patch:
- *     summary: Update profile info
+ *     summary: Update user profile info
  *     tags: [Profile]
  *     security:
  *       - bearerAuth: []
  *     requestBody:
+ *       description: Fields to update in the user profile
  *       required: true
  *       content:
  *         application/json:
  *           schema:
  *             type: object
+ *             properties:
+ *               display_name:
+ *                 type: string
+ *                 example: "New Name"
+ *               avatar_media_id:
+ *                 type: string
+ *                 nullable: true
+ *                 example: "abc123"
+ *               weekly_goal:
+ *                 type: integer
+ *                 example: 150
+ *               timezone:
+ *                 type: string
+ *                 example: "UTC"
+ *             additionalProperties: false
  *     responses:
  *       204:
- *         description: Updated successfully
+ *         description: Profile updated successfully
  */
+
 /**
  * @swagger
  * /preferences:
@@ -68,12 +85,18 @@ module.exports = function createProfileRouter({
  *     security:
  *       - bearerAuth: []
  *     requestBody:
+ *       description: Fields to update in user preferences
  *       required: true
  *       content:
  *         application/json:
  *           schema:
  *             type: object
+ *             properties:
+ *               is_subject_public:
+ *                 type: boolean
+ *                 example: true
+ *             additionalProperties: false
  *     responses:
  *       204:
- *         description: Preferences updated
+ *         description: Preferences updated successfully
  */

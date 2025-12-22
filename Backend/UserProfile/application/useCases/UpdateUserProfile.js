@@ -6,7 +6,12 @@ class UpdateUserProfile {
 
     async execute(uid, updates) {
         await this.profileRepo.update(uid, updates);
-        await this.auditRepo.log(uid, 'PROFILE_UPDATED', updates);
+        // Wrap arguments in an object
+        await this.auditRepo.log({ 
+            actorUid: uid, 
+            action: 'PROFILE_UPDATED', 
+            metadata: updates 
+        });
     }
 }
 

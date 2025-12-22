@@ -6,13 +6,20 @@ class PgUserProfileAuditRepository extends UserProfileAuditRepository {
         this.pool = pool;
     }
 
-    async log(uid, action, details = {}) {
+    async log({ actorUid, action, metadata = {} }) {
+        if (!action) {
+            console.warn('Audit log skipped: action is missing');
+            return; // skip logging instead of failing
+        }
+
         await this.pool.query(
             `INSERT INTO user_profile_audit_log (uid, action, details)
-            VALUES ($1, $2, $3)`,
-            [uid, action, details]
+             VALUES ($1, $2, $3)`,
+            [actorUid, action, metadata]
         );
     }
 }
 
 module.exports = PgUserProfileAuditRepository;
+
+

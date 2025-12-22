@@ -22,7 +22,7 @@ class PgUserPreferencesRepository extends UserPreferencesRepository {
              DO UPDATE SET
              is_subject_public = EXCLUDED.is_subject_public,
              updated_at = now()`,
-            [uid, prefs.isSubjectPublic]
+            [uid, prefs.is_subject_public]
         );
     }
 }

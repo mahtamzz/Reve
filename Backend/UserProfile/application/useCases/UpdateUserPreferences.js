@@ -6,7 +6,12 @@ class UpdateUserPreferences {
 
     async execute(uid, prefs) {
         await this.prefsRepo.upsert(uid, prefs);
-        await this.auditRepo.log(uid, 'PREFERENCES_UPDATED', prefs);
+        // Wrap arguments in an object
+        await this.auditRepo.log({ 
+            actorUid: uid, 
+            action: 'PREFERENCES_UPDATED', 
+            metadata: prefs 
+        });
     }
 }
 
