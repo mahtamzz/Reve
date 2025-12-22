@@ -5,6 +5,7 @@ module.exports = function setTokens(res, accessToken, refreshToken) {
         httpOnly: true,
         secure: isProduction,        // only true in prod
         sameSite: isProduction ? "none" : "lax",
+        path: "/api", 
         maxAge: 1000 * 60 * 15
     });
 
@@ -12,6 +13,7 @@ module.exports = function setTokens(res, accessToken, refreshToken) {
         httpOnly: true,
         secure: isProduction,
         sameSite: isProduction ? "none" : "lax",
+        path: "/api", 
         maxAge: 1000 * 60 * 60 * 24 * 7
     });
 };

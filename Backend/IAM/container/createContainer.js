@@ -60,7 +60,7 @@ async function createContainer() {
     console.log("📧 Email service ready");
 
 
-    const jwtService = new JwtService(process.env.JWT_KEY);
+    const jwtService = new JwtService(process.env.JWT_SECRET);
 
     const eventBus = new EventBus(process.env.RABBITMQ_URL);
     await eventBus.connect();

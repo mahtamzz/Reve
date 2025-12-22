@@ -6,7 +6,7 @@ const env = {
     SERVICE_NAME: 'user-profile-service',
 
     // JWT (verification only)
-    JWT_KEY: process.env.JWT_KEY || 'dev_secret',
+    JWT_SECRET: process.env.JWT_SECRET || 'dev_secret',
     JWT_ISSUER: process.env.JWT_ISSUER || 'iam-service',
 
     // Database (owned by this service)

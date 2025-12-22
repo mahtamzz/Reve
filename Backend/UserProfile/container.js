@@ -45,9 +45,7 @@ async function createContainer() {
 
     /* JWT */
     const jwtVerifier = new JwtVerifier({
-        secret: process.env.JWT_SECRET,
-        issuer: process.env.JWT_ISSUER,
-        audience: 'profile-service'
+        secret: process.env.JWT_SECRET
     });
 
     const auth = authMiddleware(jwtVerifier);

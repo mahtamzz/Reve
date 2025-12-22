@@ -82,6 +82,10 @@ class AuthController {
             const { password, ...safeUser } = user;
             setTokenCookie(res, accessToken, refreshToken);
 
+            // FOR SWAGGER TESTING -- DEV ONLY
+            console.log("🔑 [DEV] User access token:");
+            console.log(accessToken);
+
             res.json({ user: safeUser });
         } catch (err) {
             res.status(401).json({ message: err.message });

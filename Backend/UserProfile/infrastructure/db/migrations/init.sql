@@ -20,8 +20,7 @@ CREATE TABLE user_DST (
 
 CREATE TABLE user_preferences (
     uid INT PRIMARY KEY,
-    is_profile_public BOOLEAN DEFAULT TRUE,
-    show_streak BOOLEAN DEFAULT TRUE,
+    is_subject_public BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now()
 );

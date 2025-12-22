@@ -16,14 +16,13 @@ class PgUserPreferencesRepository extends UserPreferencesRepository {
 
     async upsert(uid, prefs) {
         await this.pool.query(
-            `INSERT INTO user_preferences (uid, is_profile_public, show_streak)
-                VALUES ($1, $2, $3)
-                ON CONFLICT (uid)
-                DO UPDATE SET
-                is_profile_public = EXCLUDED.is_profile_public,
-                show_streak = EXCLUDED.show_streak,
-                updated_at = now()`,
-            [uid, prefs.isProfilePublic, prefs.showStreak]
+            `INSERT INTO user_preferences (uid, is_subject_public)
+             VALUES ($1, $2)
+             ON CONFLICT (uid)
+             DO UPDATE SET
+             is_subject_public = EXCLUDED.is_subject_public,
+             updated_at = now()`,
+            [uid, prefs.isSubjectPublic]
         );
     }
 }

@@ -8,18 +8,18 @@ class PgUserDailyStudyRepository extends UserDailyStudyRepository {
 
     async upsert(uid, studyDate, minutes) {
         await this.pool.query(
-            `INSERT INTO user_daily_study (uid, study_date, total_duration_minutes)
+            `INSERT INTO user_DST (uid, study_date, total_duration_minutes)
             VALUES ($1, $2, $3)
             ON CONFLICT (uid, study_date)
             DO UPDATE SET total_duration_minutes =
-            user_daily_study.total_duration_minutes + EXCLUDED.total_duration_minutes`,
+            user_DST.total_duration_minutes + EXCLUDED.total_duration_minutes`,
             [uid, studyDate, minutes]
         );
     }
 
     async findByUidAndDate(uid, date) {
         const { rows } = await this.pool.query(
-            `SELECT * FROM user_daily_study
+            `SELECT * FROM user_DST
             WHERE uid = $1 AND study_date = $2`,
             [uid, date]
         );
@@ -28,7 +28,7 @@ class PgUserDailyStudyRepository extends UserDailyStudyRepository {
 
     async findRange(uid, from, to) {
         const { rows } = await this.pool.query(
-            `SELECT * FROM user_daily_study
+            `SELECT * FROM user_DST
             WHERE uid = $1 AND study_date BETWEEN $2 AND $3
             ORDER BY study_date`,
             [uid, from, to]
