@@ -1,5 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+
+
+import EmojiPicker, { EmojiClickData, Theme } from "emoji-picker-react";
+
+
 import {
   ArrowLeft,
   Send,
@@ -32,6 +37,19 @@ export default function GroupChat() {
   const location = useLocation();
   const navigate = useNavigate();
 
+  const [emojiOpen, setEmojiOpen] = useState(false);
+  const emojiRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const onClickOutside = (e: MouseEvent) => {
+      if (!emojiRef.current) return;
+      if (!emojiRef.current.contains(e.target as Node)) setEmojiOpen(false);
+    };
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, []);
+
+
   const groupName =
     (location.state as { groupName?: string } | null)?.groupName ?? "Group Chat";
 
@@ -51,6 +69,17 @@ export default function GroupChat() {
       time: "09:31",
     },
   ]);
+
+  const fileInputRef = useRef(null);
+
+  const handleButtonClick = () => {
+    fileInputRef.current.click();
+  };
+
+  const handleFileChange = (event) => {
+    const files = event.target.files;
+    console.log(files); // فایل‌ها اینجا در دسترس‌اند
+  };
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
@@ -88,7 +117,6 @@ export default function GroupChat() {
 
           <div className="flex-1 min-h-0 w-full px-4 py-4">
             <div className="max-w-7xl mx-auto h-full min-h-0">
-              {/* ✅ فقط چت + پنل اطلاعات گروه */}
               <div className="grid h-full min-h-0 grid-cols-1 lg:grid-cols-[1fr_340px] gap-4">
                 {/* Center panel (chat) */}
                 <motion.section
@@ -105,7 +133,6 @@ export default function GroupChat() {
                   <div className="shrink-0 px-4 py-3 border-b border-zinc-200 bg-white/70">
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex items-center gap-3 min-w-0">
-                        {/* ✅ برگشت به لیست گروه‌ها */}
                         <button
                           onClick={() => navigate("/notifications")}
                           className="
@@ -195,13 +222,50 @@ export default function GroupChat() {
                   {/* Input */}
                   <div className="shrink-0 border-t border-zinc-200 bg-white px-4 py-3">
                     <div className="flex items-center gap-3">
-                      <button className="text-zinc-400 hover:text-zinc-600 transition">
-                        <Smile className="h-5 w-5" />
-                      </button>
+                    <div className="relative" ref={emojiRef}>
+                    <button
+                      type="button"
+                      onClick={() => setEmojiOpen((v) => !v)}
+                      className="text-zinc-400 hover:text-zinc-600 transition"
+                    >
+                      <Smile className="h-5 w-5" />
+                    </button>
 
-                      <button className="text-zinc-400 hover:text-zinc-600 transition">
-                        <Paperclip className="h-5 w-5" />
-                      </button>
+
+                    {emojiOpen && (
+                      <div className="absolute bottom-12 left-0 z-50">
+                        <EmojiPicker
+                          theme={Theme.LIGHT}
+                          onEmojiClick={(emojiData: EmojiClickData) => {
+                            setInput((prev) => prev + emojiData.emoji);
+                            setEmojiOpen(false);
+                          }}
+                          width={320}
+                          height={380}
+                        />
+                      </div>
+                    )}
+
+                  </div>
+
+                  {/* دکمه */}
+                  <button
+                    type="button"
+                    onClick={handleButtonClick}
+                    className="text-zinc-400 hover:text-zinc-600 transition"
+                  >
+                    <Paperclip className="h-5 w-5" />
+                  </button>
+
+                  {/* input مخفی */}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    className="hidden"
+                    multiple
+                    accept="image/*,.pdf,.doc,.docx,.zip,.rar"
+                    onChange={handleFileChange}
+                  />
 
                       <input
                         value={input}
