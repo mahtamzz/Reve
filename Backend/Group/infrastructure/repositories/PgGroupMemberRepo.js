@@ -63,6 +63,18 @@ class PgGroupMemberRepository extends GroupMemberRepository {
         );
         return result.rows[0]?.role || null;
     }
+
+    async updateRole(groupId, uid, role) {
+        const result = await this.db.query(
+            `UPDATE group_members
+            SET role = $3
+            WHERE group_id = $1 AND uid = $2
+            RETURNING uid, role, joined_at`,
+            [groupId, uid, role]
+        );
+        return result.rows[0] || null;
+    }
+
 }
 
 module.exports = PgGroupMemberRepository;

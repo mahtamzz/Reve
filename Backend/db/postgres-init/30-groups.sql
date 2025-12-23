@@ -1,9 +1,13 @@
+\connect group_db;
+
 CREATE TABLE groups (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name            VARCHAR(100) NOT NULL,
     description     TEXT,
     visibility      VARCHAR(20) NOT NULL DEFAULT 'public',
     -- public | private | invite_only
+    weekly_xp INT NOT NULL DEFAULT 0,
+    minimum_dst_mins INT,
     owner_uid       INT NOT NULL,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -11,6 +15,15 @@ CREATE TABLE groups (
 
 CREATE INDEX idx_groups_owner_uid ON groups(owner_uid);
 CREATE INDEX idx_groups_visibility ON groups(visibility);
+
+ALTER TABLE groups
+ADD CONSTRAINT chk_groups_weekly_xp_non_negative
+CHECK (weekly_xp >= 0);
+
+ALTER TABLE groups
+ADD CONSTRAINT chk_groups_minimum_dst_positive
+CHECK (minimum_dst_mins IS NULL OR minimum_dst_mins > 0);
+
 
 CREATE TABLE group_members (
     group_id    UUID NOT NULL,
@@ -64,7 +77,7 @@ CREATE TABLE group_audit_log (
     actor_uid   INT NOT NULL,
 
     action      VARCHAR(50) NOT NULL,
-    target_uid  UUID,
+    target_uid  INT,
     metadata    JSONB,
 
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),

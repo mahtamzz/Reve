@@ -13,15 +13,11 @@ class JoinGroup {
         const banned = await this.banRepo.isBanned(groupId, uid);
         if (banned) throw new Error('You are banned from this group');
 
-        const existing = await this.groupMemberRepo.find(uid, groupId);
-        if (existing) throw new Error('Already a member');
+        const existingRole = await this.groupMemberRepo.getRole(groupId, uid);
+        if (existingRole) throw new Error('Already a member');
 
         if (group.visibility === 'public') {
-            await this.groupMemberRepo.add({
-                uid,
-                groupId,
-                role: 'member'
-            });
+            await this.groupMemberRepo.addMember(groupId, uid, 'member');
             return { status: 'joined' };
         }
 

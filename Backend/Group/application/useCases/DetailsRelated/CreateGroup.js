@@ -5,23 +5,33 @@ class CreateGroup {
         this.auditRepo = auditRepo;
     }
 
-    async execute({ uid, name, description, weeklyXp, minimumDst }) {
+    async execute({
+        uid,
+        name,
+        description,
+        visibility,
+        weeklyXp,
+        minimumDstMins
+    }) {
         const group = await this.groupRepo.create({
             name,
             description,
+            visibility,
             weeklyXp,
-            minimumDst,
-            adminUid: uid
+            minimumDstMins,
+            ownerUid: uid
         });
 
-        await this.membershipRepo.add({
+        await this.membershipRepo.addMember(
+            group.id,
             uid,
-            groupId: group.id,
-            role: 'admin'
-        });
+            'owner'
+        );
 
-        await this.auditRepo.log(uid, 'GROUP_CREATED', {
-            groupId: group.id
+        await this.auditRepo.log({
+            groupId: group.id,
+            actorUid: uid,
+            action: 'group.created'
         });
 
         return group;

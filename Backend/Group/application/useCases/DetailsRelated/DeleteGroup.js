@@ -6,20 +6,20 @@ class DeleteGroup {
     }
 
     async execute({ uid, groupId }) {
-        const membership = await this.groupMemberRepo.find(uid, groupId);
-        if (!membership) throw new Error('Not a member');
+        const role = await this.groupMemberRepo.getRole(groupId, uid);
+        if (!role) throw new Error('Not a member');
 
-        if (membership.role !== 'owner') {
+        if (role !== 'owner') {
             throw new Error('Only owner can delete group');
         }
-
-        await this.groupRepo.delete(groupId);
-
         await this.auditRepo.log({
             groupId,
             actorUid: uid,
             action: 'group.deleted'
         });
+
+        await this.groupRepo.delete(groupId);
+
     }
 }
 

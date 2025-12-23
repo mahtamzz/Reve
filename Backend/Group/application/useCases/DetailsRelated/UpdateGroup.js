@@ -6,14 +6,26 @@ class UpdateGroup {
     }
 
     async execute({ uid, groupId, fields }) {
-        const membership = await this.groupMemberRepo.find(uid, groupId);
-        if (!membership) throw new Error('Not a member');
+        const role = await this.groupMemberRepo.getRole(groupId, uid);
+        if (!role) throw new Error('Not a member');
 
-        if (membership.role !== 'owner' && membership.role !== 'admin') {
+        if (role !== 'owner' && role !== 'admin') {
             throw new Error('Insufficient permissions');
         }
 
-        const updated = await this.groupRepo.update(groupId, fields);
+        const mappedFields = { ...fields };
+
+        if ('weeklyXp' in fields) {
+            mappedFields.weekly_xp = fields.weeklyXp;
+            delete mappedFields.weeklyXp;
+        }
+
+        if ('minimumDstMins' in fields) {
+            mappedFields.minimum_dst_mins = fields.minimumDstMins;
+            delete mappedFields.minimumDstMins;
+        }
+
+        const updated = await this.groupRepo.update(groupId, mappedFields);
 
         await this.auditRepo.log({
             groupId,

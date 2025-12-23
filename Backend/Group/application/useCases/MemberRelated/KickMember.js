@@ -5,25 +5,22 @@ class KickMember {
     }
 
     async execute({ actorUid, targetUid, groupId }) {
-        const actor = await this.groupMemberRepo.find(actorUid, groupId);
-        if (!actor) throw new Error('Not a member');
+        const actorRole = await this.groupMemberRepo.getRole(groupId, actorUid);
+        if (!actorRole) throw new Error('Not a member');
 
-        if (actor.role !== 'owner' && actor.role !== 'admin') {
+        if (actorRole !== 'owner' && actorRole !== 'admin') {
             throw new Error('Insufficient permissions');
         }
 
-        const target = await this.groupMemberRepo.find(targetUid, groupId);
-        if (!target) throw new Error('Target not a member');
+        const targetRole = await this.groupMemberRepo.getRole(groupId, targetUid);
+        if (!targetRole) throw new Error('Target not a member');
 
-        if (target.role === 'owner') {
-            throw new Error('Cannot kick owner');
-        }
-
-        if (actor.role === 'admin' && target.role === 'admin') {
+        if (targetRole === 'owner') throw new Error('Cannot kick owner');
+        if (actorRole === 'admin' && targetRole === 'admin') {
             throw new Error('Admin cannot kick another admin');
         }
 
-        await this.groupMemberRepo.remove(targetUid, groupId);
+        await this.groupMemberRepo.removeMember(groupId, targetUid);
 
         await this.auditRepo.log({
             groupId,

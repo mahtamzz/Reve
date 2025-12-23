@@ -6,15 +6,37 @@ class PgGroupRepository extends GroupRepository {
         this.db = db;
     }
 
-    async create({ name, description, visibility, ownerUid }) {
+    async create({
+        name,
+        description,
+        visibility = 'public',
+        weeklyXp = 0,
+        minimumDstMins = null,
+        ownerUid
+    }) {
         const result = await this.db.query(
             `
-            INSERT INTO groups (name, description, visibility, owner_uid)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO groups (
+                name,
+                description,
+                visibility,
+                weekly_xp,
+                minimum_dst_mins,
+                owner_uid
+            )
+            VALUES ($1, $2, $3, $4, $5, $6)
             RETURNING *
             `,
-            [name, description, visibility, ownerUid]
+            [
+                name,
+                description,
+                visibility,
+                weeklyXp,
+                minimumDstMins,
+                ownerUid
+            ]
         );
+
         return result.rows[0];
     }
 
@@ -35,8 +57,25 @@ class PgGroupRepository extends GroupRepository {
     }
 
     async update(groupId, fields) {
-        const keys = Object.keys(fields);
-        const values = Object.values(fields);
+        // 🔒 whitelist allowed fields
+        const allowed = [
+            'name',
+            'description',
+            'visibility',
+            'weekly_xp',
+            'minimum_dst_mins'
+        ];
+
+        const filtered = Object.fromEntries(
+            Object.entries(fields).filter(([k]) => allowed.includes(k))
+        );
+
+        if (Object.keys(filtered).length === 0) {
+            return this.findById(groupId);
+        }
+
+        const keys = Object.keys(filtered);
+        const values = Object.values(filtered);
 
         const setClause = keys
             .map((k, i) => `${k} = $${i + 2}`)

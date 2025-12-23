@@ -13,7 +13,7 @@ function createApp(container) {
     app.use(cors({
         origin: [
             "http://localhost:5173",
-            "http://localhost:3001"
+            "http://localhost:3002"
         ],
         credentials: true
     }));
@@ -31,7 +31,7 @@ function createApp(container) {
             },
             servers: [
                 {
-                    url: "http://localhost:3002/api/groups"
+                    url: "http://localhost:3002"
                 }
             ],
             components: {
@@ -52,11 +52,7 @@ function createApp(container) {
 
     const swaggerSpec = swaggerJsdoc(swaggerOptions);
 
-    app.use(
-        "/api/groups/docs",
-        swaggerUi.serve,
-        swaggerUi.setup(swaggerSpec)
-    );
+    app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
     app.use("/api/groups", container.routers.groupRouter);
 

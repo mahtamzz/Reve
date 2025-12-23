@@ -43,11 +43,11 @@ async function createContainer() {
     });
 
     /* REPOSITORIES */
-    const groupRepo = new PgGroupRepo({ pool: db });
-    const groupMemberRepo = new PgGroupMemberRepo({ pool: db });
-    const joinRequestRepo = new PgJoinRequestRepo({ pool: db });
-    const banRepo = new PgBanRepo({ pool: db });
-    const auditRepo = new PgAuditRepo({ pool: db });
+    const groupRepo = new PgGroupRepo(db);
+    const groupMemberRepo = new PgGroupMemberRepo(db);
+    const joinRequestRepo = new PgJoinRequestRepo(db);
+    const banRepo = new PgBanRepo(db);
+    const auditRepo = new PgAuditRepo(db);
 
     /* JWT */
     const jwtVerifier = new JwtVerifier({

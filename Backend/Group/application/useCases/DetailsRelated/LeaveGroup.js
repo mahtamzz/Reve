@@ -5,14 +5,14 @@ class LeaveGroup {
     }
 
     async execute({ uid, groupId }) {
-        const membership = await this.membershipRepo.find(uid, groupId);
-        if (!membership) throw new Error('Not a member');
+        const role = await this.membershipRepo.getRole(groupId, uid);
+        if (!role) throw new Error('Not a member');
 
-        if (membership.role === 'admin') {
-            throw new Error('Admin must transfer ownership');
+        if (role === 'owner') {
+            throw new Error('Owner must transfer ownership before leaving');
         }
 
-        await this.membershipRepo.remove(uid, groupId);
+        await this.membershipRepo.removeMember(groupId, uid);
     }
 }
 

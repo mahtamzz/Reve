@@ -47,7 +47,7 @@ module.exports = function createGroupRoutes({ controller, auth }) {
      *                 type: string
      *               weeklyXp:
      *                 type: integer
-     *               minimumDst:
+     *               minimum_dst_mins:
      *                 type: integer
      *     responses:
      *       201:
