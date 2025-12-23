@@ -3,7 +3,7 @@ const isProduction = process.env.NODE_ENV === "production";
 module.exports = function setTokens(res, accessToken, refreshToken) {
     const cookieOptions = {
         httpOnly: true,
-        secure: isProduction,            // HTTPS only in prod
+        secure: isProduction,
         sameSite: isProduction ? "none" : "lax",
         path: "/", 
     };
