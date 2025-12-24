@@ -58,6 +58,23 @@ services:
     ports:
       - "3002:3002"
 
+  study_service:
+    build:
+      context: .
+      dockerfile: Study/Dockerfile
+    container_name: study_service
+    restart: always
+    env_file:
+      - ./Study/.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+    ports:
+      - "3003:3003"
+
+
   postgres:
     image: postgres:15
     container_name: postgres_db
@@ -95,6 +112,7 @@ services:
       - iam_service
       - profile_service
       - group_service
+      - study_service
 
 volumes:
   pgdata:
