@@ -152,15 +152,25 @@ class AuthController {
     refreshToken = async (req, res) => {
         try {
             const token = req.cookies.refreshToken;
+
             const { user, accessToken, refreshToken } =
                 await this.refreshTokenUC.execute(token);
 
             setTokenCookie(res, accessToken, refreshToken);
+
+            // FOR SWAGGER TESTING -- DEV ONLY
+            console.log("🔁 [DEV] Refreshed access token:");
+            console.log(accessToken);
+
+            console.log("🔁 [DEV] Refreshed refresh token:");
+            console.log(refreshToken);
+
             res.json({ user });
         } catch (err) {
             res.status(401).json({ message: err.message });
         }
     };
+
 
     /* ---------------- GOOGLE AUTH ---------------- */
 
