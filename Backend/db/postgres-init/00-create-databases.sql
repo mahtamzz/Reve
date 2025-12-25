@@ -6,3 +6,6 @@ CREATE DATABASE group_db;
 
 CREATE DATABASE study_db;
 
+CREATE DATABASE media_db;
+
+

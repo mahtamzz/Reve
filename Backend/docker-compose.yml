@@ -74,6 +74,19 @@ services:
     ports:
       - "3003:3003"
 
+  media_service:
+    build:
+      context: .
+      dockerfile: Media/Dockerfile
+    container_name: media_service
+    restart: always
+    env_file:
+      - ./Media/.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "3004:3004"
 
   postgres:
     image: postgres:15
@@ -113,6 +126,7 @@ services:
       - profile_service
       - group_service
       - study_service
+      - media_service
 
 volumes:
   pgdata:
