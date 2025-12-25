@@ -3,18 +3,37 @@ const multer = require('multer');
 
 const upload = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: 2 * 1024 * 1024 } // 2MB
+    limits: { fileSize: 5 * 1024 * 1024 } // 2MB
 });
 
 module.exports = function createMediaRoutes({ controller, auth }) {
     const router = express.Router();
 
+    router.post(
+        '/avatar',
+        auth,
+        (req, res, next) => {
+            upload.single('file')(req, res, (err) => {
+                if (err?.code === 'LIMIT_FILE_SIZE') {
+                    return res.status(413).json({ error: 'File too large' });
+                }
+                if (err) return next(err);
+                next();
+            });
+        },
+        controller.uploadAvatarHandler
+    );
+
+    router.get('/avatar', auth, controller.getMyAvatarHandler);
+    router.get('/users/:uid/avatar', controller.getUserAvatarHandler);
+    router.delete('/avatar', auth, controller.deleteAvatarHandler);
+
     /**
-     * @swagger
-     * tags:
-     *   name: Media
-     *   description: User avatars
-     */
+ * @swagger
+ * tags:
+ *   name: Media
+ *   description: User avatars
+ */
 
     /**
      * @swagger
@@ -36,12 +55,7 @@ module.exports = function createMediaRoutes({ controller, auth }) {
      *     responses:
      *       201: { description: Avatar uploaded }
      */
-    router.post(
-        '/avatar',
-        auth,
-        upload.single('file'),
-        controller.uploadAvatarHandler
-    );
+
 
     /**
      * @swagger
@@ -53,7 +67,6 @@ module.exports = function createMediaRoutes({ controller, auth }) {
      *     responses:
      *       200: { description: Avatar image }
      */
-    router.get('/avatar', auth, controller.getMyAvatarHandler);
 
     /**
      * @swagger
@@ -69,7 +82,6 @@ module.exports = function createMediaRoutes({ controller, auth }) {
      *     responses:
      *       200: { description: Avatar image }
      */
-    router.get('/users/:uid/avatar', controller.getUserAvatarHandler);
 
     /**
      * @swagger
@@ -81,7 +93,6 @@ module.exports = function createMediaRoutes({ controller, auth }) {
      *     responses:
      *       204: { description: Deleted }
      */
-    router.delete('/avatar', auth, controller.deleteAvatarHandler);
 
     return router;
 };
