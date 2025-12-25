@@ -1,3 +1,5 @@
+// src/pages/GroupDetails.tsx
+
 import React, { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
@@ -10,17 +12,10 @@ import { logout } from "@/utils/authToken";
 import LookAtBuddy from "@/components/LookAtBuddy";
 import { MemberCard, type Member } from "@/components/Groups/MemberCard";
 
-const EASE_OUT: [number, number, number, number] = [0.16, 1, 0.3, 1];
+import { useGroupDetails } from "@/hooks/useGroups";
+import type { ApiGroupMember } from "@/api/types";
 
-type GroupDetailsData = {
-  id: string;
-  name: string;
-  description: string;
-  streak: number;
-  xp: number;
-  minimumDailyStudy: string;
-  members: Member[];
-};
+const EASE_OUT: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
 function StatCard({
   label,
@@ -68,6 +63,22 @@ function MiniSectionTitle({
   );
 }
 
+function placeholderAvatar(seed: string) {
+  const s = encodeURIComponent(seed || "member");
+  // بدون dependency: آواتار قابل اتکا
+  return `https://api.dicebear.com/7.x/identicon/svg?seed=${s}`;
+}
+
+function mapMember(m: ApiGroupMember, idx: number): Member {
+  const id = String(m.id ?? m.uid ?? m.userId ?? idx);
+  const name = String(m.username ?? m.displayName ?? m.name ?? `Member ${idx + 1}`);
+  const avatarUrl = String(m.avatarUrl ?? m.avatar_url ?? placeholderAvatar(id));
+  const time = String(m.time ?? m.studyTime ?? m.study_time ?? "--:--:--");
+  const online = Boolean(m.online);
+
+  return { id, name, avatarUrl, time, online };
+}
+
 export default function GroupDetails() {
   const { groupId } = useParams<{ groupId: string }>();
   const navigate = useNavigate();
@@ -75,6 +86,8 @@ export default function GroupDetails() {
 
   const groupNameFromState = (location.state as { groupName?: string } | null)?.groupName;
   const [membersOpen, setMembersOpen] = useState<boolean>(false);
+
+  const { data, isLoading, isError } = useGroupDetails(groupId || "");
 
   useEffect(() => {
     if (!membersOpen) return;
@@ -85,91 +98,23 @@ export default function GroupDetails() {
     return () => window.removeEventListener("keydown", onKey);
   }, [membersOpen]);
 
-  const data = useMemo<GroupDetailsData>(() => {
-    const members: Member[] = [
-      {
-        id: "1",
-        name: "nafas",
-        avatarUrl:
-          "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=256&q=60",
-        time: "01:12:14",
-        online: true,
-      },
-      {
-        id: "2",
-        name: "mahta",
-        avatarUrl:
-          "https://images.unsplash.com/photo-1520975869018-7d4b23f3f4ad?auto=format&fit=crop&w=256&q=60",
-        time: "01:12:14",
-        online: true,
-      },
-      {
-        id: "3",
-        name: "lala",
-        avatarUrl:
-          "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=256&q=60",
-        time: "01:12:14",
-        online: true,
-      },
-      {
-        id: "4",
-        name: "jajaja",
-        avatarUrl:
-          "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=256&q=60",
-        time: "01:12:14",
-        online: false,
-      },
-      {
-        id: "5",
-        name: "jajaja",
-        avatarUrl:
-          "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=256&q=60",
-        time: "01:12:14",
-        online: false,
-      },
-      {
-        id: "6",
-        name: "nafas",
-        avatarUrl:
-          "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=256&q=60",
-        time: "01:12:14",
-        online: true,
-      },
-      {
-        id: "7",
-        name: "lala",
-        avatarUrl:
-          "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=256&q=60",
-        time: "01:12:14",
-        online: true,
-      },
-      {
-        id: "8",
-        name: "jajaja",
-        avatarUrl:
-          "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=256&q=60",
-        time: "01:12:14",
-        online: false,
-      },
-    ];
+  const group = data?.group;
+  const members = useMemo(() => (data?.members ?? []).map(mapMember), [data?.members]);
 
-    return {
-      id: groupId ?? "unknown",
-      name: groupNameFromState ?? "Group",
-      description:
-        "A focused space to study together, keep streaks, and stay accountable. Set a daily minimum and climb the leaderboard.",
-      streak: 20,
-      xp: 1043,
-      minimumDailyStudy: "12h",
-      members,
-    };
-  }, [groupId, groupNameFromState]);
+  const previewMembers = useMemo(() => members.slice(0, 4), [members]);
 
-  const previewMembers = useMemo(() => data.members.slice(0, 4), [data.members]);
+  const minimumDailyMinutes = group?.minimum_dst_mins ?? null;
+  const weeklyXp = group?.weekly_xp ?? null;
 
   const goToChat = () => {
-    navigate(`/groups/${data.id}/chat`, { state: { groupName: data.name } });
+    const name = group?.name ?? groupNameFromState ?? "Group";
+    navigate(`/groups/${groupId}/chat`, { state: { groupName: name } });
   };
+
+  const title = group?.name ?? groupNameFromState ?? "Group";
+  const description =
+    group?.description ??
+    "A focused space to study together, keep streaks, and stay accountable.";
 
   return (
     <div className="min-h-screen bg-creamtext text-zinc-900">
@@ -180,14 +125,12 @@ export default function GroupDetails() {
           <Topbar username={"User"} />
 
           <div className="mx-auto max-w-6xl px-4 py-6">
-            {/* header */}
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.35, ease: EASE_OUT }}
               className="relative"
             >
-              {/* Back on LEFT (requested) */}
               <div className="flex items-center justify-between gap-3">
                 <button
                   type="button"
@@ -207,7 +150,6 @@ export default function GroupDetails() {
                   <span className="relative">Back</span>
                 </button>
 
-                {/* Chat on RIGHT */}
                 <button
                   type="button"
                   onClick={goToChat}
@@ -230,56 +172,48 @@ export default function GroupDetails() {
               <div className="mt-4">
                 <p className="text-sm text-zinc-500">Groups / Details</p>
                 <h1 className="mt-1 text-2xl sm:text-3xl font-semibold tracking-tight text-zinc-900">
-                  {data.name}
+                  {title}
                 </h1>
-                <p className="mt-1 text-sm text-zinc-600 max-w-2xl">{data.description}</p>
+                <p className="mt-1 text-sm text-zinc-600 max-w-2xl">{description}</p>
+
+                {isLoading && <p className="mt-3 text-sm text-zinc-500">Loading…</p>}
+                {isError && (
+                  <p className="mt-3 text-sm text-rose-700">
+                    Failed to load group details (maybe deleted or no access).
+                  </p>
+                )}
               </div>
             </motion.div>
 
-            {/* buddy (smaller wrapper + tighter spacing) */}
             <div className="mt-5 max-w-md">
               <div className="rounded-3xl border border-zinc-200 bg-white/60 backdrop-blur p-1 shadow-sm">
                 <LookAtBuddy label="Your study buddy" />
               </div>
             </div>
 
-            {/* main */}
             <motion.div
               initial={{ opacity: 0, y: 10, scale: 0.99 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               transition={{ duration: 0.35, ease: EASE_OUT }}
               className="relative mt-6 rounded-3xl bg-white p-6 shadow-sm border border-zinc-200 overflow-hidden"
             >
-              {/* accents */}
               <div className="pointer-events-none absolute -top-16 -right-20 h-56 w-56 rounded-full bg-yellow-200/30 blur-3xl" />
               <div className="pointer-events-none absolute -bottom-24 -left-20 h-64 w-64 rounded-full bg-yellow-100/50 blur-3xl" />
 
               <div className="relative grid grid-cols-12 gap-6">
-                {/* left */}
                 <div className="col-span-12 lg:col-span-7">
                   <div className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
                     <MiniSectionTitle
                       title="Overview"
-                      subtitle="Quick snapshot of your group progress."
+                      subtitle="Quick snapshot of your group."
                       right="Live"
                     />
 
                     <div className="mt-4 grid grid-cols-2 gap-4">
-                      <StatCard
-                        label="Streak"
-                        value={data.streak}
-                        suffix="days"
-                        valueClassName="text-amber-600"
-                      />
-                      <StatCard
-                        label="XP"
-                        value={data.xp}
-                        suffix="total"
-                        valueClassName="text-sky-600"
-                      />
+                      <StatCard label="Weekly XP goal" value={weeklyXp ?? 0} suffix="xp" valueClassName="text-sky-600" />
+                      <StatCard label="Members" value={members.length} suffix="people" valueClassName="text-amber-600" />
                     </div>
 
-                    {/* Minimum daily study - now structured + colored number */}
                     <div className="mt-5 rounded-2xl border border-zinc-200 bg-gradient-to-br from-yellow-50/70 to-white p-4">
                       <div className="flex items-start justify-between gap-3">
                         <div>
@@ -287,7 +221,7 @@ export default function GroupDetails() {
                             Minimum daily study time
                           </p>
                           <p className="mt-1 text-[11px] text-zinc-500">
-                            Keep it realistic; consistency beats intensity.
+                            Consistency beats intensity.
                           </p>
                         </div>
 
@@ -297,9 +231,8 @@ export default function GroupDetails() {
                       </div>
 
                       <div className="mt-3 flex items-baseline gap-2">
-                        {/* colored number */}
                         <span className="text-2xl font-semibold tabular-nums tracking-tight bg-gradient-to-r from-amber-600 via-yellow-600 to-rose-500 bg-clip-text text-transparent">
-                          {data.minimumDailyStudy}
+                          {minimumDailyMinutes == null ? "—" : `${minimumDailyMinutes} min`}
                         </span>
                         <span className="text-xs font-medium text-zinc-500">per day</span>
                       </div>
@@ -307,13 +240,11 @@ export default function GroupDetails() {
                   </div>
                 </div>
 
-                {/* right */}
                 <div className="col-span-12 lg:col-span-5 space-y-6">
-                  {/* Members */}
                   <div className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
                     <MiniSectionTitle
                       title="Members"
-                      subtitle={`${data.members.length} members · live status`}
+                      subtitle={`${members.length} members`}
                       right="Online"
                     />
 
@@ -338,7 +269,6 @@ export default function GroupDetails() {
                     </div>
                   </div>
 
-                  {/* Group Chat */}
                   <div className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
                     <MiniSectionTitle
                       title="Group Chat"
@@ -358,7 +288,7 @@ export default function GroupDetails() {
                     >
                       <span className="flex items-center gap-2">
                         <MessageCircle className="h-4 w-4" />
-                        Open chat for {data.name}
+                        Open chat for {title}
                       </span>
                       <span className="text-xs text-zinc-500">→</span>
                     </button>
@@ -367,7 +297,6 @@ export default function GroupDetails() {
               </div>
             </motion.div>
 
-            {/* MEMBERS MODAL */}
             <AnimatePresence>
               {membersOpen && (
                 <motion.div
@@ -407,7 +336,7 @@ export default function GroupDetails() {
                         <div>
                           <p className="text-sm text-zinc-500">Members</p>
                           <p className="mt-1 text-xl font-semibold text-zinc-900">
-                            {data.name} — {data.members.length} members
+                            {title} — {members.length} members
                           </p>
                           <p className="mt-1 text-xs text-zinc-500">
                             Press <span className="font-semibold">Esc</span> to close
@@ -431,7 +360,7 @@ export default function GroupDetails() {
                     <div className="p-6 overflow-auto">
                       <div className="rounded-3xl border border-zinc-200 bg-[#FFFBF2] p-6">
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-y-10 gap-x-6">
-                          {data.members.map((m) => (
+                          {members.map((m) => (
                             <MemberCard key={m.id} m={m} />
                           ))}
                         </div>

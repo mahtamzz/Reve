@@ -1,28 +1,44 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+// src/hooks/useGroups.ts
+
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { groupsApi, type CreateGroupBody } from "@/api/groups";
+import type { ApiGroupDetailsResponse } from "@/api/types";
 
-export const groupByIdKey = (id: string) => ["groups", "byId", id] as const;
+export const groupDetailsKey = (id: string) => ["groups", "details", id] as const;
 
-export function useGroupById(id: string) {
+export function useGroupDetails(id: string) {
   return useQuery({
-    queryKey: groupByIdKey(id),
-    queryFn: () => groupsApi.getById(id),
+    queryKey: groupDetailsKey(id),
+    queryFn: () => groupsApi.getDetails(id),
     enabled: !!id,
+    retry: false,
   });
 }
 
 export function useCreateGroup() {
   const qc = useQueryClient();
+
   return useMutation({
     mutationFn: (body: CreateGroupBody) => groupsApi.create(body),
-    // اینجا فقط می‌تونی صفحه‌ی جزئیات گروه جدید رو باز کنی
-    // یا اگر ids رو نگه می‌داری، اون لیست ids رو invalidate کنی
+    onSuccess: (created) => {
+      // ✅ چون details endpoint شکلش فرق داره، اینجا فقط invalidate می‌کنیم
+      // و اگر لازم شد بعداً با getDetails پر می‌کنیم.
+      qc.invalidateQueries({ queryKey: ["groups"] });
+
+      // می‌تونی optionally دیتای group رو زیر یک key جدا ذخیره کنی،
+      // ولی الان ما list نداریم و صفحه Groups بر اساس ids، details می‌گیرد.
+    },
   });
 }
 
 export function useDeleteGroup() {
   const qc = useQueryClient();
+
   return useMutation({
     mutationFn: (groupId: string) => groupsApi.remove(groupId),
+    onSuccess: (_void, groupId) => {
+      qc.removeQueries({ queryKey: groupDetailsKey(groupId) });
+      qc.invalidateQueries({ queryKey: ["groups"] });
+    },
   });
 }

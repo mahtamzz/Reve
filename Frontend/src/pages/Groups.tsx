@@ -1,8 +1,13 @@
-import React, { useMemo, useRef, useState } from "react";
+// src/pages/Groups.tsx
+
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { Plus, Search, Trash2 } from "lucide-react";
 import { useQueries } from "@tanstack/react-query";
+
+import { ApiError } from "@/api/client";
+import type { ApiGroup } from "@/api/types";
 
 import Sidebar from "@/components/Dashboard/SidebarIcon";
 import Topbar from "@/components/Dashboard/DashboardHeader";
@@ -11,9 +16,8 @@ import { logout } from "@/utils/authToken";
 import { GroupCard } from "@/components/Groups/GroupCard";
 
 import { useMyGroupIds } from "@/hooks/useMyGroupIds";
-import { useCreateGroup, useDeleteGroup, groupByIdKey } from "@/hooks/useGroups";
+import { useCreateGroup, useDeleteGroup, groupDetailsKey } from "@/hooks/useGroups";
 import { groupsApi } from "@/api/groups";
-import type { ApiGroup } from "@/api/types";
 
 type CreateGroupPayload = {
   name: string;
@@ -24,13 +28,23 @@ type CreateGroupPayload = {
   invites: string[];
 };
 
+function getWeeklyXp(g: ApiGroup): number {
+  const anyG = g as any;
+  return (anyG.weeklyXp ?? anyG.weekly_xp ?? 0) as number;
+}
+
 function mapApiGroupToCard(g: ApiGroup) {
+  const goal = getWeeklyXp(g);
   return {
     id: g.id,
     name: g.name,
     score: 0,
-    goal: g.weekly_xp ?? 0,
+    goal,
   };
+}
+
+function getHttpStatus(err: unknown): number | undefined {
+  return err instanceof ApiError ? err.status : (err as any)?.status;
 }
 
 export default function Groups() {
@@ -39,24 +53,35 @@ export default function Groups() {
   const [createOpen, setCreateOpen] = useState(false);
   const newCardIdRef = useRef<string | null>(null);
 
-  // ✅ ids از localStorage
   const { ids, add: addId, remove: removeId } = useMyGroupIds();
 
-  // ✅ چندتا GET /groups/:id همزمان
+  // ✅ هر id -> getDetails (برمی‌گردونه {group, members})
   const groupQueries = useQueries({
     queries: ids.map((id) => ({
-      queryKey: groupByIdKey(id),
-      queryFn: () => groupsApi.getById(id),
+      queryKey: groupDetailsKey(id),
+      queryFn: () => groupsApi.getDetails(id),
       enabled: !!id,
       retry: false,
     })),
   });
 
+  useEffect(() => {
+    groupQueries.forEach((q, idx) => {
+      if (!q.isError) return;
+      const status = getHttpStatus(q.error);
+      const id = ids[idx];
+      if (!id) return;
+
+      // گروه حذف شده یا دسترسی نداری → از localStorage پاکش کن
+      if (status === 404 || status === 403) removeId(id);
+    });
+  }, [groupQueries, ids, removeId]);
+
   const isLoading = groupQueries.some((q) => q.isLoading);
   const hasError = groupQueries.some((q) => q.isError);
 
   const groups: ApiGroup[] = groupQueries
-    .map((q) => q.data)
+    .map((q) => q.data?.group)
     .filter(Boolean) as ApiGroup[];
 
   const filtered = useMemo(() => {
@@ -65,41 +90,37 @@ export default function Groups() {
     return groups.filter((g) => g.name.toLowerCase().includes(q));
   }, [groups, query]);
 
-  const { mutate: createGroup, isPending: isCreating, error: createError } = useCreateGroup();
-  const { mutate: deleteGroup, isPending: isDeleting } = useDeleteGroup();
+  const createMutation = useCreateGroup();
+  const deleteMutation = useDeleteGroup();
 
-  const handleCreateGroup = (payload: CreateGroupPayload) => {
-    createGroup(
-      {
-        name: payload.name,
-        description: payload.description || null,
-        weekly_xp: payload.goalXp ?? null,
-        minimum_dst_mins: payload.minDailyMinutes ?? null,
-      },
-      {
-        onSuccess: (created) => {
-          // ✅ id جدید رو ذخیره کن تا لیست صفحه داشته باشه
-          addId(created.id);
-          newCardIdRef.current = created.id;
+  const isCreating = createMutation.isPending;
+  const createError = createMutation.error;
 
-          setQuery("");
-          setCreateOpen(false);
+  const isDeleting = deleteMutation.isPending;
 
-          window.setTimeout(() => {
-            const el = document.getElementById(`group-card-${created.id}`);
-            el?.scrollIntoView({ behavior: "smooth", block: "start" });
-          }, 120);
-        },
-      }
-    );
+  const handleCreateGroup = async (payload: CreateGroupPayload) => {
+    // ✅ invites فعلاً به بک نفرست (در بک endpointش نداریم)
+    const created = await createMutation.mutateAsync({
+      name: payload.name,
+      description: payload.description || null,
+      visibility: payload.privacy,
+      weeklyXp: payload.goalXp ?? null,
+      minimumDstMins: payload.minDailyMinutes ?? null,
+    });
+
+    addId(created.id);
+    newCardIdRef.current = created.id;
+    setQuery("");
+
+    window.setTimeout(() => {
+      const el = document.getElementById(`group-card-${created.id}`);
+      el?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 120);
   };
 
   const handleDelete = (id: string) => {
-    deleteGroup(id, {
-      onSuccess: () => {
-        // ✅ از localStorage حذفش کن تا از UI بره
-        removeId(id);
-      },
+    deleteMutation.mutate(id, {
+      onSuccess: () => removeId(id),
     });
   };
 
@@ -111,7 +132,6 @@ export default function Groups() {
           <Topbar username={"User"} />
 
           <div className="mx-auto max-w-6xl px-4 py-6">
-            {/* header */}
             <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
               <div>
                 <p className="text-sm text-zinc-500">My Groups</p>
@@ -136,17 +156,13 @@ export default function Groups() {
               </div>
             </div>
 
-            {/* create error */}
             {createError && (
               <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
                 Failed to create group.
               </div>
             )}
 
-            {/* load / error */}
-            {isLoading && (
-              <div className="mt-6 text-sm text-zinc-600">Loading groups…</div>
-            )}
+            {isLoading && <div className="mt-6 text-sm text-zinc-600">Loading groups…</div>}
 
             {hasError && (
               <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
@@ -154,13 +170,10 @@ export default function Groups() {
               </div>
             )}
 
-            {/* empty */}
             {!filtered.length && !isLoading ? (
               <div className="mt-10 rounded-3xl border border-zinc-200 bg-white p-10 text-center">
                 <p className="text-sm font-semibold text-zinc-900">No groups yet</p>
-                <p className="mt-1 text-sm text-zinc-600">
-                  Create a group to see it here.
-                </p>
+                <p className="mt-1 text-sm text-zinc-600">Create a group to see it here.</p>
               </div>
             ) : (
               <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -187,9 +200,7 @@ export default function Groups() {
                           <GroupCard
                             group={uiGroup as any}
                             onClick={() =>
-                              navigate(`/groups/${g.id}`, {
-                                state: { groupName: g.name },
-                              })
+                              navigate(`/groups/${g.id}`, { state: { groupName: g.name } })
                             }
                           />
 
@@ -220,7 +231,6 @@ export default function Groups() {
               </div>
             )}
 
-            {/* floating create */}
             <button
               type="button"
               onClick={() => setCreateOpen(true)}

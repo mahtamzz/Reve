@@ -1,8 +1,11 @@
 // src/api/client.ts
 
+import { getAccessToken } from "@/utils/authToken";
+
 export class ApiError<T = unknown> extends Error {
   status?: number;
   details?: T;
+
   constructor(message: string, status?: number, details?: T) {
     super(message);
     this.name = "ApiError";
@@ -14,13 +17,18 @@ export class ApiError<T = unknown> extends Error {
 const REFRESH_PATH = "/auth/refresh-token";
 
 type RequestOptions = Omit<RequestInit, "body"> & {
-  auth?: boolean;
-  retry?: boolean;
+  auth?: boolean;          // default true
+  retry?: boolean;         // default true
   body?: any;
+  timeoutMs?: number;      // optional
 };
 
+function stripTrailingSlashes(url: string) {
+  return url.replace(/\/+$/, "");
+}
+
 export function createApiClient(rawBase: string) {
-  const API_BASE_URL = rawBase.replace(/\/+$/, "");
+  const API_BASE_URL = stripTrailingSlashes(rawBase);
 
   let refreshPromise: Promise<boolean> | null = null;
 
@@ -75,71 +83,90 @@ export function createApiClient(rawBase: string) {
     return data as T;
   }
 
-  async function apiFetch<T = unknown>(
-    path: string,
-    options: RequestOptions = {}
-  ): Promise<T> {
-    const { auth = true, retry = true, headers, body, ...rest } = options;
+  async function apiFetch<T = unknown>(path: string, options: RequestOptions = {}): Promise<T> {
+    const {
+      auth = true,
+      retry = true,
+      headers,
+      body,
+      timeoutMs,
+      ...rest
+    } = options;
 
     const isFormData = typeof FormData !== "undefined" && body instanceof FormData;
+
     const finalHeaders: HeadersInit = { ...(headers || {}) };
+
+    // ✅ اگر accessToken داری، Bearer بفرست (بدون تغییر بک)
+    const token = getAccessToken();
+    if (auth && token && (finalHeaders as any).Authorization == null) {
+      (finalHeaders as any).Authorization = `Bearer ${token}`;
+    }
 
     if (!isFormData && body != null && (finalHeaders as any)["Content-Type"] == null) {
       (finalHeaders as any)["Content-Type"] = "application/json";
     }
 
-    const finalOptions: RequestInit = {
-      ...rest,
-      headers: finalHeaders,
-      credentials: auth ? "include" : "omit",
-      body:
-        body == null
-          ? undefined
-          : isFormData
-            ? body
-            : typeof body === "string"
+    const controller = timeoutMs ? new AbortController() : null;
+    const timeoutId = timeoutMs
+      ? window.setTimeout(() => controller?.abort(), timeoutMs)
+      : null;
+
+    try {
+      const finalOptions: RequestInit = {
+        ...rest,
+        headers: finalHeaders,
+        // ✅ cookie-based auth هم حفظ می‌شه
+        credentials: auth ? "include" : "omit",
+        signal: controller?.signal,
+        body:
+          body == null
+            ? undefined
+            : isFormData
               ? body
-              : JSON.stringify(body),
-    };
+              : typeof body === "string"
+                ? body
+                : JSON.stringify(body),
+      };
 
-    const url = buildUrl(path);
-    const res = await fetch(url, finalOptions);
+      const url = buildUrl(path);
+      const res = await fetch(url, finalOptions);
 
-    if (res.status === 401 && auth && retry && !isRefreshRequest(path)) {
-      const ok = await refreshOnce();
-      if (!ok) throw new ApiError("UNAUTHENTICATED", 401);
+      // ✅ اگر 401 شد، یکبار refresh و retry
+      if (res.status === 401 && auth && retry && !isRefreshRequest(path)) {
+        const ok = await refreshOnce();
+        if (!ok) throw new ApiError("UNAUTHENTICATED", 401);
 
-      const retryRes = await fetch(url, finalOptions);
-      return parseJsonOrThrow<T>(retryRes);
+        const retryRes = await fetch(url, finalOptions);
+        return parseJsonOrThrow<T>(retryRes);
+      }
+
+      return parseJsonOrThrow<T>(res);
+    } finally {
+      if (timeoutId) window.clearTimeout(timeoutId);
     }
-
-    return parseJsonOrThrow<T>(res);
   }
 
-  return {
-    apiFetch,
-    apiClient: {
-      get: <T>(path: string, opts?: RequestOptions) =>
-        apiFetch<T>(path, { ...opts, method: "GET" }),
+  const apiClient = {
+    get: <T>(path: string, opts?: RequestOptions) =>
+      apiFetch<T>(path, { ...opts, method: "GET" }),
 
-      post: <T>(path: string, body?: any, opts?: RequestOptions) =>
-        apiFetch<T>(path, { ...opts, method: "POST", body }),
+    post: <T>(path: string, body?: any, opts?: RequestOptions) =>
+      apiFetch<T>(path, { ...opts, method: "POST", body }),
 
-      patch: <T>(path: string, body?: any, opts?: RequestOptions) =>
-        apiFetch<T>(path, { ...opts, method: "PATCH", body }),
+    patch: <T>(path: string, body?: any, opts?: RequestOptions) =>
+      apiFetch<T>(path, { ...opts, method: "PATCH", body }),
 
-      delete: <T>(path: string, opts?: RequestOptions) =>
-        apiFetch<T>(path, { ...opts, method: "DELETE" }),
-    },
+    delete: <T>(path: string, opts?: RequestOptions) =>
+      apiFetch<T>(path, { ...opts, method: "DELETE" }),
   };
+
+  return { apiFetch, apiClient };
 }
 
-// ✅ اینا باید بعد از createApiClient باشن
-const PROFILE_BASE =
-  import.meta.env.VITE_API_PROFILE_BASE || "http://localhost:3001/api";
-
-const GROUPS_BASE =
-  import.meta.env.VITE_API_GROUPS_BASE || "http://localhost:3002/api";
+// ✅ base ها
+const PROFILE_BASE = import.meta.env.VITE_API_PROFILE_BASE || "http://localhost:3001/api";
+const GROUPS_BASE = import.meta.env.VITE_API_GROUPS_BASE || "http://localhost:3002/api";
 
 export const profileClient = createApiClient(PROFILE_BASE).apiClient;
 export const groupsClient = createApiClient(GROUPS_BASE).apiClient;
