@@ -1,4 +1,5 @@
-import { apiClient } from "@/api/client";
+import { profileClient as apiClient } from "./client";
+// ... همون کدهای profileApi
 
 export type Profile = {
   uid: number;
@@ -24,6 +25,15 @@ export type ProfileMeResponse = {
   preferences: Preferences;
 };
 
+export type UpdateProfilePayload = {
+  display_name?: string;
+  avatar_media_id?: string | null;
+  weekly_goal?: number | null;
+  timezone?: string;
+};
+
 export const profileApi = {
   me: () => apiClient.get<ProfileMeResponse>("/profile/me"),
+  updateMe: (payload: UpdateProfilePayload) =>
+    apiClient.patch<void>("/profile/me", payload),
 };

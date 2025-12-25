@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { useProfileMe } from "@/hooks/useProfileMe";
+import { useUpdateProfileMe } from "@/hooks/useUpdateProfileMe";
 import { ApiError } from "@/api/client";
 
 import Sidebar from "@/components/Dashboard/SidebarIcon";
@@ -15,7 +16,7 @@ import { ChallengeCard } from "@/components/Dashboard/ChallengeCard";
 import LookAtBuddy from "@/components/LookAtBuddy";
 
 function isoDate(d: Date) {
-  return d.toISOString().slice(0, 10); // YYYY-MM-DD
+  return d.toISOString().slice(0, 10);
 }
 
 function lastNDays(n: number) {
@@ -39,9 +40,15 @@ export default function Dashboard() {
 
   const { data, isLoading, error } = useProfileMe();
 
+  // ✅ mutation برای PATCH /profile/me
+  const {
+    mutate: updateProfile,
+    isPending: isUpdatingProfile,
+    error: updateError,
+  } = useUpdateProfileMe();
+
   const [score, setScore] = useState<number>(0);
 
-  // weekly: همیشه 7 روز اخیر (فعلاً mock مثل قبل)
   const [weekly, setWeekly] = useState<WeeklyPoint[]>(() => {
     const days = lastNDays(7);
     return days.map((date, idx) => ({
@@ -63,53 +70,41 @@ export default function Dashboard() {
     setScore(data.profile.xp);
   }, [data]);
 
-
   useEffect(() => {
     const focusSeconds = (location.state as any)?.focusSeconds as number | undefined;
     if (!focusSeconds || focusSeconds <= 0) return;
-  
+
     const hoursAdded = focusSeconds / 3600;
     const minutes = Math.max(1, Math.round(focusSeconds / 60));
-  
-    // هر 5 دقیقه کامل = 1 امتیاز | زیر 5 دقیقه = 0
     const pointsAdded = Math.floor(focusSeconds / 300);
-  
-    // ✅ فقط اگر امتیاز داریم به score اضافه کن و toast امتیاز نشون بده
+
     if (pointsAdded > 0) {
       setScore((s) => s + pointsAdded);
-  
       setToast({ points: pointsAdded, minutes, hours: hoursAdded });
     } else {
-      // اگر دوست داری زیر 5 دقیقه هم یه پیام نشون بدی، اینو نگه دار
-      // یا کلاً حذفش کن تا هیچ toast نیاد.
       setToast({ points: 0, minutes, hours: hoursAdded });
     }
-  
-    // weekly رو همیشه برای 7 روز اخیر نگه می‌داریم و امروز رو آپدیت می‌کنیم
+
     const days = lastNDays(7);
     const today = days[days.length - 1];
-  
+
     setWeekly((prev) => {
       const map = new Map(prev.map((p) => [p.date, p.hours]));
-      const next = days.map((date) => ({
+      return days.map((date) => ({
         date,
         hours: (map.get(date) ?? 0) + (date === today ? hoursAdded : 0),
       }));
-      return next;
     });
-  
+
     navigate(location.pathname, { replace: true, state: null });
   }, [location.pathname, location.state, navigate]);
-  
 
-  // Auto-dismiss toast
   useEffect(() => {
     if (!toast) return;
     const t = window.setTimeout(() => setToast(null), 3500);
     return () => window.clearTimeout(t);
   }, [toast]);
 
-  // ====== UI states (loading / error / unauthenticated) ======
   if (isLoading) {
     return (
       <div className="min-h-screen bg-[#F7F8FA] flex items-center justify-center">
@@ -140,26 +135,46 @@ export default function Dashboard() {
   }
 
   const { profile } = data;
-  const username = profile.display_name; 
+  const username = profile.display_name;
   const streak = profile.streak;
-
 
   const handleLogout = async () => {
     navigate("/login");
   };
+
+  // ✅ نمونه PATCH: ذخیره timezone واقعی مرورگر + weekly_goal
+  const handleSaveProfile = () => {
+    const tz =
+      Intl.DateTimeFormat().resolvedOptions().timeZone ||
+      profile.timezone ||
+      "UTC";
+
+    updateProfile({
+      timezone: tz,
+      weekly_goal: profile.weekly_goal ?? 150,
+      // display_name: username,        // اگر خواستی آپدیت کنی
+      // avatar_media_id: null,         // اگر خواستی آپدیت کنی
+    });
+  };
+
+  const updateErrMsg =
+    updateError && (updateError as ApiError<any>)?.message
+      ? (updateError as ApiError<any>).message
+      : updateError
+        ? "Failed to update profile."
+        : null;
 
   return (
     <div className="min-h-screen bg-creamtext text-zinc-900">
       <div className="flex">
         <Sidebar activeKey="dashboard" onLogout={handleLogout} />
 
-        {/* چون Sidebar fixed است */}
         <div className="flex-1 min-w-0 md:ml-64">
           <Topbar
             username={username}
             profile={{
               username,
-              email: "", // اگر لازم داری باید از auth/me هم بگیری یا در profile اضافه کنی
+              email: "",
               fullName: username,
               role: "Student",
               avatarUrl: null,
@@ -167,12 +182,9 @@ export default function Dashboard() {
           />
 
           <div className="mx-auto max-w-6xl px-4 py-6">
-            {/* ROW 1 */}
             <div className="grid grid-cols-12 gap-6">
-              {/* Left hero */}
               <section className="col-span-12 lg:col-span-5">
                 <div className="relative overflow-hidden rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
-                  {/* accents */}
                   <div className="pointer-events-none absolute -top-12 -right-14 h-48 w-48 rounded-full bg-yellow-200/45 blur-3xl" />
                   <div className="pointer-events-none absolute -bottom-20 -left-16 h-56 w-56 rounded-full bg-yellow-100/60 blur-3xl" />
 
@@ -187,7 +199,6 @@ export default function Dashboard() {
                     </div>
                   </div>
 
-                  {/* stats */}
                   <div className="relative mt-6 grid grid-cols-2 gap-4">
                     <div className="rounded-2xl border border-zinc-200 bg-[#FFFBF2] p-4">
                       <p className="text-xs text-zinc-500">Streak</p>
@@ -210,7 +221,6 @@ export default function Dashboard() {
                     </div>
                   </div>
 
-                  {/* Study Buddy */}
                   <div className="relative mt-5">
                     <LookAtBuddy label="Study buddy" />
                   </div>
@@ -220,28 +230,34 @@ export default function Dashboard() {
                       Find people to study with and stay accountable.
                     </p>
 
-                    {/* چون email نداریم، این بخش را اختیاری گذاشتیم */}
                     <p className="mt-2 text-xs text-zinc-500 truncate">
                       Timezone: <span className="text-zinc-700">{profile.timezone}</span>
                     </p>
 
-                    <div className="mt-4 flex items-center justify-end">
+                    {/* ✅ نمایش خطای PATCH (اگر داشتیم) */}
+                    {updateErrMsg && (
+                      <p className="mt-2 text-xs text-rose-600">{updateErrMsg}</p>
+                    )}
+
+                    <div className="mt-4 flex items-center justify-end gap-2">
                       <button
+                        onClick={handleSaveProfile}
+                        disabled={isUpdatingProfile}
                         className="
                           rounded-xl border border-zinc-200 bg-white
                           px-3 py-1.5 text-xs font-medium text-zinc-700
                           hover:border-yellow-300 hover:text-zinc-900
                           transition-colors
+                          disabled:opacity-60 disabled:cursor-not-allowed
                         "
                       >
-                        Open
+                        {isUpdatingProfile ? "Saving..." : "Save timezone"}
                       </button>
                     </div>
                   </div>
                 </div>
               </section>
 
-              {/* Right chart */}
               <section className="col-span-12 lg:col-span-7">
                 <motion.div
                   initial={{ opacity: 0, y: 10, scale: 0.99 }}
@@ -272,7 +288,6 @@ export default function Dashboard() {
 
             {/* ROW 2 */}
             <div className="mt-6 grid grid-cols-12 gap-6">
-              {/* Subjects */}
               <section className="col-span-12 lg:col-span-6 rounded-3xl bg-white p-6 shadow-sm border border-zinc-200">
                 <div className="flex items-center justify-between">
                   <div>
@@ -280,26 +295,8 @@ export default function Dashboard() {
                     <p className="mt-0.5 text-xs text-zinc-500">Hover a subject to preview</p>
                   </div>
 
-                  <button
-                    className="
-                      group relative overflow-hidden
-                      rounded-xl border border-zinc-200
-                      bg-white px-3 py-1.5
-                      text-xs font-medium text-zinc-700
-                      shadow-sm
-                      transition-all duration-300
-                      hover:-translate-y-0.5 hover:shadow-md
-                      hover:border-yellow-300 hover:text-zinc-900
-                    "
-                  >
-                    <span
-                      className="
-                        pointer-events-none absolute inset-0
-                        translate-x-[-120%] group-hover:translate-x-[120%]
-                        transition-transform duration-700 ease-in-out
-                        bg-[linear-gradient(90deg,transparent,rgba(250,204,21,0.18),transparent)]
-                      "
-                    />
+                  <button className="group relative overflow-hidden rounded-xl border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md hover:border-yellow-300 hover:text-zinc-900">
+                    <span className="pointer-events-none absolute inset-0 translate-x-[-120%] group-hover:translate-x-[120%] transition-transform duration-700 ease-in-out bg-[linear-gradient(90deg,transparent,rgba(250,204,21,0.18),transparent)]" />
                     <span className="relative z-10 flex items-center gap-2">
                       Manage
                       <span className="h-1.5 w-1.5 rounded-full bg-zinc-300 group-hover:bg-yellow-500 transition-colors duration-300" />
@@ -315,7 +312,6 @@ export default function Dashboard() {
                 </div>
               </section>
 
-              {/* Challenges */}
               <section className="col-span-12 lg:col-span-6 rounded-3xl bg-white p-6 shadow-sm border border-zinc-200">
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-semibold text-zinc-900">Challenges</p>
@@ -353,12 +349,7 @@ export default function Dashboard() {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 16, scale: 0.96 }}
                 transition={{ duration: 0.25, ease: "easeOut" }}
-                className="
-                  fixed right-6 top-24 z-50
-                  w-[320px]
-                  rounded-3xl border border-zinc-200
-                  bg-white shadow-xl p-4
-                "
+                className="fixed right-6 top-24 z-50 w-[320px] rounded-3xl border border-zinc-200 bg-white shadow-xl p-4"
               >
                 <p className="text-sm font-semibold text-zinc-900">Focus session completed</p>
 
@@ -372,7 +363,6 @@ export default function Dashboard() {
                   ) : (
                     <span className="text-zinc-500">No XP (minimum 5 minutes)</span>
                   )}
-                                    
                   {" · "}
                   Today{" "}
                   <span className="font-semibold text-zinc-900">

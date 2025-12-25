@@ -175,32 +175,15 @@ export default function FocusPage() {
           </div>
 
           <div className="mt-10 text-center">
-            <AnimatePresence mode="popLayout">
-              <motion.div
-                key={`${mins}:${secs}`}
-                initial={{ opacity: 0, y: 10, filter: "blur(6px)" }}
-                animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-                exit={{ opacity: 0, y: -10, filter: "blur(6px)" }}
-                transition={{ duration: 0.18, ease: EASE_OUT }}
-                className="text-[72px] sm:text-[84px] font-semibold tracking-tight text-[#2B1A14]"
-              >
-                {mins}:{secs}
-              </motion.div>
-            </AnimatePresence>
-
             <motion.div
-              className={`mt-3 mx-auto h-[2px] w-28 rounded-full ${bg.underline}`}
-              animate={{ width: running ? 190 : 112 }}
-              transition={{ duration: 0.45, ease: EASE_OUT }}
-            />
-
-            <p className="mt-3 text-xs text-zinc-500">
-              Studied:{" "}
-              <span className="font-semibold text-zinc-700">
-                {Math.floor(studiedSeconds / 60)} min
-              </span>
-            </p>
+              className="text-[72px] sm:text-[84px] font-semibold tracking-tight text-[#2B1A14]"
+              animate={{ opacity: running ? 1 : 0.98 }}
+              transition={{ duration: 0.25, ease: EASE_OUT }}
+            >
+              {mins}:{secs}
+            </motion.div>
           </div>
+
 
           {/* Controls */}
           <div className="mt-10 flex items-center justify-between gap-4">
