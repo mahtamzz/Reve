@@ -48,14 +48,14 @@ async function createContainer() {
     const redisClient = new RedisClient({ host: process.env.REDIS_HOST });
     await redisClient.connect();
     console.log("Redis connected?", redisClient.getClient().isOpen);
-    
+
     const cacheService = new CacheService(redisClient.getClient());
 
     const emailService = new EmailService({
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS
     });
-    
+
     await emailService.transporter.verify();
     console.log("📧 Email service ready");
 
@@ -67,7 +67,7 @@ async function createContainer() {
 
     /* REPOSITORIES */
     const userRepository = new UserRepositoryPg({
-        pool: db,        
+        pool: db,
         cache: cacheService,
         withRetry
     });
@@ -132,7 +132,7 @@ async function createContainer() {
         hasher: { hash: (password) => bcrypt.hash(password, 10) }
     });
 
-    const refreshToken = new RefreshTokenUC(jwtService);
+    const refreshToken = new RefreshTokenUC(jwtService, userRepository);
     const googleAuth = new GoogleAuthUC(userRepository, jwtService);
 
     const adminLogin = new AdminLoginUC({

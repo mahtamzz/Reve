@@ -1,19 +1,22 @@
 require("dotenv").config();
-const app = require("./app");
-const initContainer = require("./container"); 
+const createApp = require("./app");   // 👈 rename for clarity
+const initContainer = require("./container");
 const createAuthRoutes = require("./interfaces/http/routes/auth.routes");
 
 const PORT = process.env.PORT || 3000;
 
 async function start() {
     try {
-        // 1. Initialize DI container (Redis, DB, EventBus, etc.)
+        // 1️⃣ Initialize container (DB, Redis, RabbitMQ, etc.)
         const container = await initContainer();
 
-        // 2. Register routes AFTER container is ready
+        // 2️⃣ Create express app
+        const app = createApp();   // ✅ THIS WAS MISSING
+
+        // 3️⃣ Register routes
         app.use("/api/auth", createAuthRoutes(container));
 
-        // 3. Start HTTP server
+        // 4️⃣ Start server
         app.listen(PORT, () => {
             console.log(`IAM running on port ${PORT}`);
         });

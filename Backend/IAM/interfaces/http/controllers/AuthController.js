@@ -86,6 +86,9 @@ class AuthController {
             console.log("🔑 [DEV] User access token:");
             console.log(accessToken);
 
+            console.log("🔑 [DEV] User refresh token:");
+            console.log(refreshToken);
+
             res.json({ user: safeUser });
         } catch (err) {
             res.status(401).json({ message: err.message });
