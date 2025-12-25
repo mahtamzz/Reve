@@ -37,3 +37,48 @@ export type ApiGroupDetailsResponse = {
   group: ApiGroup;
   members: ApiGroupMember[];
 };
+
+
+// ---------- Study Types ----------
+export type StudySubject = {
+  id: string;
+  name: string;
+  color: string | null;
+
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type StudySession = {
+  id: string;
+  subject_id?: string;
+  subjectId?: string; 
+  duration_mins?: number;
+  durationMins?: number;
+  started_at?: string | null;
+  startedAt?: string | null;
+
+  [k: string]: any;
+};
+
+export type StudyDashboard = {
+  subjects?: StudySubject[];
+  totals?: {
+    totalMins?: number;
+    totalXp?: number;
+    sessionsCount?: number;
+    [k: string]: any;
+  };
+  stats?: {
+    weeklyGoalMins?: number;
+    streakDays?: number;
+    [k: string]: any;
+  };
+
+  [k: string]: any;
+};
+
+export type WeeklyGoalUpdateResponse = {
+  weeklyGoalMins?: number;
+  [k: string]: any;
+};

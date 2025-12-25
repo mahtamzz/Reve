@@ -1,20 +1,25 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useLocation, useNavigate } from "react-router-dom";
 
+import { ApiError } from "@/api/client";
+
 import { useProfileMe } from "@/hooks/useProfileMe";
 import { useUpdateProfileMe } from "@/hooks/useUpdateProfileMe";
-import { ApiError } from "@/api/client";
+
+import { useSubjects, useStudyDashboard, useSessions } from "@/hooks/useStudy";
 
 import Sidebar from "@/components/Dashboard/SidebarIcon";
 import Topbar from "@/components/Dashboard/DashboardHeader";
 
 import { WeeklyStudyChart } from "@/components/Dashboard/LineChart";
 import type { WeeklyPoint } from "@/components/Dashboard/LineChart";
+
 import { SubjectCard } from "@/components/Dashboard/SubjectCard";
 import { ChallengeCard } from "@/components/Dashboard/ChallengeCard";
 import LookAtBuddy from "@/components/LookAtBuddy";
 
+// ----------------- utils -----------------
 function isoDate(d: Date) {
   return d.toISOString().slice(0, 10);
 }
@@ -34,60 +39,144 @@ function clamp(n: number, a: number, b: number) {
   return Math.max(a, Math.min(b, n));
 }
 
+function toNumber(v: any): number | null {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+function pickWeeklySeriesHours(dashboard: any): WeeklyPoint[] | null {
+  const raw =
+    dashboard?.weekly ??
+    dashboard?.weeklySeries ??
+    dashboard?.series ??
+    dashboard?.points ??
+    dashboard?.chart ??
+    null;
+
+  if (!Array.isArray(raw)) return null;
+
+  const out: WeeklyPoint[] = [];
+  for (const item of raw) {
+    const date = String(item?.date ?? item?.day ?? item?.d ?? "");
+    if (!date) continue;
+
+    const mins = toNumber(
+      item?.mins ?? item?.minutes ?? item?.durationMins ?? item?.duration_mins
+    );
+    const hours = toNumber(item?.hours);
+    const h = hours != null ? hours : mins != null ? mins / 60 : 0;
+
+    out.push({ date: date.slice(0, 10), hours: Math.max(0, h) });
+  }
+
+  return out.length ? out : null;
+}
+
+function normalizeToLast7Days(series: WeeklyPoint[] | null): WeeklyPoint[] {
+  const days = lastNDays(7);
+  const map = new Map<string, number>();
+  (series ?? []).forEach((p) => map.set(p.date, p.hours));
+  return days.map((date) => ({ date, hours: map.get(date) ?? 0 }));
+}
+
+function buildWeeklyFromSessions(sessions: any[] | undefined): WeeklyPoint[] {
+  const days = lastNDays(7);
+  const minsByDay = new Map(days.map((d) => [d, 0]));
+
+  for (const s of sessions ?? []) {
+    const startedAt = (s as any).startedAt ?? (s as any).started_at ?? null;
+    const mins = Number((s as any).durationMins ?? (s as any).duration_mins ?? 0);
+    if (!startedAt) continue;
+
+    const day = isoDate(new Date(startedAt));
+    if (!minsByDay.has(day)) continue;
+    minsByDay.set(day, (minsByDay.get(day) ?? 0) + (Number.isFinite(mins) ? mins : 0));
+  }
+
+  return days.map((date) => ({
+    date,
+    hours: (minsByDay.get(date) ?? 0) / 60,
+  }));
+}
+
+// ----------------- page -----------------
 export default function Dashboard() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const { data, isLoading, error } = useProfileMe();
+  // ✅ Hooks: always at top
+  const { data: me, isLoading: meLoading, error: meError } = useProfileMe();
+  const { mutate: updateProfile, isPending: isUpdatingProfile, error: updateProfileError } =
+    useUpdateProfileMe();
 
-  // ✅ mutation برای PATCH /profile/me
-  const {
-    mutate: updateProfile,
-    isPending: isUpdatingProfile,
-    error: updateError,
-  } = useUpdateProfileMe();
+  const { data: dashboard, isLoading: dashLoading, error: dashError } = useStudyDashboard();
+  const { data: subjects, isLoading: subjectsLoading, error: subjectsError } = useSubjects();
 
-  const [score, setScore] = useState<number>(0);
+  // sessions last 7 days
+  const fromISO = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 6);
+    d.setHours(0, 0, 0, 0);
+    return d.toISOString();
+  }, []);
 
-  const [weekly, setWeekly] = useState<WeeklyPoint[]>(() => {
-    const days = lastNDays(7);
-    return days.map((date, idx) => ({
-      date,
-      hours: [2, 4, 3, 6, 5, 9, 4][idx] ?? 0,
-    }));
+  const toISO = useMemo(() => {
+    const d = new Date();
+    d.setHours(23, 59, 59, 999);
+    return d.toISOString();
+  }, []);
+
+  const { data: sessions, isLoading: sessionsLoading, error: sessionsError } = useSessions({
+    from: fromISO,
+    to: toISO,
+    limit: 500,
+    offset: 0,
   });
 
-  const totalHours = useMemo(() => weekly.reduce((s, x) => s + x.hours, 0), [weekly]);
+  // local UI
+  const [score, setScore] = useState(0);
+  const [weekly, setWeekly] = useState<WeeklyPoint[]>(() => normalizeToLast7Days(null));
+  const [toast, setToast] = useState<{ points: number; minutes: number; hours: number } | null>(
+    null
+  );
 
-  const [toast, setToast] = useState<{
-    points: number;
-    minutes: number;
-    hours: number;
-  } | null>(null);
-
+  // hydrate score from profile
   useEffect(() => {
-    if (!data) return;
-    setScore(data.profile.xp);
-  }, [data]);
+    if (!me) return;
+    setScore(me.profile.xp);
+  }, [me]);
 
+  // weekly series from dashboard (fallback sessions)
   useEffect(() => {
-    const focusSeconds = (location.state as any)?.focusSeconds as number | undefined;
+    const seriesFromDash = pickWeeklySeriesHours(dashboard);
+    if (seriesFromDash?.length) {
+      setWeekly(normalizeToLast7Days(seriesFromDash));
+    } else {
+      setWeekly(buildWeeklyFromSessions(sessions));
+    }
+  }, [dashboard, sessions]);
+
+  // toast after focus (UI only)
+  const consumedFocusRef = useRef("");
+  useEffect(() => {
+    const st = location.state as any;
+    const focusSeconds: number | undefined = st?.focusSeconds;
     if (!focusSeconds || focusSeconds <= 0) return;
+
+    const key = String(focusSeconds);
+    if (consumedFocusRef.current === key) return;
+    consumedFocusRef.current = key;
 
     const hoursAdded = focusSeconds / 3600;
     const minutes = Math.max(1, Math.round(focusSeconds / 60));
     const pointsAdded = Math.floor(focusSeconds / 300);
 
-    if (pointsAdded > 0) {
-      setScore((s) => s + pointsAdded);
-      setToast({ points: pointsAdded, minutes, hours: hoursAdded });
-    } else {
-      setToast({ points: 0, minutes, hours: hoursAdded });
-    }
+    setToast({ points: Math.max(0, pointsAdded), minutes, hours: hoursAdded });
+    if (pointsAdded > 0) setScore((s) => s + pointsAdded);
 
+    // optimistic weekly add today
     const days = lastNDays(7);
     const today = days[days.length - 1];
-
     setWeekly((prev) => {
       const map = new Map(prev.map((p) => [p.date, p.hours]));
       return days.map((date) => ({
@@ -105,7 +194,12 @@ export default function Dashboard() {
     return () => window.clearTimeout(t);
   }, [toast]);
 
-  if (isLoading) {
+  // ✅ derived values (still hooks, so must be before returns)
+  const totalHours = useMemo(() => weekly.reduce((s, x) => s + x.hours, 0), [weekly]);
+
+  // ----------------- returns after ALL hooks -----------------
+  const anyLoading = meLoading || dashLoading;
+  if (anyLoading) {
     return (
       <div className="min-h-screen bg-[#F7F8FA] flex items-center justify-center">
         <p className="text-zinc-600">Loading dashboard…</p>
@@ -113,61 +207,46 @@ export default function Dashboard() {
     );
   }
 
-  if (error) {
-    const err = error as ApiError<any>;
-    const isAuthError = err.status === 401;
-
+  const anyError = meError || dashError;
+  if (anyError) {
+    const err = anyError as ApiError<any>;
     return (
       <div className="min-h-screen bg-[#F7F8FA] flex items-center justify-center">
         <p className="text-zinc-600">
-          {isAuthError ? "Session expired. Please login again." : "Failed to load dashboard."}
+          {err?.status === 401 ? "Session expired. Please login again." : "Failed to load dashboard."}
         </p>
       </div>
     );
   }
 
-  if (!data) {
+  if (!me) {
     return (
       <div className="min-h-screen bg-[#F7F8FA] flex items-center justify-center">
-        <p className="text-zinc-600">No data.</p>
+        <p className="text-zinc-600">No profile data.</p>
       </div>
     );
   }
 
-  const { profile } = data;
+  const { profile } = me;
   const username = profile.display_name;
   const streak = profile.streak;
 
-  const handleLogout = async () => {
-    navigate("/login");
+  const handleSaveTimezone = () => {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || profile.timezone || "UTC";
+    updateProfile({ timezone: tz });
   };
 
-  // ✅ نمونه PATCH: ذخیره timezone واقعی مرورگر + weekly_goal
-  const handleSaveProfile = () => {
-    const tz =
-      Intl.DateTimeFormat().resolvedOptions().timeZone ||
-      profile.timezone ||
-      "UTC";
-
-    updateProfile({
-      timezone: tz,
-      weekly_goal: profile.weekly_goal ?? 150,
-      // display_name: username,        // اگر خواستی آپدیت کنی
-      // avatar_media_id: null,         // اگر خواستی آپدیت کنی
-    });
-  };
-
-  const updateErrMsg =
-    updateError && (updateError as ApiError<any>)?.message
-      ? (updateError as ApiError<any>).message
-      : updateError
+  const updateProfileErrMsg =
+    updateProfileError && (updateProfileError as ApiError<any>)?.message
+      ? (updateProfileError as ApiError<any>).message
+      : updateProfileError
         ? "Failed to update profile."
         : null;
 
   return (
     <div className="min-h-screen bg-creamtext text-zinc-900">
       <div className="flex">
-        <Sidebar activeKey="dashboard" onLogout={handleLogout} />
+        <Sidebar activeKey="dashboard" onLogout={() => navigate("/login")} />
 
         <div className="flex-1 min-w-0 md:ml-64">
           <Topbar
@@ -183,81 +262,74 @@ export default function Dashboard() {
 
           <div className="mx-auto max-w-6xl px-4 py-6">
             <div className="grid grid-cols-12 gap-6">
+              {/* LEFT */}
               <section className="col-span-12 lg:col-span-5">
                 <div className="relative overflow-hidden rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
                   <div className="pointer-events-none absolute -top-12 -right-14 h-48 w-48 rounded-full bg-yellow-200/45 blur-3xl" />
                   <div className="pointer-events-none absolute -bottom-20 -left-16 h-56 w-56 rounded-full bg-yellow-100/60 blur-3xl" />
 
-                  <div className="relative flex items-start justify-between gap-4">
-                    <div className="min-w-0">
-                      <p className="text-xl sm:text-2xl font-semibold tracking-tight text-zinc-900">
-                        Welcome back, <span className="text-zinc-800">{username}</span>
-                      </p>
-                      <p className="mt-1 text-sm text-zinc-600">
-                        Keep your routine steady and improve your focus.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="relative mt-6 grid grid-cols-2 gap-4">
-                    <div className="rounded-2xl border border-zinc-200 bg-[#FFFBF2] p-4">
-                      <p className="text-xs text-zinc-500">Streak</p>
-                      <p className="mt-1 text-3xl font-semibold text-amber-700">{streak}</p>
-                      <p className="mt-1 text-[11px] text-zinc-500">days</p>
-                    </div>
-
-                    <div className="rounded-2xl border border-zinc-200 bg-[#FFFBF2] p-4">
-                      <p className="text-xs text-zinc-500">XP</p>
-                      <motion.p
-                        key={score}
-                        initial={{ y: 6, opacity: 0 }}
-                        animate={{ y: 0, opacity: 1 }}
-                        transition={{ duration: 0.2, ease: "easeOut" }}
-                        className="mt-1 text-3xl font-semibold text-emerald-600"
-                      >
-                        {score}
-                      </motion.p>
-                      <p className="mt-1 text-[11px] text-zinc-500">total points</p>
-                    </div>
-                  </div>
-
-                  <div className="relative mt-5">
-                    <LookAtBuddy label="Study buddy" />
-                  </div>
-
-                  <div className="relative mt-5 rounded-2xl border border-zinc-200 bg-gradient-to-br from-yellow-50 to-white p-4">
-                    <p className="mt-1 text-xs text-zinc-600">
-                      Find people to study with and stay accountable.
+                  <div className="relative">
+                    <p className="text-xl sm:text-2xl font-semibold tracking-tight text-zinc-900">
+                      Welcome back, <span className="text-zinc-800">{username}</span>
                     </p>
+                    <p className="mt-1 text-sm text-zinc-600">Keep your routine steady and improve your focus.</p>
 
-                    <p className="mt-2 text-xs text-zinc-500 truncate">
-                      Timezone: <span className="text-zinc-700">{profile.timezone}</span>
-                    </p>
+                    <div className="mt-6 grid grid-cols-2 gap-4">
+                      <div className="rounded-2xl border border-zinc-200 bg-[#FFFBF2] p-4">
+                        <p className="text-xs text-zinc-500">Streak</p>
+                        <p className="mt-1 text-3xl font-semibold text-amber-700">{streak}</p>
+                        <p className="mt-1 text-[11px] text-zinc-500">days</p>
+                      </div>
 
-                    {/* ✅ نمایش خطای PATCH (اگر داشتیم) */}
-                    {updateErrMsg && (
-                      <p className="mt-2 text-xs text-rose-600">{updateErrMsg}</p>
-                    )}
+                      <div className="rounded-2xl border border-zinc-200 bg-[#FFFBF2] p-4">
+                        <p className="text-xs text-zinc-500">XP</p>
+                        <motion.p
+                          key={score}
+                          initial={{ y: 6, opacity: 0 }}
+                          animate={{ y: 0, opacity: 1 }}
+                          transition={{ duration: 0.2, ease: "easeOut" }}
+                          className="mt-1 text-3xl font-semibold text-emerald-600"
+                        >
+                          {score}
+                        </motion.p>
+                        <p className="mt-1 text-[11px] text-zinc-500">total points</p>
+                      </div>
+                    </div>
 
-                    <div className="mt-4 flex items-center justify-end gap-2">
-                      <button
-                        onClick={handleSaveProfile}
-                        disabled={isUpdatingProfile}
-                        className="
-                          rounded-xl border border-zinc-200 bg-white
-                          px-3 py-1.5 text-xs font-medium text-zinc-700
-                          hover:border-yellow-300 hover:text-zinc-900
-                          transition-colors
-                          disabled:opacity-60 disabled:cursor-not-allowed
-                        "
-                      >
-                        {isUpdatingProfile ? "Saving..." : "Save timezone"}
-                      </button>
+                    <div className="mt-5">
+                      <LookAtBuddy label="Study buddy" />
+                    </div>
+
+                    <div className="mt-5 rounded-2xl border border-zinc-200 bg-gradient-to-br from-yellow-50 to-white p-4">
+                      <p className="text-xs text-zinc-500 truncate">
+                        Timezone: <span className="text-zinc-700">{profile.timezone}</span>
+                      </p>
+
+                      {updateProfileErrMsg ? (
+                        <p className="mt-2 text-xs text-rose-600">{updateProfileErrMsg}</p>
+                      ) : null}
+
+                      <div className="mt-3 flex justify-end">
+                        <button
+                          onClick={handleSaveTimezone}
+                          disabled={isUpdatingProfile}
+                          className="
+                            rounded-xl border border-zinc-200 bg-white
+                            px-3 py-1.5 text-xs font-medium text-zinc-700
+                            hover:border-yellow-300 hover:text-zinc-900
+                            transition-colors
+                            disabled:opacity-60 disabled:cursor-not-allowed
+                          "
+                        >
+                          {isUpdatingProfile ? "Saving..." : "Save timezone"}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
               </section>
 
+              {/* RIGHT */}
               <section className="col-span-12 lg:col-span-7">
                 <motion.div
                   initial={{ opacity: 0, y: 10, scale: 0.99 }}
@@ -288,14 +360,18 @@ export default function Dashboard() {
 
             {/* ROW 2 */}
             <div className="mt-6 grid grid-cols-12 gap-6">
+              {/* Subjects */}
               <section className="col-span-12 lg:col-span-6 rounded-3xl bg-white p-6 shadow-sm border border-zinc-200">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-semibold text-zinc-900">Subjects</p>
-                    <p className="mt-0.5 text-xs text-zinc-500">Hover a subject to preview</p>
+                    <p className="mt-0.5 text-xs text-zinc-500">Pick one and start focusing</p>
                   </div>
 
-                  <button className="group relative overflow-hidden rounded-xl border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md hover:border-yellow-300 hover:text-zinc-900">
+                  <button
+                    onClick={() => navigate("/study/subjects")}
+                    className="group relative overflow-hidden rounded-xl border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md hover:border-yellow-300 hover:text-zinc-900"
+                  >
                     <span className="pointer-events-none absolute inset-0 translate-x-[-120%] group-hover:translate-x-[120%] transition-transform duration-700 ease-in-out bg-[linear-gradient(90deg,transparent,rgba(250,204,21,0.18),transparent)]" />
                     <span className="relative z-10 flex items-center gap-2">
                       Manage
@@ -304,14 +380,26 @@ export default function Dashboard() {
                   </button>
                 </div>
 
-                <div className="mt-4 grid grid-cols-2 gap-3">
-                  <SubjectCard title="Math" nextText="Next: 25 min" />
-                  <SubjectCard title="Physics" nextText="Next: 25 min" />
-                  <SubjectCard title="English" nextText="Next: 25 min" />
-                  <SubjectCard title="Biology" nextText="Next: 25 min" />
-                </div>
+                {subjectsLoading || sessionsLoading ? (
+                  <div className="mt-4 text-sm text-zinc-600">Loading subjects…</div>
+                ) : subjectsError || sessionsError ? (
+                  <div className="mt-4 text-sm text-rose-600">Failed to load subjects.</div>
+                ) : (
+                  <div className="mt-4 grid grid-cols-2 gap-3">
+                    {(subjects ?? []).slice(0, 4).map((sub) => (
+                      <SubjectCard key={sub.id} subjectId={sub.id} title={sub.name} />
+                    ))}
+
+                    {(subjects ?? []).length === 0 ? (
+                      <div className="col-span-2 rounded-2xl border border-zinc-200 bg-[#FFFBF2] p-4 text-sm text-zinc-600">
+                        No subjects yet. Create one in “Manage”.
+                      </div>
+                    ) : null}
+                  </div>
+                )}
               </section>
 
+              {/* Challenges */}
               <section className="col-span-12 lg:col-span-6 rounded-3xl bg-white p-6 shadow-sm border border-zinc-200">
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-semibold text-zinc-900">Challenges</p>
@@ -363,8 +451,7 @@ export default function Dashboard() {
                   ) : (
                     <span className="text-zinc-500">No XP (minimum 5 minutes)</span>
                   )}
-                  {" · "}
-                  Today{" "}
+                  {" · "}Today{" "}
                   <span className="font-semibold text-zinc-900">
                     +{clamp(toast.hours, 0, 24).toFixed(2)}h
                   </span>

@@ -164,9 +164,12 @@ export function createApiClient(rawBase: string) {
   return { apiFetch, apiClient };
 }
 
-// ✅ base ها
 const PROFILE_BASE = import.meta.env.VITE_API_PROFILE_BASE || "http://localhost:3001/api";
 const GROUPS_BASE = import.meta.env.VITE_API_GROUPS_BASE || "http://localhost:3002/api";
 
+const STUDY_BASE   = import.meta.env.VITE_API_STUDY_BASE   || "http://localhost:3003/api";
+
+
 export const profileClient = createApiClient(PROFILE_BASE).apiClient;
 export const groupsClient = createApiClient(GROUPS_BASE).apiClient;
+export const studyClient   = createApiClient(STUDY_BASE).apiClient;

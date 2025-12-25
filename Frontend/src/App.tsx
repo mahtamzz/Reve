@@ -21,6 +21,7 @@ import Notifications from "./pages/Notifications";
 import ConnectionsPage from "./pages/ConnectionsPage";
 import ProfilePage from "./pages/ProfilePage";
 import ProgressPage from "./pages/ProgressPage";
+import ManageSubjects from "./pages/ManageSubjects";
 import { Route, Routes } from "react-router-dom";
 import React from "react";
 
@@ -52,6 +53,7 @@ function App() {
       <Route path="/connections" element={<ConnectionsPage />} />
       <Route path="/profile" element={<ProfilePage />} />
       <Route path="/progress" element={<ProgressPage />} />
+      <Route path="/study/subjects" element={<ManageSubjects />} />
     </Routes>
   );
 }
