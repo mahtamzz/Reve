@@ -55,30 +55,60 @@ export default function Groups() {
 
   const { ids, add: addId, remove: removeId } = useMyGroupIds();
 
+  // برای جلوگیری از remove چندباره یک id (در رندرهای متعدد)
+  const cleanedIdsRef = useRef<Set<string>>(new Set());
+
   // ✅ هر id -> getDetails (برمی‌گردونه {group, members})
   const groupQueries = useQueries({
     queries: ids.map((id) => ({
       queryKey: groupDetailsKey(id),
       queryFn: () => groupsApi.getDetails(id),
-      enabled: !!id,
+      enabled: Boolean(id),
       retry: false,
     })),
   });
 
-  useEffect(() => {
-    groupQueries.forEach((q, idx) => {
-      if (!q.isError) return;
-      const status = getHttpStatus(q.error);
-      const id = ids[idx];
-      if (!id) return;
+  // یک snapshot پایدار از errorها بسازیم تا useEffect بی‌دلیل روی هر رندر تریگر نشه
+  const errorPairs = useMemo(() => {
+    return groupQueries
+      .map((q, idx) => {
+        if (!q.isError) return null;
+        const id = ids[idx];
+        if (!id) return null;
+        const status = getHttpStatus(q.error);
+        return { id, status };
+      })
+      .filter(Boolean) as Array<{ id: string; status?: number }>;
+  }, [groupQueries, ids]);
 
+  useEffect(() => {
+    for (const { id, status } of errorPairs) {
       // گروه حذف شده یا دسترسی نداری → از localStorage پاکش کن
-      if (status === 404 || status === 403) removeId(id);
-    });
-  }, [groupQueries, ids, removeId]);
+      if (status === 404 || status === 403) {
+        // فقط یک‌بار برای هر id
+        if (!cleanedIdsRef.current.has(id)) {
+          cleanedIdsRef.current.add(id);
+          removeId(id);
+        }
+      }
+    }
+  }, [errorPairs, removeId]);
 
   const isLoading = groupQueries.some((q) => q.isLoading);
-  const hasError = groupQueries.some((q) => q.isError);
+
+  // خطاهای “واقعی” (نه 403/404هایی که داریم پاک می‌کنیم)
+  const realErrors = useMemo(() => {
+    return groupQueries
+      .map((q) => {
+        if (!q.isError) return null;
+        const status = getHttpStatus(q.error);
+        if (status === 403 || status === 404) return null;
+        return { status, error: q.error };
+      })
+      .filter(Boolean) as Array<{ status?: number; error: unknown }>;
+  }, [groupQueries]);
+
+  const hasRealError = realErrors.length > 0;
 
   const groups: ApiGroup[] = groupQueries
     .map((q) => q.data?.group)
@@ -164,9 +194,9 @@ export default function Groups() {
 
             {isLoading && <div className="mt-6 text-sm text-zinc-600">Loading groups…</div>}
 
-            {hasError && (
+            {hasRealError && (
               <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-                Some groups failed to load (maybe deleted or no access).
+                Some groups failed to load due to a server/network error.
               </div>
             )}
 
@@ -197,32 +227,12 @@ export default function Groups() {
                         }
                       >
                         <div className="relative">
-                          <GroupCard
-                            group={uiGroup as any}
-                            onClick={() =>
-                              navigate(`/groups/${g.id}`, { state: { groupName: g.name } })
-                            }
-                          />
-
-                          <button
-                            type="button"
-                            title="Delete group"
-                            disabled={isDeleting}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDelete(g.id);
-                            }}
-                            className="
-                              absolute right-3 top-3
-                              rounded-xl border border-zinc-200 bg-white/90
-                              p-2 text-zinc-600 shadow-sm
-                              hover:text-rose-600 hover:border-rose-200
-                              transition
-                              disabled:opacity-60 disabled:cursor-not-allowed
-                            "
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                        <GroupCard
+                          group={uiGroup as any}
+                          onClick={() => navigate(`/groups/${g.id}`, { state: { groupName: g.name } })}
+                          onDelete={() => handleDelete(g.id)}
+                          deleteDisabled={isDeleting}
+                        />
                         </div>
                       </motion.div>
                     );

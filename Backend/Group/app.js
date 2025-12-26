@@ -60,6 +60,18 @@ function createApp(container) {
         res.json({ status: "ok" });
     });
 
+    app.use((err, req, res, next) => {
+        const msg = String(err?.message || "Internal Server Error");
+      
+        if (msg === "Group not found") return res.status(404).json({ error: msg });
+        if (msg === "Access denied") return res.status(403).json({ error: msg });
+        if (msg === "Not a member") return res.status(403).json({ error: msg });
+      
+        console.error(err);
+        return res.status(500).json({ error: "Internal Server Error" });
+      });
+      
+
     return app;
 }
 

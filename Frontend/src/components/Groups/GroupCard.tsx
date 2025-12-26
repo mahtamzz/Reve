@@ -1,6 +1,6 @@
 import React from "react";
 import { motion } from "framer-motion";
-import { UsersRound } from "lucide-react";
+import { UsersRound, Trash2 } from "lucide-react";
 
 export type Group = {
   id: string;
@@ -12,17 +12,30 @@ export type Group = {
 export function GroupCard({
   group,
   onClick,
+  onDelete,
+  deleteDisabled,
 }: {
   group: Group;
   onClick?: (g: Group) => void;
+  onDelete?: (g: Group) => void;
+  deleteDisabled?: boolean;
 }) {
   const progress =
     group.goal > 0 ? Math.min(100, Math.round((group.score / group.goal) * 100)) : 0;
 
+  const handleOpen = () => onClick?.(group);
+
   return (
-    <motion.button
-      type="button"
-      onClick={() => onClick?.(group)}
+    <motion.div
+      role="button"
+      tabIndex={0}
+      onClick={handleOpen}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          handleOpen();
+        }
+      }}
       initial={{ opacity: 0, y: 10, scale: 0.99 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       whileHover={{ y: -3, scale: 1.01 }}
@@ -38,6 +51,8 @@ export function GroupCard({
         shadow-sm
         hover:shadow-md
         transition-shadow
+        outline-none
+        focus:ring-2 focus:ring-yellow-300/60
       "
     >
       {/* accents */}
@@ -57,17 +72,42 @@ export function GroupCard({
             </p>
           </div>
 
-          <span
-            className="
-              rounded-full
-              border border-yellow-200
-              bg-yellow-50
-              px-2.5 py-1
-              text-[11px] font-semibold text-yellow-700
-            "
-          >
-            {progress}%
-          </span>
+          {/* right side actions (no overlap) */}
+          <div className="flex items-center gap-2 shrink-0">
+            <span
+              className="
+                rounded-full
+                border border-yellow-200
+                bg-yellow-50
+                px-2.5 py-1
+                text-[11px] font-semibold text-yellow-700
+              "
+            >
+              {progress}%
+            </span>
+
+            {onDelete && (
+              <button
+                type="button"
+                disabled={deleteDisabled}
+                onClick={(e) => {
+                  e.stopPropagation(); // مهم: کلیک کارت اجرا نشه
+                  onDelete(group);
+                }}
+                className="
+                  rounded-xl border border-zinc-200 bg-white/90
+                  p-2 text-zinc-600 shadow-sm
+                  hover:text-rose-600 hover:border-rose-200
+                  transition
+                  disabled:opacity-60 disabled:cursor-not-allowed
+                "
+                aria-label="Delete group"
+                title="Delete group"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* stats */}
@@ -123,6 +163,6 @@ export function GroupCard({
           bg-[linear-gradient(90deg,transparent,rgba(250,204,21,0.14),transparent)]
         "
       />
-    </motion.button>
+    </motion.div>
   );
 }

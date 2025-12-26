@@ -1,20 +1,29 @@
 // src/pages/Settings.tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Mail, User2, Camera, Check, X, Lock, ShieldAlert } from "lucide-react";
+import { Mail, User2, Camera, Check, X, Lock, ShieldAlert, Trash2 } from "lucide-react";
 
 import Sidebar from "@/components/Dashboard/SidebarIcon";
 import Topbar from "@/components/Dashboard/DashboardHeader";
 import { fetchWithAuth } from "@/utils/fetchWithAuth";
-import { logout } from "@/utils/authToken";
+import { getAccessToken, logout } from "@/utils/authToken";
 
 const EASE_OUT: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
+/** ====== Profile service endpoints ====== **/
+const API_GATEWAY = "http://localhost:8080/api";
+const ME_URL = `${API_GATEWAY}/auth/me`;
+const PROFILE_PATCH_URL = `${API_GATEWAY}/profile`;
+const PASSWORD_URL = `${API_GATEWAY}/profile/password`;
+
+/** ====== Media service endpoints (Swagger) ====== **/
+const MEDIA_ORIGIN = "http://localhost:3004";
+const MEDIA_AVATAR_URL = `${MEDIA_ORIGIN}/api/media/avatar`; // GET/POST/DELETE
+
 type UserProfile = {
-  id: number;
+  id: number | string;
   username: string;
   email: string;
-  avatarUrl?: string | null;
   fullName?: string | null;
   bio?: string | null;
 };
@@ -239,16 +248,71 @@ function EditableRow({
   );
 }
 
+/** ====== Media helpers ====== **/
+async function mediaFetchAvatarBlob(): Promise<Blob | null> {
+  const token = getAccessToken();
+  if (!token) return null;
+
+  const res = await fetch(MEDIA_AVATAR_URL, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+    credentials: "include",
+  });
+
+  if (!res.ok) return null;
+  return await res.blob();
+}
+
+async function mediaUploadAvatar(file: File): Promise<void> {
+  const token = getAccessToken();
+  if (!token) throw new Error("UNAUTHENTICATED");
+
+  const fd = new FormData();
+  // ✅ طبق curl: -F 'file=@...'
+  fd.append("file", file);
+
+  const res = await fetch(MEDIA_AVATAR_URL, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    credentials: "include",
+    body: fd,
+  });
+
+  if (!res.ok) {
+    let msg = "Avatar upload failed.";
+    try {
+      const j = await res.json();
+      msg = j?.message ?? j?.error ?? msg;
+    } catch {}
+    throw new Error(msg);
+  }
+}
+
+async function mediaDeleteAvatar(): Promise<void> {
+  const token = getAccessToken();
+  if (!token) throw new Error("UNAUTHENTICATED");
+
+  const res = await fetch(MEDIA_AVATAR_URL, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    let msg = "Avatar delete failed.";
+    try {
+      const j = await res.json();
+      msg = j?.message ?? j?.error ?? msg;
+    } catch {}
+    throw new Error(msg);
+  }
+}
+
 export default function Settings() {
   const [loading, setLoading] = useState(true);
   const [me, setMe] = useState<UserProfile | null>(null);
 
   const [toast, setToast] = useState<{ kind: "success" | "error"; title: string; message?: string } | null>(null);
-
-  // Avatar upload
-  const fileRef = useRef<HTMLInputElement | null>(null);
-  const [avatarUploading, setAvatarUploading] = useState(false);
-
   const closeToast = () => setToast(null);
 
   useEffect(() => {
@@ -257,42 +321,111 @@ export default function Settings() {
     return () => window.clearTimeout(t);
   }, [toast]);
 
+  /** ====== Avatar state ====== **/
+  const fileRef = useRef<HTMLInputElement | null>(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarDeleting, setAvatarDeleting] = useState(false);
+  const [avatarSrc, setAvatarSrc] = useState<string | null>(null);
+
+  // ✅ StrictMode-safe blob management
+  const currentUrlRef = useRef<string | null>(null);
+  const pendingRevokeRef = useRef<string[]>([]);
+
+  const setAvatarObjectUrl = (nextUrl: string | null) => {
+    const prev = currentUrlRef.current;
+    currentUrlRef.current = nextUrl;
+    setAvatarSrc(nextUrl);
+
+    // قبلی رو نگه می‌داریم تا بعد از load تصویر revoke کنیم
+    if (prev && prev !== nextUrl) pendingRevokeRef.current.push(prev);
+  };
+
+  const revokePending = () => {
+    const list = pendingRevokeRef.current.splice(0, pendingRevokeRef.current.length);
+    list.forEach((u) => {
+      try {
+        URL.revokeObjectURL(u);
+      } catch {}
+    });
+  };
+
+  const loadMyAvatar = async () => {
+    const blob = await mediaFetchAvatarBlob();
+    if (!blob) {
+      setAvatarObjectUrl(null);
+      // وقتی null شد هم pending رو می‌تونیم پاک کنیم
+      revokePending();
+      return;
+    }
+    const url = URL.createObjectURL(blob);
+    setAvatarObjectUrl(url);
+    // revoke رو نمی‌زنیم تا وقتی img load بشه
+  };
+
+  // cleanup (StrictMode causes quick unmount/mount in dev)
   useEffect(() => {
+    return () => {
+      const cur = currentUrlRef.current;
+      const pend = [...pendingRevokeRef.current];
+
+      // ✅ به‌جای revoke فوری، با تاخیر انجام بده تا مرورگر وسط load گیر نکند
+      window.setTimeout(() => {
+        try {
+          if (cur) URL.revokeObjectURL(cur);
+        } catch {}
+        pend.forEach((u) => {
+          try {
+            URL.revokeObjectURL(u);
+          } catch {}
+        });
+      }, 5000);
+    };
+  }, []);
+
+  /** ====== Load me + avatar ====== **/
+  useEffect(() => {
+    let mounted = true;
+
     const run = async () => {
       try {
-        const res = await fetchWithAuth("http://localhost:8080/api/auth/me");
+        const res = await fetchWithAuth(ME_URL);
         if (!res.ok) {
           await logout();
           return;
         }
-        const data = await res.json();
-        const u = (data.user ?? data) as any;
 
-        // سعی می‌کنیم فیلدهای رایج رو هم‌نام کنیم
+        const data = await res.json().catch(() => null);
+        const u = (data?.user ?? data) as any;
+
         const normalized: UserProfile = {
           id: u.id,
           username: u.username ?? "",
           email: u.email ?? "",
-          avatarUrl: u.avatarUrl ?? u.avatar ?? null,
           fullName: u.fullName ?? u.name ?? null,
           bio: u.bio ?? null,
         };
 
+        if (!mounted) return;
         setMe(normalized);
+
+        await loadMyAvatar();
       } catch {
         await logout();
       } finally {
-        setLoading(false);
+        if (mounted) setLoading(false);
       }
     };
 
     run();
+    return () => {
+      mounted = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ====== API helpers ======
-  // نکته: endpointها رو مطابق بک‌اندت تنظیم کن
+  /** ====== Profile API ====== **/
   const patchProfile = async (payload: Partial<UserProfile>) => {
-    const res = await fetchWithAuth("http://localhost:8080/api/profile", {
+    const res = await fetchWithAuth(PROFILE_PATCH_URL, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -302,92 +435,81 @@ export default function Settings() {
       let msg = "Update failed.";
       try {
         const j = await res.json();
-        msg = j?.message ?? msg;
+        msg = j?.message ?? j?.error ?? msg;
       } catch {}
       throw new Error(msg);
     }
 
     const data = await res.json().catch(() => null);
-    // اگر بک‌اند کاربر جدید برگردوند، همونو ست کن
-    if (data?.user || data) {
-      const u = (data.user ?? data) as any;
-      setMe((prev) =>
-        prev
-          ? {
-              ...prev,
-              username: u.username ?? prev.username,
-              email: u.email ?? prev.email,
-              avatarUrl: u.avatarUrl ?? u.avatar ?? prev.avatarUrl,
-              fullName: u.fullName ?? u.name ?? prev.fullName,
-              bio: u.bio ?? prev.bio,
-            }
-          : prev
-      );
-    } else {
-      // در غیر اینصورت optimistic
-      setMe((prev) => (prev ? { ...prev, ...payload } : prev));
-    }
+    const u = (data?.user ?? data) as any;
+
+    setMe((prev) =>
+      prev
+        ? {
+            ...prev,
+            username: u?.username ?? prev.username,
+            email: u?.email ?? prev.email,
+            fullName: u?.fullName ?? u?.name ?? prev.fullName,
+            bio: u?.bio ?? prev.bio,
+          }
+        : prev
+    );
   };
 
   const saveField = (field: keyof UserProfile) => async (next: string) => {
     if (!me) return;
+    const prevValue = (me as any)[field];
+
     try {
       await patchProfile({ [field]: next } as any);
       setToast({ kind: "success", title: "Saved", message: `${field} updated successfully.` });
     } catch (e: any) {
       setToast({ kind: "error", title: "Couldn’t save", message: e?.message ?? "Try again." });
-      // rollback
-      setMe((prev) => (prev ? { ...prev, [field]: (me as any)[field] } : prev));
+      setMe((p) => (p ? { ...p, [field]: prevValue } : p));
     }
   };
 
+  /** ====== Avatar actions ====== **/
   const onPickAvatar = () => fileRef.current?.click();
 
   const onAvatarSelected = async (file: File | null) => {
     if (!file) return;
-    if (!me) return;
 
     // preview سریع
     const previewUrl = URL.createObjectURL(file);
-    const prevAvatar = me.avatarUrl ?? null;
-    setMe({ ...me, avatarUrl: previewUrl });
+    setAvatarObjectUrl(previewUrl);
 
     setAvatarUploading(true);
     try {
-      const fd = new FormData();
-      fd.append("avatar", file);
-
-      const res = await fetchWithAuth("http://localhost:8080/api/profile/avatar", {
-        method: "POST",
-        body: fd,
-      });
-
-      if (!res.ok) {
-        let msg = "Avatar upload failed.";
-        try {
-          const j = await res.json();
-          msg = j?.message ?? msg;
-        } catch {}
-        throw new Error(msg);
-      }
-
-      const data = await res.json().catch(() => null);
-      const url = data?.avatarUrl ?? data?.url ?? data?.user?.avatarUrl ?? null;
-
-      setMe((p) => (p ? { ...p, avatarUrl: url ?? p.avatarUrl } : p));
+      await mediaUploadAvatar(file);
+      await loadMyAvatar();
       setToast({ kind: "success", title: "Avatar updated" });
     } catch (e: any) {
-      setMe((p) => (p ? { ...p, avatarUrl: prevAvatar } : p));
+      await loadMyAvatar();
       setToast({ kind: "error", title: "Couldn’t update avatar", message: e?.message ?? "Try again." });
     } finally {
       setAvatarUploading(false);
     }
   };
 
-  // Password change modal
+  const onDeleteAvatar = async () => {
+    setAvatarDeleting(true);
+    try {
+      await mediaDeleteAvatar();
+      setAvatarObjectUrl(null);
+      setToast({ kind: "success", title: "Avatar deleted" });
+    } catch (e: any) {
+      setToast({ kind: "error", title: "Couldn’t delete avatar", message: e?.message ?? "Try again." });
+    } finally {
+      setAvatarDeleting(false);
+    }
+  };
+
+  /** ====== Password modal ====== **/
   const [pwOpen, setPwOpen] = useState(false);
   const [pwSaving, setPwSaving] = useState(false);
   const [pw, setPw] = useState({ current: "", next: "", confirm: "" });
+
   const pwError = useMemo(() => {
     if (!pwOpen) return "";
     if (!pw.current || !pw.next || !pw.confirm) return "";
@@ -398,21 +520,24 @@ export default function Settings() {
 
   const savePassword = async () => {
     if (pwError) return;
+
     setPwSaving(true);
     try {
-      const res = await fetchWithAuth("http://localhost:8080/api/profile/password", {
+      const res = await fetchWithAuth(PASSWORD_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ currentPassword: pw.current, newPassword: pw.next }),
       });
+
       if (!res.ok) {
         let msg = "Password update failed.";
         try {
           const j = await res.json();
-          msg = j?.message ?? msg;
+          msg = j?.message ?? j?.error ?? msg;
         } catch {}
         throw new Error(msg);
       }
+
       setPwOpen(false);
       setPw({ current: "", next: "", confirm: "" });
       setToast({ kind: "success", title: "Password updated" });
@@ -423,6 +548,7 @@ export default function Settings() {
     }
   };
 
+  /** ====== UI states ====== **/
   if (loading) {
     return (
       <div className="min-h-screen bg-creamtext text-zinc-900 flex items-center justify-center">
@@ -469,7 +595,6 @@ export default function Settings() {
                   Manage your profile details. Changes are saved instantly.
                 </p>
               </div>
-
             </motion.div>
 
             {/* Layout */}
@@ -490,12 +615,13 @@ export default function Settings() {
                       {/* Avatar */}
                       <div className="relative">
                         <div className="h-16 w-16 rounded-3xl border border-zinc-200 bg-gradient-to-br from-yellow-50 to-white shadow-sm overflow-hidden">
-                          {me.avatarUrl ? (
-                            // eslint-disable-next-line @next/next/no-img-element
+                          {avatarSrc ? (
                             <img
-                              src={me.avatarUrl}
+                              src={avatarSrc}
                               alt="avatar"
                               className="h-full w-full object-cover"
+                              // ✅ وقتی تصویر جدید لود شد، URL های قبلی revoke شوند
+                              onLoad={revokePending}
                             />
                           ) : (
                             <div className="h-full w-full flex items-center justify-center text-zinc-500">
@@ -507,10 +633,10 @@ export default function Settings() {
                         <button
                           type="button"
                           onClick={onPickAvatar}
-                          disabled={avatarUploading}
+                          disabled={avatarUploading || avatarDeleting}
                           className={cx(
                             "absolute -right-2 -bottom-2 rounded-2xl border px-2.5 py-2 shadow-sm transition-all",
-                            avatarUploading
+                            avatarUploading || avatarDeleting
                               ? "border-zinc-200 bg-zinc-50 text-zinc-400 cursor-not-allowed"
                               : "border-zinc-200 bg-white text-zinc-700 hover:-translate-y-0.5 hover:shadow-md hover:border-yellow-300 hover:text-zinc-900"
                           )}
@@ -534,6 +660,37 @@ export default function Settings() {
                         </p>
                         <p className="mt-0.5 text-sm text-zinc-600 truncate">{me.email}</p>
 
+                        <div className="mt-3 flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={onDeleteAvatar}
+                            disabled={!avatarSrc || avatarUploading || avatarDeleting}
+                            className={cx(
+                              "rounded-2xl border px-3 py-2 text-xs font-semibold shadow-sm transition-all inline-flex items-center gap-2",
+                              !avatarSrc || avatarUploading || avatarDeleting
+                                ? "border-zinc-200 bg-zinc-50 text-zinc-400 cursor-not-allowed"
+                                : "border-rose-200 bg-rose-50 text-rose-800 hover:-translate-y-0.5 hover:shadow-md"
+                            )}
+                            title="Delete avatar"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            {avatarDeleting ? "Deleting..." : "Delete avatar"}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={loadMyAvatar}
+                            disabled={avatarUploading || avatarDeleting}
+                            className={cx(
+                              "rounded-2xl border px-3 py-2 text-xs font-semibold shadow-sm transition-all",
+                              avatarUploading || avatarDeleting
+                                ? "border-zinc-200 bg-zinc-50 text-zinc-400 cursor-not-allowed"
+                                : "border-zinc-200 bg-white text-zinc-700 hover:border-yellow-300 hover:text-zinc-900"
+                            )}
+                          >
+                            Refresh
+                          </button>
+                        </div>
                       </div>
                     </div>
 
@@ -659,12 +816,7 @@ export default function Settings() {
           {/* Toast */}
           <AnimatePresence>
             {toast ? (
-              <Toast
-                kind={toast.kind}
-                title={toast.title}
-                message={toast.message}
-                onClose={closeToast}
-              />
+              <Toast kind={toast.kind} title={toast.title} message={toast.message} onClose={closeToast} />
             ) : null}
           </AnimatePresence>
 
@@ -703,9 +855,7 @@ export default function Settings() {
                       <div>
                         <p className="text-sm text-zinc-500">Security</p>
                         <p className="mt-1 text-xl font-semibold text-zinc-900">Change password</p>
-                        <p className="mt-1 text-xs text-zinc-500">
-                          Use a strong password (8+ chars).
-                        </p>
+                        <p className="mt-1 text-xs text-zinc-500">Use a strong password (8+ chars).</p>
                       </div>
 
                       <button

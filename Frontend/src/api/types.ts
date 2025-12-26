@@ -82,3 +82,24 @@ export type WeeklyGoalUpdateResponse = {
   weeklyGoalMins?: number;
   [k: string]: any;
 };
+
+// ---------- Media Types ----------
+export type ApiAvatarMeta = {
+  id?: string;
+  userId?: string;
+  uid?: string;
+
+  filename?: string;
+  mimeType?: string;
+  size?: number;
+
+  url?: string;
+  createdAt?: string;
+  updatedAt?: string;
+
+  mime_type?: string;
+  created_at?: string;
+  updated_at?: string;
+
+  [k: string]: any;
+};

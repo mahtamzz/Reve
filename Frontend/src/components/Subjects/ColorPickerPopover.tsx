@@ -14,10 +14,10 @@ function isHexColor(v: string) {
 type Props = {
   value: string; // #RRGGBB
   onChange: (hex: string) => void;
-  opacity?: number; // 0..100 (اختیاری)
+  opacity?: number;
   onOpacityChange?: (v: number) => void;
   label?: string;
-  align?: "left" | "right"; // برای اینکه پنل از چپ/راست بچسبه
+  align?: "left" | "right";
 };
 
 export function ColorPickerPopover({
@@ -55,14 +55,13 @@ export function ColorPickerPopover({
 
     const rect = btn.getBoundingClientRect();
     const gap = 8;
-    const width = 280; // همون عرض پنل
+    const width = 280; 
 
     let left =
       align === "right"
         ? rect.right - width
         : rect.left;
 
-    // جلوگیری از بیرون زدن از صفحه
     const minLeft = 8;
     const maxLeft = window.innerWidth - width - 8;
     left = clamp(left, minLeft, maxLeft);
@@ -76,7 +75,6 @@ export function ColorPickerPopover({
     setOpen((p) => {
       const next = !p;
       if (!p && next) {
-        // باز شدن
         requestAnimationFrame(computePosition);
       }
       return next;
@@ -107,12 +105,10 @@ export function ColorPickerPopover({
     };
   }, [open]);
 
-  // با اسکرول/ریسایز موقعیت آپدیت بشه
   useEffect(() => {
     if (!open) return;
 
     const onResize = () => computePosition();
-    // capture=true تا اگر داخل اسکرول‌کانتینر بود هم کار کنه
     const onScroll = () => computePosition();
 
     window.addEventListener("resize", onResize);

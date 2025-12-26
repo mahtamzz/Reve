@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { X, CheckCircle2, AlertTriangle, Palette } from "lucide-react";
+import { ColorPickerPopover } from "../Subjects/ColorPickerPopover";
+
 
 const EASE_OUT: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
@@ -182,42 +184,47 @@ export default function CreateSubjectModal({
                       <p className="mt-2 text-xs text-red-600">{errors.name}</p>
                     )}
 
-                    <div className="mt-4">
-                      <label className="block text-xs font-semibold text-zinc-700">
-                        Color (hex)
-                      </label>
+                  <div className="mt-4">
+                    <label className="block text-xs font-semibold text-zinc-700">Color</label>
 
-                      <div className="mt-2 flex items-center gap-2">
-                        <span
-                          className="h-10 w-10 rounded-2xl border border-zinc-200 shadow-sm"
-                          style={{ background: isHexColor(color) ? color : "#FFAA00" }}
-                          aria-hidden
+                    <div className="mt-2 flex items-center gap-2">
+                      {/* ✅ Color picker button */}
+                      <ColorPickerPopover
+                        value={isHexColor(color) ? color : "#FFAA00"}
+                        onChange={(hex) => {
+                          setColor(hex);      // ✅ picker → state
+                          setTouched(true);
+                        }}
+                        label="Subject color"
+                        align="left"
+                      />
+
+                      {/* ✅ Hex input */}
+                      <div className="flex-1 relative">
+                        <Palette className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
+                        <input
+                          value={color}
+                          onChange={(e) => setColor(e.target.value)}   // ✅ input → state
+                          onBlur={() => setTouched(true)}
+                          placeholder="#FFAA00"
+                          className="
+                            w-full rounded-2xl border border-zinc-200 bg-white
+                            pl-10 pr-4 py-3 text-sm text-zinc-800 shadow-sm outline-none
+                            focus:ring-2 focus:ring-yellow-300/60 focus:border-yellow-300
+                          "
                         />
-
-                        <div className="flex-1 relative">
-                          <Palette className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
-                          <input
-                            value={color}
-                            onChange={(e) => setColor(e.target.value)}
-                            onBlur={() => setTouched(true)}
-                            placeholder="#FFAA00"
-                            className="
-                              w-full rounded-2xl border border-zinc-200 bg-white
-                              pl-10 pr-4 py-3 text-sm text-zinc-800 shadow-sm outline-none
-                              focus:ring-2 focus:ring-yellow-300/60 focus:border-yellow-300
-                            "
-                          />
-                        </div>
                       </div>
-
-                      {touched && errors.color && (
-                        <p className="mt-2 text-xs text-red-600">{errors.color}</p>
-                      )}
-
-                      <p className="mt-2 text-[11px] text-zinc-500">
-                        Optional, used for UI accents.
-                      </p>
                     </div>
+
+                    {touched && errors.color && (
+                      <p className="mt-2 text-xs text-red-600">{errors.color}</p>
+                    )}
+
+                    <p className="mt-2 text-[11px] text-zinc-500">
+                      Optional, used for UI accents.
+                    </p>
+                  </div>
+
                   </div>
 
                   <div className="mt-5 flex items-center justify-end gap-2">
