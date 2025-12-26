@@ -78,10 +78,8 @@ function sumHours(weekly: WeeklyPoint[]) {
 }
 
 export default function Analytics() {
-  // ✅ نمودار 7 روز اخیر بر اساس روزهای لوکال
   const days = useMemo(() => lastNLocalDays(7), []);
 
-  // ✅ بازه‌ی API: از 00:00 شش روز قبل تا 00:00 فردا (کل امروز پوشش داده میشه)
   const fromIso = useMemo(() => addDays(startOfLocalDay(new Date()), -6).toISOString(), []);
   const toIso = useMemo(() => addDays(startOfLocalDay(new Date()), 1).toISOString(), []);
 
@@ -171,12 +169,11 @@ export default function Analytics() {
         <Sidebar activeKey="analytics" onLogout={logout} />
 
         <div className="flex-1 min-w-0 md:ml-64">
-          <Topbar username={username} />
 
-          <div className="mx-auto max-w-6xl px-4 py-6">
+          <div className="mx-auto max-w-6xl px-4 py-10">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-xl sm:text-2xl font-semibold tracking-tight text-zinc-900">
+                <p className="text-xl sm:text-2xl font-semibold tracking-tight text-zinc-900 ">
                   Analytics
                 </p>
                 <p className="mt-1 text-sm text-zinc-600">

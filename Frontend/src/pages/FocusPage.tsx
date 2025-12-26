@@ -79,7 +79,6 @@ export default function FocusPage() {
     try {
       const sentinel = (await navigator.wakeLock.request("screen")) as WakeLockSentinelLike;
 
-      // اگر قبلی وجود داشت آزادش کن
       if (wakeLockRef.current && !wakeLockRef.current.released) {
         try {
           await wakeLockRef.current.release();
@@ -88,14 +87,11 @@ export default function FocusPage() {
 
       wakeLockRef.current = sentinel;
 
-      // بعضی مرورگرها event released دارند
       const onReleased = () => {
-        // اگر تایمر هنوز running هست، وقتی released شد (مثلاً به دلیل سیستم)، دوباره می‌گیریم
-        // (re-acquire در visibilitychange هم انجام می‌شه)
+
       };
       sentinel.addEventListener?.("release", onReleased);
     } catch (e: any) {
-      // معمولاً: NotAllowedError / SecurityError
       setWakeLockError(e?.message ? String(e.message) : "Wake lock failed.");
     }
   };
@@ -115,28 +111,23 @@ export default function FocusPage() {
     }
   };
 
-  // اگر کاربر از تب خارج شد و برگشت، wake lock ممکنه drop بشه => دوباره بگیر
   useEffect(() => {
     const onVisibility = () => {
       if (document.visibilityState === "visible" && running) {
-        // تلاش دوباره برای گرفتن wake lock
         requestWakeLock();
       }
-      // وقتی hidden شد، بعضی مرورگرها خودکار release می‌کنند؛ اینجا لازم نیست کاری کنیم
     };
 
     document.addEventListener("visibilitychange", onVisibility);
     return () => document.removeEventListener("visibilitychange", onVisibility);
   }, [running]);
 
-  // وقتی running خاموش شد یا unmount شد => release
   useEffect(() => {
     if (!running) {
       releaseWakeLock();
       return;
     }
 
-    // وقتی running روشن شد هم تلاش کن (به‌جز درخواست داخل toggle که با gesture است)
     requestWakeLock();
 
     return () => {
@@ -145,7 +136,6 @@ export default function FocusPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [running]);
 
-  // دریافت subjectId از navigation state
   useEffect(() => {
     const incoming = (location.state as any)?.subjectId as string | undefined;
     if (!incoming) return;
@@ -157,7 +147,6 @@ export default function FocusPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state]);
 
-  // پیش‌فرض: اولین subject
   useEffect(() => {
     if (subjectId) return;
     if (!subjects?.length) return;
@@ -194,7 +183,6 @@ export default function FocusPage() {
   };
 
   const toggle = async () => {
-    // چون wake lock بهتره با gesture گرفته بشه، موقع Start همینجا می‌گیریم
     if (!running) {
       await requestWakeLock();
     } else {
@@ -235,7 +223,6 @@ export default function FocusPage() {
       state: { focusSeconds: studiedSeconds },
     });
 
-    // بعد از navigate هم reset
     setTime(0);
     startedAtRef.current = null;
     baseAtStartRef.current = 0;

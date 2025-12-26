@@ -8,9 +8,14 @@ import {
   Link as LinkIcon,
   Mail,
   Pencil,
+  X,
 } from "lucide-react";
 
-type Profile = {
+import { useProfileInfoMe } from "@/hooks/useProfileInfoMe";
+import { useProfileInfoDashboard } from "@/hooks/useProfileInfoDashboard";
+import { useUpdateProfileInfo } from "@/hooks/useUpdateProfileInfo";
+
+type UiProfile = {
   fullName: string;
   username: string;
   role?: string;
@@ -24,36 +29,127 @@ type Profile = {
   followers: number;
   following: number;
 
-  // optional stats for your app
   focusMinutes?: number;
   streakDays?: number;
+
+  weeklyGoal?: number | null;
+  timezone?: string;
 };
 
 const EASE_OUT: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
 export default function ProfilePage() {
-  // بعداً اینو از API/Context میاری
-  const p = useMemo<Profile>(
-    () => ({
-      fullName: "Mathew Anderson",
-      username: "mathew",
-      role: "Student",
-      avatarUrl: null,
-      coverUrl: null,
-      bio:
-        "I study consistently and I like calm focus sessions. Rain + piano is my favorite mix.",
-      email: "mathew@example.com",
-      location: "Tehran, IR",
-      website: "example.com",
-      followers: 3586,
-      following: 2659,
-      focusMinutes: 1240,
-      streakDays: 12,
-    }),
-    []
-  );
-
   const [tab, setTab] = useState<"profile" | "followers" | "following">("profile");
+  const [editOpen, setEditOpen] = useState(false);
+
+  const meQ = useProfileInfoMe();
+  const dashQ = useProfileInfoDashboard();
+  const updateM = useUpdateProfileInfo();
+
+  const serverProfile = meQ.data?.profile;
+  const prefs = meQ.data?.preferences ?? null;
+  const todayStudyMinutes = dashQ.data?.todayStudyMinutes ?? 0;
+
+  // فرم ادیت (snake_case برای ارسال به بک)
+  const [form, setForm] = useState<{
+    display_name: string;
+    timezone: string;
+    weekly_goal: string; // string برای input
+  }>({ display_name: "", timezone: "UTC", weekly_goal: "" });
+
+  // وقتی دیتا اومد، فرم رو sync کن
+  React.useEffect(() => {
+    if (!serverProfile) return;
+    setForm({
+      display_name: serverProfile.display_name ?? "",
+      timezone: serverProfile.timezone ?? "UTC",
+      weekly_goal:
+        serverProfile.weekly_goal == null ? "" : String(serverProfile.weekly_goal),
+    });
+  }, [serverProfile?.uid]); // فقط وقتی کاربر عوض شد
+
+  const p = useMemo<UiProfile>(() => {
+    // تلاش برای map کردن فیلدها اگر روی بک وجود داشته باشند
+    const displayName =
+      (serverProfile as any)?.display_name ??
+      (serverProfile as any)?.displayName ??
+      "";
+
+    const username =
+      (serverProfile as any)?.username ??
+      (serverProfile as any)?.handle ??
+      "user";
+
+    const avatarUrl =
+      (serverProfile as any)?.avatar_url ??
+      (serverProfile as any)?.avatarUrl ??
+      null;
+
+    const coverUrl =
+      (serverProfile as any)?.cover_url ??
+      (serverProfile as any)?.coverUrl ??
+      null;
+
+    const bio = (serverProfile as any)?.bio ?? undefined;
+    const email = (serverProfile as any)?.email ?? undefined;
+    const location = (serverProfile as any)?.location ?? undefined;
+    const website = (serverProfile as any)?.website ?? undefined;
+
+    // چون بک شما followers/following نداره، فعلاً 0
+    const followers = (serverProfile as any)?.followers ?? 0;
+    const following = (serverProfile as any)?.following ?? 0;
+
+    const streakDays =
+      (serverProfile as any)?.streak ??
+      (serverProfile as any)?.streak_current ??
+      0;
+
+    return {
+      fullName: displayName || "—",
+      username,
+      role: (serverProfile as any)?.role ?? "Student",
+      avatarUrl,
+      coverUrl,
+      bio,
+      email,
+      location,
+      website,
+      followers,
+      following,
+      focusMinutes: todayStudyMinutes,
+      streakDays,
+      weeklyGoal: (serverProfile as any)?.weekly_goal ?? null,
+      timezone: (serverProfile as any)?.timezone ?? "UTC",
+    };
+  }, [serverProfile, todayStudyMinutes]);
+
+  const isLoading = meQ.isLoading || dashQ.isLoading;
+  const isError = meQ.isError || dashQ.isError;
+
+  async function onSave() {
+    if (!serverProfile?.uid) return;
+
+    const payload: any = {
+      display_name: form.display_name.trim() || null,
+      timezone: form.timezone.trim() || "UTC",
+    };
+
+    // weekly_goal اگر عدد معتبر بود بفرست
+    const w = form.weekly_goal.trim();
+    if (w === "") {
+      payload.weekly_goal = null;
+    } else {
+      const n = Number(w);
+      if (!Number.isFinite(n) || n < 0) {
+        alert("Weekly goal باید عدد معتبر باشد");
+        return;
+      }
+      payload.weekly_goal = n;
+    }
+
+    await updateM.mutateAsync(payload);
+    setEditOpen(false);
+  }
 
   return (
     <div className="min-h-screen bg-[#F7F8FA]">
@@ -73,9 +169,7 @@ export default function ProfilePage() {
                 className="absolute inset-0 h-full w-full object-cover"
               />
             ) : (
-              <>
-                <div className="absolute inset-0 opacity-80 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.8),transparent_45%),radial-gradient(circle_at_70%_70%,rgba(0,0,0,0.06),transparent_55%)]" />
-              </>
+              <div className="absolute inset-0 opacity-80 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.8),transparent_45%),radial-gradient(circle_at_70%_70%,rgba(0,0,0,0.06),transparent_55%)]" />
             )}
           </div>
 
@@ -101,18 +195,25 @@ export default function ProfilePage() {
               <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
                 <div className="text-center sm:text-left">
                   <div className="text-lg sm:text-xl font-semibold text-zinc-900">
-                    {p.fullName}
+                    {isLoading ? "Loading…" : p.fullName}
                   </div>
                   <div className="mt-1 text-sm text-zinc-500">
                     @{p.username} · {p.role ?? "Student"}
                   </div>
+                  {serverProfile?.timezone ? (
+                    <div className="mt-1 text-xs text-zinc-500">
+                      Timezone: {serverProfile.timezone}
+                    </div>
+                  ) : null}
                 </div>
 
                 {/* Actions */}
                 <div className="flex items-center justify-center sm:justify-end gap-2">
                   <button
                     type="button"
-                    className="inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-800 hover:border-yellow-300 hover:bg-yellow-50 transition"
+                    onClick={() => setEditOpen(true)}
+                    disabled={isLoading || !serverProfile}
+                    className="inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-800 hover:border-yellow-300 hover:bg-yellow-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Pencil className="h-4 w-4" />
                     Edit Profile
@@ -120,12 +221,34 @@ export default function ProfilePage() {
                 </div>
               </div>
 
-              {/* Numbers row (بدون posts) */}
+              {isError ? (
+                <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  خطا در دریافت پروفایل. لطفاً دوباره تلاش کنید.
+                </div>
+              ) : null}
+
+              {/* Numbers row */}
               <div className="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <StatBox label="Followers" value={p.followers} icon={<UserCheck className="h-4 w-4" />} />
-                <StatBox label="Following" value={p.following} icon={<UserPlus className="h-4 w-4" />} />
-                <StatBox label="Focus (min)" value={p.focusMinutes ?? 0} icon={<span className="text-sm">⏱️</span>} />
-                <StatBox label="Streak (days)" value={p.streakDays ?? 0} icon={<span className="text-sm">🔥</span>} />
+                <StatBox
+                  label="Followers"
+                  value={p.followers}
+                  icon={<UserCheck className="h-4 w-4" />}
+                />
+                <StatBox
+                  label="Following"
+                  value={p.following}
+                  icon={<UserPlus className="h-4 w-4" />}
+                />
+                <StatBox
+                  label="Today focus (min)"
+                  value={p.focusMinutes ?? 0}
+                  icon={<span className="text-sm">⏱️</span>}
+                />
+                <StatBox
+                  label="Streak (days)"
+                  value={p.streakDays ?? 0}
+                  icon={<span className="text-sm">🔥</span>}
+                />
               </div>
 
               {/* Tabs */}
@@ -160,9 +283,21 @@ export default function ProfilePage() {
                       <InfoRow icon={<MapPin className="h-4 w-4" />} value={p.location ?? "—"} />
                       <InfoRow icon={<LinkIcon className="h-4 w-4" />} value={p.website ?? "—"} />
                     </div>
+
+                    {/* نمایش چند preference اگر وجود داشت */}
+                    {prefs ? (
+                      <div className="mt-4 text-xs text-zinc-500 space-y-1">
+                        {"showStreak" in prefs ? (
+                          <div>showStreak: {String((prefs as any).showStreak)}</div>
+                        ) : null}
+                        {"isProfilePublic" in prefs ? (
+                          <div>isProfilePublic: {String((prefs as any).isProfilePublic)}</div>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
 
-                  {/* Right area (no posts) */}
+                  {/* Right area */}
                   <div className="lg:col-span-2 space-y-5">
                     <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
                       <div className="flex items-center justify-between">
@@ -179,13 +314,22 @@ export default function ProfilePage() {
                       </div>
 
                       <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <MiniMetric title="Weekly goal" value="5 sessions" />
-                        <MiniMetric title="Preferred sounds" value="Rain · Piano" />
-                        <MiniMetric title="Best time" value="Night" />
-                        <MiniMetric title="Consistency" value="Good" />
+                        <MiniMetric
+                          title="Weekly goal (min)"
+                          value={
+                            serverProfile?.weekly_goal == null
+                              ? "—"
+                              : String(serverProfile.weekly_goal)
+                          }
+                        />
+                        <MiniMetric title="Today focus" value={`${todayStudyMinutes} min`} />
+                        <MiniMetric title="Timezone" value={serverProfile?.timezone ?? "—"} />
+                        <MiniMetric
+                          title="XP"
+                          value={serverProfile?.xp == null ? "—" : String(serverProfile.xp)}
+                        />
                       </div>
                     </div>
-
                   </div>
                 </div>
               ) : tab === "followers" ? (
@@ -197,11 +341,99 @@ export default function ProfilePage() {
           </div>
         </motion.div>
       </div>
+
+      {/* Edit modal */}
+      {editOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <button
+            className="absolute inset-0 bg-black/30"
+            onClick={() => setEditOpen(false)}
+            aria-label="close"
+          />
+          <div className="relative z-10 w-full max-w-lg rounded-2xl border border-zinc-200 bg-white p-5 shadow-xl">
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-semibold text-zinc-900">Edit profile</div>
+              <button
+                className="rounded-lg p-2 hover:bg-zinc-100"
+                onClick={() => setEditOpen(false)}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              <Field
+                label="Display name"
+                value={form.display_name}
+                onChange={(v) => setForm((s) => ({ ...s, display_name: v }))}
+              />
+              <Field
+                label="Timezone"
+                value={form.timezone}
+                onChange={(v) => setForm((s) => ({ ...s, timezone: v }))}
+                placeholder="UTC"
+              />
+              <Field
+                label="Weekly goal (min)"
+                value={form.weekly_goal}
+                onChange={(v) => setForm((s) => ({ ...s, weekly_goal: v }))}
+                placeholder="150"
+              />
+
+              {updateM.isError ? (
+                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  ذخیره انجام نشد. (PATCH /me)
+                </div>
+              ) : null}
+            </div>
+
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <button
+                className="rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-800 hover:bg-zinc-50"
+                onClick={() => setEditOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="rounded-xl bg-zinc-900 px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={updateM.isPending}
+                onClick={onSave}
+              >
+                {updateM.isPending ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
 
 /* ---------- Small components ---------- */
+
+function Field({
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <label className="block">
+      <div className="text-xs font-semibold text-zinc-700">{label}</div>
+      <input
+        value={value}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+        className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-400"
+      />
+    </label>
+  );
+}
 
 function StatBox({
   label,
@@ -269,7 +501,6 @@ function MiniMetric({ title, value }: { title: string; value: string }) {
 }
 
 function ConnectionsList({ mode }: { mode: "followers" | "following" }) {
-  // این‌ها mock هستند؛ بعداً از API می‌گیری
   const data =
     mode === "followers"
       ? [

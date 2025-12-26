@@ -159,9 +159,8 @@ export default function Groups() {
       <div className="flex">
         <Sidebar activeKey="groups" onLogout={logout} />
         <div className="flex-1 min-w-0 md:ml-64">
-          <Topbar username={"User"} />
 
-          <div className="mx-auto max-w-6xl px-4 py-6">
+          <div className="mx-auto max-w-6xl px-4 py-10">
             <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
               <div>
                 <p className="text-sm text-zinc-500">My Groups</p>
