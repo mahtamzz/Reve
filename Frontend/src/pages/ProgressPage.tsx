@@ -10,57 +10,224 @@ import {
   CheckCircle2,
 } from "lucide-react";
 
+import { useQueryClient } from "@tanstack/react-query";
+import { ApiError } from "@/api/client";
+import { useStudyDashboard, useSessions } from "@/hooks/useStudy";
+import { useUpdateWeeklyGoal } from "@/hooks/useStudy";
+
 const EASE_OUT: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
-type WeekPoint = {
-  day: string; // Mon..Sun or localized
-  minutes: number;
-};
+type WeekPoint = { day: string; minutes: number };
 
 function cx(...classes: Array<string | false | undefined | null>) {
   return classes.filter(Boolean).join(" ");
 }
+function getHttpStatus(err: unknown): number | undefined {
+  return err instanceof ApiError ? err.status : (err as any)?.status;
+}
+
+// ---------- UTC helpers (must match backend day bucketing) ----------
+function utcDateKeyFromIso(iso: string) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+function startOfUTCDay(d: Date) {
+  const x = new Date(d);
+  x.setUTCHours(0, 0, 0, 0);
+  return x;
+}
+function addUTCDays(d: Date, delta: number) {
+  const x = new Date(d);
+  x.setUTCDate(x.getUTCDate() + delta);
+  return x;
+}
+function utcDateKey(d: Date) {
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+function startOfUTCWeekMonday(d: Date) {
+  const x = startOfUTCDay(d);
+  const dow = x.getUTCDay(); // 0=Sun..6=Sat
+  const diff = (dow + 6) % 7; // Monday => 0
+  return addUTCDays(x, -diff);
+}
+function endExclusiveOfUTCWeekMonday(d: Date) {
+  return addUTCDays(startOfUTCWeekMonday(d), 7);
+}
+function labelsMonSun() {
+  return ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+}
+
+function readDurationMins(s: any): number {
+  const v = s.durationMins ?? s.duration_mins ?? s.duration ?? 0;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+function readStartedAtIso(s: any): string | null {
+  return (
+    (s.startedAt ??
+      s.started_at ??
+      s.createdAt ??
+      s.created_at ??
+      s.loggedAt ??
+      s.logged_at ??
+      s.date ??
+      s.timestamp ??
+      null) as string | null
+  );
+}
 
 export default function ProgressPage() {
-  // ---- mock data (بعداً از API بیار)
-  const data = useMemo(() => {
-    const weekly: WeekPoint[] = [
-      { day: "Mon", minutes: 35 },
-      { day: "Tue", minutes: 50 },
-      { day: "Wed", minutes: 0 },
-      { day: "Thu", minutes: 45 },
-      { day: "Fri", minutes: 60 },
-      { day: "Sat", minutes: 25 },
-      { day: "Sun", minutes: 40 },
-    ];
-
-    const totalWeek = weekly.reduce((a, b) => a + b.minutes, 0);
-    const sessionsWeek = weekly.filter((x) => x.minutes > 0).length;
-
-    return {
-      streakDays: 12,
-      bestDay: "Fri",
-      focusThisWeekMinutes: totalWeek,
-      sessionsThisWeek: sessionsWeek,
-      goalWeeklyMinutes: 240,
-      weekly,
-      lifetimeMinutes: 3820,
-    };
-  }, []);
-
+  const qc = useQueryClient();
   const [range, setRange] = useState<"week" | "month">("week");
 
-  const goalPct = Math.min(
-    100,
-    Math.round((data.focusThisWeekMinutes / data.goalWeeklyMinutes) * 100)
+  // ✅ this week in UTC (Mon..Sun)
+  const weekStart = useMemo(() => startOfUTCWeekMonday(new Date()), []);
+  const weekEndEx = useMemo(() => endExclusiveOfUTCWeekMonday(new Date()), []);
+
+  // dashboard uses YYYY-MM-DD (UTC)
+  const dashFrom = useMemo(() => utcDateKey(weekStart), [weekStart]);
+  const dashTo = useMemo(() => utcDateKey(addUTCDays(weekEndEx, -1)), [weekEndEx]);
+
+  const { data: dashboard, isLoading: dashLoading, error: dashError } = useStudyDashboard({
+    from: dashFrom,
+    to: dashTo,
+  });
+
+  // ✅ Source of truth for minutes: sessions (avoid totals bugs/inclusive issues)
+  const sessionsParams = useMemo(
+    () => ({
+      from: weekStart.toISOString(), // 00:00:00Z Monday
+      to: weekEndEx.toISOString(),   // 00:00:00Z next Monday
+      limit: 5000,
+      offset: 0,
+    }),
+    [weekStart, weekEndEx]
   );
 
-  const max = Math.max(...data.weekly.map((d) => d.minutes), 1);
+  const { data: sessions, isLoading: sessionsLoading, error: sessionsError } =
+    useSessions(sessionsParams);
+
+  const { mutate: updateWeeklyGoal, isPending: goalUpdating } = useUpdateWeeklyGoal();
+
+  // ------- build weekly minutes from sessions using SAME UTC bucketing as backend -------
+  const weekly: WeekPoint[] = useMemo(() => {
+    const labels = labelsMonSun();
+
+    // init 7 day bins
+    const minsByDay = new Map<string, number>();
+    for (let i = 0; i < 7; i++) {
+      minsByDay.set(utcDateKey(addUTCDays(weekStart, i)), 0);
+    }
+
+    for (const s of sessions ?? []) {
+      const startedAt = readStartedAtIso(s);
+      if (!startedAt) continue;
+
+      const dayKey = utcDateKeyFromIso(startedAt);
+      if (!dayKey) continue;
+
+      if (!minsByDay.has(dayKey)) continue; // out of week window
+      minsByDay.set(dayKey, (minsByDay.get(dayKey) ?? 0) + readDurationMins(s));
+    }
+
+    return labels.map((label, i) => {
+      const key = utcDateKey(addUTCDays(weekStart, i));
+      return { day: label, minutes: minsByDay.get(key) ?? 0 };
+    });
+  }, [sessions, weekStart]);
+
+  const focusThisWeekMinutes = useMemo(
+    () => weekly.reduce((a, b) => a + b.minutes, 0),
+    [weekly]
+  );
+
+  const sessionsThisWeek = useMemo(() => {
+    let c = 0;
+    for (const s of sessions ?? []) {
+      if (readDurationMins(s) > 0) c++;
+    }
+    return c;
+  }, [sessions]);
+
+  const daysActive = useMemo(() => weekly.filter((x) => x.minutes > 0).length, [weekly]);
+
+  const bestDay = useMemo(() => {
+    const max = Math.max(...weekly.map((d) => d.minutes), 0);
+    if (max <= 0) return "—";
+    const idx = weekly.findIndex((d) => d.minutes === max);
+    return weekly[idx]?.day ?? "—";
+  }, [weekly]);
+
+  const stats = useMemo(() => (dashboard as any)?.stats ?? {}, [dashboard]);
+
+  const streakDays = useMemo(() => {
+    const n = Number(stats.streak_current ?? 0);
+    return Number.isFinite(n) ? n : 0;
+  }, [stats]);
+
+  const goalWeeklyMinutes = useMemo(() => {
+    const n = Number(stats.weekly_goal_mins ?? 0);
+    return Number.isFinite(n) ? n : 0;
+  }, [stats]);
+
+  const goalPct = useMemo(() => {
+    if (!goalWeeklyMinutes || goalWeeklyMinutes <= 0) return 0;
+    return Math.min(100, Math.round((focusThisWeekMinutes / goalWeeklyMinutes) * 100));
+  }, [focusThisWeekMinutes, goalWeeklyMinutes]);
+
+  const maxBar = useMemo(() => Math.max(...weekly.map((d) => d.minutes), 1), [weekly]);
+
+  const anyLoading = dashLoading || sessionsLoading;
+  const anyError = dashError || sessionsError;
+  const status = getHttpStatus(dashError) ?? getHttpStatus(sessionsError);
+
+  const handleAdjustWeeklyGoal = () => {
+    const current = goalWeeklyMinutes || 0;
+    const raw = window.prompt("Set weekly goal (minutes):", String(current || 240));
+    if (raw == null) return;
+    const next = Math.max(0, Math.round(Number(raw)));
+    if (!Number.isFinite(next)) return;
+
+    updateWeeklyGoal(next, {
+      onSuccess: async () => {
+        await qc.invalidateQueries({
+          predicate: (q) =>
+            Array.isArray(q.queryKey) &&
+            q.queryKey[0] === "study" &&
+            q.queryKey[1] === "dashboard",
+        });
+      },
+    });
+  };
+
+  if (anyLoading) {
+    return (
+      <div className="min-h-screen bg-[#F7F8FA] flex items-center justify-center">
+        <p className="text-zinc-600">Loading progress…</p>
+      </div>
+    );
+  }
+
+  if (anyError) {
+    return (
+      <div className="min-h-screen bg-[#F7F8FA] flex items-center justify-center">
+        <p className="text-zinc-600">
+          {status === 401 ? "Session expired. Please login again." : "Failed to load progress."}
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#F7F8FA]">
       <div className="mx-auto max-w-6xl px-4 py-6">
-        {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -68,15 +235,8 @@ export default function ProgressPage() {
           className="rounded-[28px] border border-zinc-200 bg-white shadow-sm overflow-hidden"
         >
           <div className="relative p-6 sm:p-7">
-            {/* glows */}
-            <div
-              aria-hidden
-              className="pointer-events-none absolute -top-20 -right-28 h-64 w-64 rounded-full bg-yellow-200/35 blur-3xl"
-            />
-            <div
-              aria-hidden
-              className="pointer-events-none absolute -bottom-24 -left-24 h-72 w-72 rounded-full bg-sky-200/20 blur-3xl"
-            />
+            <div aria-hidden className="pointer-events-none absolute -top-20 -right-28 h-64 w-64 rounded-full bg-yellow-200/35 blur-3xl" />
+            <div aria-hidden className="pointer-events-none absolute -bottom-24 -left-24 h-72 w-72 rounded-full bg-sky-200/20 blur-3xl" />
 
             <div className="relative flex flex-col gap-5">
               <div className="flex items-start justify-between gap-4">
@@ -87,11 +247,9 @@ export default function ProgressPage() {
                     </div>
 
                     <div>
-                      <h1 className="text-xl font-semibold text-zinc-900">
-                        Progress
-                      </h1>
+                      <h1 className="text-xl font-semibold text-zinc-900">Progress</h1>
                       <p className="mt-0.5 text-sm text-zinc-500">
-                        Track your focus time, streaks, and weekly consistency.
+                        Weekly minutes are computed from sessions (UTC day buckets).
                       </p>
                     </div>
                   </div>
@@ -100,77 +258,62 @@ export default function ProgressPage() {
                 </div>
 
                 <div className="shrink-0 rounded-2xl border border-zinc-200 bg-white/70 backdrop-blur p-1 flex items-center gap-1">
-                  <Pill
-                    active={range === "week"}
-                    onClick={() => setRange("week")}
-                    label="This week"
-                  />
-                  <Pill
-                    active={range === "month"}
-                    onClick={() => setRange("month")}
-                    label="This month"
-                  />
+                  <Pill active={range === "week"} onClick={() => setRange("week")} label="This week" />
+                  <Pill active={range === "month"} onClick={() => setRange("month")} label="This month" />
                 </div>
               </div>
 
-              {/* KPI cards */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <KpiCard
                   title="Current streak"
-                  value={`${data.streakDays} days`}
-                  sub={`Best day: ${data.bestDay}`}
+                  value={`${streakDays} days`}
+                  sub={`Best day: ${bestDay}`}
                   icon={<Flame className="h-5 w-5" />}
                   accent="yellow"
                 />
                 <KpiCard
                   title="Focus this week"
-                  value={`${data.focusThisWeekMinutes} min`}
-                  sub={`Lifetime: ${data.lifetimeMinutes} min`}
+                  value={`${focusThisWeekMinutes} min`}
+                  sub={`Days active: ${daysActive}/7`}
                   icon={<Timer className="h-5 w-5" />}
                   accent="sky"
                 />
                 <KpiCard
                   title="Sessions this week"
-                  value={`${data.sessionsThisWeek}`}
-                  sub="Days with study activity"
+                  value={`${sessionsThisWeek}`}
+                  sub="Count of logged sessions"
                   icon={<CalendarDays className="h-5 w-5" />}
                   accent="zinc"
                 />
                 <KpiCard
                   title="Weekly goal"
                   value={`${goalPct}%`}
-                  sub={`${data.focusThisWeekMinutes}/${data.goalWeeklyMinutes} min`}
+                  sub={`${focusThisWeekMinutes}/${goalWeeklyMinutes || 0} min`}
                   icon={<Target className="h-5 w-5" />}
                   accent="yellow"
-                  progress={goalPct}
+                  progress={goalWeeklyMinutes > 0 ? goalPct : 0}
                 />
               </div>
             </div>
           </div>
 
-          {/* Body */}
           <div className="border-t border-zinc-200 bg-white">
             <div className="p-5 sm:p-7 grid grid-cols-1 lg:grid-cols-3 gap-5">
-              {/* Chart */}
               <div className="lg:col-span-2 rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <p className="text-sm font-semibold text-zinc-900">
-                      Weekly activity
-                    </p>
-                    <p className="mt-1 text-xs text-zinc-500">
-                      Minutes studied each day
-                    </p>
+                    <p className="text-sm font-semibold text-zinc-900">Weekly activity</p>
+                    <p className="mt-1 text-xs text-zinc-500">Minutes studied each day (Mon–Sun, UTC)</p>
                   </div>
 
                   <span className="inline-flex items-center rounded-full border border-yellow-200 bg-yellow-100/60 px-3 py-1 text-[11px] font-semibold text-yellow-800">
-                    {data.focusThisWeekMinutes} min total
+                    {focusThisWeekMinutes} min total
                   </span>
                 </div>
 
                 <div className="mt-5 grid grid-cols-7 gap-2 items-end h-40">
-                  {data.weekly.map((d) => {
-                    const h = Math.round((d.minutes / max) * 100);
+                  {weekly.map((d) => {
+                    const h = Math.round((d.minutes / maxBar) * 100);
                     const isZero = d.minutes === 0;
 
                     return (
@@ -196,57 +339,45 @@ export default function ProgressPage() {
                 <div className="mt-5 rounded-2xl border border-zinc-200 bg-[#FFFBF2] p-4">
                   <p className="text-xs font-semibold text-zinc-900">Insight</p>
                   <p className="mt-1 text-sm text-zinc-600">
-                    Your strongest day is <span className="font-semibold text-zinc-800">{data.bestDay}</span>.
-                    Try to repeat the same routine on weaker days.
+                    Your strongest day is{" "}
+                    <span className="font-semibold text-zinc-800">{bestDay}</span>.
                   </p>
                 </div>
               </div>
 
-              {/* Goals / Actions */}
               <div className="rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm">
                 <p className="text-sm font-semibold text-zinc-900">Goals</p>
-                <p className="mt-1 text-xs text-zinc-500">
-                  Small targets keep you consistent.
-                </p>
+                <p className="mt-1 text-xs text-zinc-500">Small targets keep you consistent.</p>
 
                 <div className="mt-4 space-y-3">
-                  <GoalRow
-                    title="Study 4 days this week"
-                    done={data.sessionsThisWeek >= 4}
-                    meta={`${data.sessionsThisWeek}/4 days`}
-                  />
+                  <GoalRow title="Study 4 days this week" done={daysActive >= 4} meta={`${daysActive}/4 days`} />
                   <GoalRow
                     title="Reach weekly minutes goal"
-                    done={data.focusThisWeekMinutes >= data.goalWeeklyMinutes}
-                    meta={`${data.focusThisWeekMinutes}/${data.goalWeeklyMinutes} min`}
+                    done={goalWeeklyMinutes > 0 ? focusThisWeekMinutes >= goalWeeklyMinutes : false}
+                    meta={`${focusThisWeekMinutes}/${goalWeeklyMinutes || 0} min`}
                   />
-                  <GoalRow
-                    title="Keep streak alive today"
-                    done={true}
-                    meta="On track"
-                  />
+                  <GoalRow title="Keep streak alive today" done={true} meta="Tracked by server streak" />
                 </div>
 
                 <div className="mt-5">
                   <button
                     type="button"
-                    className="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm font-semibold text-zinc-800 hover:border-yellow-300 hover:bg-yellow-50 transition"
+                    onClick={handleAdjustWeeklyGoal}
+                    disabled={goalUpdating}
+                    className="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm font-semibold text-zinc-800 hover:border-yellow-300 hover:bg-yellow-50 transition disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    Adjust weekly goal
+                    {goalUpdating ? "Saving..." : "Adjust weekly goal"}
                     <ChevronRight className="inline-block ml-2 h-4 w-4" />
                   </button>
                 </div>
 
                 <div className="mt-4 rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
                   <p className="text-xs font-semibold text-zinc-900">Tip</p>
-                  <p className="mt-1 text-sm text-zinc-600">
-                    Short sessions daily are better than one long session.
-                  </p>
+                  <p className="mt-1 text-sm text-zinc-600">Short sessions daily are better than one long session.</p>
                 </div>
               </div>
             </div>
 
-            {/* Bottom strip */}
             <div className="px-5 sm:px-7 pb-7">
               <AnimatePresence mode="popLayout">
                 <motion.div
@@ -262,8 +393,8 @@ export default function ProgressPage() {
                   </p>
                   <p className="mt-1 text-sm text-zinc-600">
                     {range === "week"
-                      ? "You’re building a solid routine. Keep the streak alive and aim for your weekly minutes goal."
-                      : "Monthly view can show trends and improvements. You can plug real monthly data here."}
+                      ? "If dashboard totals are buggy, this page still stays correct (sessions-based)."
+                      : "Monthly view not wired yet."}
                   </p>
                 </motion.div>
               </AnimatePresence>
@@ -275,26 +406,16 @@ export default function ProgressPage() {
   );
 }
 
-/* ----------------- Components ----------------- */
+/* ----------------- UI components ----------------- */
 
-function Pill({
-  active,
-  onClick,
-  label,
-}: {
-  active: boolean;
-  onClick: () => void;
-  label: string;
-}) {
+function Pill({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
   return (
     <button
       type="button"
       onClick={onClick}
       className={cx(
         "rounded-2xl px-3 py-2 text-sm font-semibold transition",
-        active
-          ? "bg-white border border-zinc-200 text-zinc-900 shadow-sm"
-          : "text-zinc-600 hover:bg-white/60"
+        active ? "bg-white border border-zinc-200 text-zinc-900 shadow-sm" : "text-zinc-600 hover:bg-white/60"
       )}
     >
       {label}
@@ -315,7 +436,7 @@ function KpiCard({
   sub: string;
   icon: React.ReactNode;
   accent: "yellow" | "sky" | "zinc";
-  progress?: number; // 0..100
+  progress?: number;
 }) {
   const accentClasses =
     accent === "yellow"
@@ -333,12 +454,7 @@ function KpiCard({
           <div className="mt-1 text-xs text-zinc-500">{sub}</div>
         </div>
 
-        <div
-          className={cx(
-            "h-10 w-10 rounded-2xl border flex items-center justify-center",
-            accentClasses
-          )}
-        >
+        <div className={cx("h-10 w-10 rounded-2xl border flex items-center justify-center", accentClasses)}>
           {icon}
         </div>
       </div>
@@ -346,29 +462,16 @@ function KpiCard({
       {typeof progress === "number" ? (
         <div className="mt-4">
           <div className="h-2 rounded-full bg-zinc-100 overflow-hidden border border-zinc-200">
-            <div
-              className="h-full bg-yellow-300"
-              style={{ width: `${Math.max(0, Math.min(100, progress))}%` }}
-            />
+            <div className="h-full bg-yellow-300" style={{ width: `${Math.max(0, Math.min(100, progress))}%` }} />
           </div>
-          <div className="mt-2 text-[11px] text-zinc-500">
-            Progress to weekly goal
-          </div>
+          <div className="mt-2 text-[11px] text-zinc-500">Progress to weekly goal</div>
         </div>
       ) : null}
     </div>
   );
 }
 
-function GoalRow({
-  title,
-  meta,
-  done,
-}: {
-  title: string;
-  meta: string;
-  done: boolean;
-}) {
+function GoalRow({ title, meta, done }: { title: string; meta: string; done: boolean }) {
   return (
     <div className="rounded-2xl border border-zinc-200 bg-white p-4">
       <div className="flex items-start justify-between gap-3">
@@ -380,9 +483,7 @@ function GoalRow({
         <div
           className={cx(
             "h-9 w-9 rounded-2xl border flex items-center justify-center shrink-0",
-            done
-              ? "border-yellow-200 bg-yellow-100/70 text-yellow-900"
-              : "border-zinc-200 bg-zinc-50 text-zinc-600"
+            done ? "border-yellow-200 bg-yellow-100/70 text-yellow-900" : "border-zinc-200 bg-zinc-50 text-zinc-600"
           )}
         >
           <CheckCircle2 className="h-4 w-4" />

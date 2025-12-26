@@ -373,9 +373,15 @@ export default function Dashboard() {
                 </div>
 
                 <div className="mt-4 grid grid-cols-2 gap-3">
-                  {(subjects ?? []).slice(0, 4).map((sub: any) => (
-                    <SubjectCard key={sub.id} subjectId={sub.id} title={sub.name ?? sub.title} />
-                  ))}
+                {(subjects ?? []).slice(0, 4).map((sub: any) => (
+                  <SubjectCard
+                    key={sub.id}
+                    subjectId={sub.id}
+                    title={sub.name ?? sub.title}
+                    color={sub.color}     // ✅ اضافه شد
+                  />
+                ))}
+
 
                   {(subjects ?? []).length === 0 ? (
                     <div className="col-span-2 rounded-2xl border border-zinc-200 bg-[#FFFBF2] p-4 text-sm text-zinc-600">

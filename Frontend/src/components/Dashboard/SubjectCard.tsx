@@ -2,15 +2,25 @@ import React from "react";
 import { motion, useMotionValue, useSpring, useTransform } from "framer-motion";
 import { Link } from "react-router-dom";
 
+function hexToRgba(hex: string, a: number) {
+  const h = hex.replace("#", "");
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+
 type SubjectCardProps = {
-  subjectId: string;          // ✅ new
+  subjectId: string;
   title: string;
-  focusLink?: string;         // default "/focus"
+  color?: string | null;
+  focusLink?: string;
 };
 
 export const SubjectCard: React.FC<SubjectCardProps> = ({
   subjectId,
   title,
+  color,
   focusLink = "/focus",
 }) => {
   const mx = useMotionValue(0);
@@ -35,6 +45,10 @@ export const SubjectCard: React.FC<SubjectCardProps> = ({
     my.set(0);
   };
 
+  const base =
+    color && /^#([0-9a-fA-F]{6})$/.test(color) ? color : "#3B82F6";
+  const glow = hexToRgba(base, 0.22);
+
   return (
     <motion.div
       onMouseMove={onMove}
@@ -55,8 +69,7 @@ export const SubjectCard: React.FC<SubjectCardProps> = ({
         aria-hidden
         className="pointer-events-none absolute -inset-24 opacity-0 blur-2xl group-hover:opacity-100 transition-opacity duration-300"
         style={{
-          background:
-            "radial-gradient(circle at var(--x) var(--y), rgba(59,130,246,0.22), transparent 55%)",
+          background: `radial-gradient(circle at var(--x) var(--y), ${glow}, transparent 55%)`,
           // @ts-ignore
           "--x": gx,
           // @ts-ignore
@@ -74,7 +87,10 @@ export const SubjectCard: React.FC<SubjectCardProps> = ({
         <div className="absolute inset-0 rotate-12 bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.55),transparent)]" />
       </motion.div>
 
-      <div className="absolute left-0 top-0 h-full w-[3px] bg-zinc-200 group-hover:bg-blue-500 transition-colors duration-300" />
+      <div
+        className="absolute left-0 top-0 h-full w-[3px]"
+        style={{ backgroundColor: base }}
+      />
 
       <div className="relative p-4" style={{ transform: "translateZ(12px)" }}>
         <p className="text-sm font-semibold text-zinc-900">{title}</p>
@@ -87,12 +103,9 @@ export const SubjectCard: React.FC<SubjectCardProps> = ({
         <div className="mt-3">
           <Link
             to={focusLink}
-            state={{ subjectId }}   // ✅ THIS
-            className="
-              inline-flex items-center gap-2
-              text-xs font-semibold text-blue-600
-              hover:text-blue-700 transition-colors
-            "
+            state={{ subjectId }}
+            className="inline-flex items-center gap-2 text-xs font-semibold transition-colors"
+            style={{ color: base }}
           >
             Start Focus →
           </Link>
