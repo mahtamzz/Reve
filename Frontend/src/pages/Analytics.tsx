@@ -13,11 +13,8 @@ import { ApiError } from "@/api/client";
 import { useProfileMe } from "@/hooks/useProfileMe";
 import { useSubjects, useSessions } from "@/hooks/useStudy";
 
-// ---------- helpers ----------
-function isoDate(d: Date) {
-  return d.toISOString().slice(0, 10);
-}
-function startOfDay(d: Date) {
+// ---------- helpers (LOCAL time, starts at 00:00) ----------
+function startOfLocalDay(d: Date) {
   const x = new Date(d);
   x.setHours(0, 0, 0, 0);
   return x;
@@ -27,10 +24,17 @@ function addDays(d: Date, delta: number) {
   x.setDate(x.getDate() + delta);
   return x;
 }
-function lastNDays(n: number) {
+// YYYY-MM-DD based on LOCAL time (نه UTC)
+function localDateKey(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+function lastNLocalDays(n: number) {
   const out: string[] = [];
-  const today = startOfDay(new Date());
-  for (let i = n - 1; i >= 0; i--) out.push(isoDate(addDays(today, -i)));
+  const today0 = startOfLocalDay(new Date());
+  for (let i = n - 1; i >= 0; i--) out.push(localDateKey(addDays(today0, -i)));
   return out;
 }
 function toHours(mins: number) {
@@ -50,7 +54,17 @@ function readDurationMins(s: any): number {
   return Number.isFinite(n) ? n : 0;
 }
 function readStartedAtIso(s: any): string | null {
-  return (s.startedAt ?? s.started_at ?? s.createdAt ?? s.created_at ?? null) as string | null;
+  return (
+    (s.startedAt ??
+      s.started_at ??
+      s.createdAt ??
+      s.created_at ??
+      s.loggedAt ??
+      s.logged_at ??
+      s.date ??
+      s.timestamp ??
+      null) as string | null
+  );
 }
 
 type SubjectAnalytics = {
@@ -60,40 +74,31 @@ type SubjectAnalytics = {
 };
 
 function sumHours(weekly: WeeklyPoint[]) {
-  return weekly.reduce((s, x) => s + x.hours, 0);
+  return weekly.reduce((acc, x) => acc + x.hours, 0);
 }
 
 export default function Analytics() {
-  // --- ثابت و بدون شرط ---
-  const days = useMemo(() => lastNDays(7), []);
+  // ✅ نمودار 7 روز اخیر بر اساس روزهای لوکال
+  const days = useMemo(() => lastNLocalDays(7), []);
 
-  // from: start of day 6 days ago, to: start of tomorrow
-  const fromIso = useMemo(() => {
-    const d = addDays(startOfDay(new Date()), -6);
-    return d.toISOString();
-  }, []);
-  const toIso = useMemo(() => {
-    const d = addDays(startOfDay(new Date()), 1);
-    return d.toISOString();
-  }, []);
+  // ✅ بازه‌ی API: از 00:00 شش روز قبل تا 00:00 فردا (کل امروز پوشش داده میشه)
+  const fromIso = useMemo(() => addDays(startOfLocalDay(new Date()), -6).toISOString(), []);
+  const toIso = useMemo(() => addDays(startOfLocalDay(new Date()), 1).toISOString(), []);
 
-  // --- hooks همیشه صدا زده می‌شن ---
+  const sessionsParams = useMemo(
+    () => ({ from: fromIso, to: toIso, limit: 500, offset: 0 }),
+    [fromIso, toIso]
+  );
+
   const { data: profileData, isLoading: profileLoading, error: profileError } = useProfileMe();
   const { data: subjects, isLoading: subjectsLoading, error: subjectsError } = useSubjects();
-  const { data: sessions, isLoading: sessionsLoading, error: sessionsError } = useSessions({
-    from: fromIso,
-    to: toIso,
-    limit: 500,
-    offset: 0,
-  });
+  const { data: sessions, isLoading: sessionsLoading, error: sessionsError } = useSessions(sessionsParams);
 
   const isLoading = profileLoading || subjectsLoading || sessionsLoading;
   const anyError = profileError || subjectsError || sessionsError;
 
   const status =
-    getHttpStatus(profileError) ??
-    getHttpStatus(subjectsError) ??
-    getHttpStatus(sessionsError);
+    getHttpStatus(profileError) ?? getHttpStatus(subjectsError) ?? getHttpStatus(sessionsError);
 
   const username = profileData?.profile?.display_name ?? "User";
 
@@ -101,6 +106,7 @@ export default function Analytics() {
     const subs = subjects ?? [];
     const sess = sessions ?? [];
 
+    // subjectId -> (YYYY-MM-DD local) -> total minutes
     const bySubject = new Map<string, Map<string, number>>();
 
     for (const s of sess as any[]) {
@@ -110,17 +116,20 @@ export default function Analytics() {
       const startedAt = readStartedAtIso(s);
       if (!startedAt) continue;
 
-      const day = String(startedAt).slice(0, 10);
+      const dt = new Date(startedAt);
+      if (Number.isNaN(dt.getTime())) continue;
+
+      const dayKey = localDateKey(dt);
       const mins = readDurationMins(s);
 
       if (!bySubject.has(sid)) bySubject.set(sid, new Map());
       const dayMap = bySubject.get(sid)!;
-      dayMap.set(day, (dayMap.get(day) ?? 0) + mins);
+      dayMap.set(dayKey, (dayMap.get(dayKey) ?? 0) + mins);
     }
 
     return subs.map((sub: any) => {
-      const sid = sub.id as string;
-      const title = (sub.name ?? sub.title ?? "Subject") as string;
+      const sid = String(sub.id ?? "");
+      const title = String(sub.name ?? sub.title ?? "Subject");
       const dayMap = bySubject.get(sid) ?? new Map<string, number>();
 
       const weekly: WeeklyPoint[] = days.map((d) => ({
@@ -133,11 +142,10 @@ export default function Analytics() {
   }, [subjects, sessions, days]);
 
   const totalAll = useMemo(
-    () => subjectAnalytics.reduce((s, sub) => s + sumHours(sub.weekly), 0),
+    () => subjectAnalytics.reduce((acc, sub) => acc + sumHours(sub.weekly), 0),
     [subjectAnalytics]
   );
 
-  // --- رندرها (بعد از تمام hookها) ---
   if (isLoading) {
     return (
       <div className="min-h-screen bg-[#F7F8FA] flex items-center justify-center">
@@ -172,7 +180,7 @@ export default function Analytics() {
                   Analytics
                 </p>
                 <p className="mt-1 text-sm text-zinc-600">
-                  Weekly study per subject (last 7 days)
+                  Weekly study per subject (last 7 days, from 00:00 local time)
                 </p>
               </div>
 

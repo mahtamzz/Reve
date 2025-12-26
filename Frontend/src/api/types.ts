@@ -2,6 +2,20 @@
 
 export type GroupVisibility = "public" | "private";
 
+export type ApiOk = { ok: boolean };
+
+export type User = {
+  uid: string;
+  email: string;
+  name?: string;
+  username?: string;
+  avatar_url?: string;
+  created_at?: string;
+  updated_at?: string;
+  [k: string]: any;
+};
+
+
 export type ApiGroup = {
   id: string;
   name: string;
@@ -40,11 +54,11 @@ export type ApiGroupDetailsResponse = {
 
 
 // ---------- Study Types ----------
+
 export type StudySubject = {
   id: string;
   name: string;
   color: string | null;
-
   created_at?: string;
   updated_at?: string;
 };
@@ -52,36 +66,39 @@ export type StudySubject = {
 export type StudySession = {
   id: string;
   subject_id?: string;
-  subjectId?: string; 
+  subjectId?: string;
   duration_mins?: number;
   durationMins?: number;
   started_at?: string | null;
   startedAt?: string | null;
+  [k: string]: any;
+};
 
+export type StudyDashboardTotalsRow = {
+  uid: string;
+  day: string; // "YYYY-MM-DD"
+  total_duration_mins: number;
+  [k: string]: any;
+};
+
+export type StudyStats = {
+  uid?: string;
+  weekly_goal_mins?: number;
+  xp_total?: number;
+  streak_current?: number;
+  streak_best?: number;
+  streak_last_day?: string | null;
   [k: string]: any;
 };
 
 export type StudyDashboard = {
+  range?: { from: string; to: string };
   subjects?: StudySubject[];
-  totals?: {
-    totalMins?: number;
-    totalXp?: number;
-    sessionsCount?: number;
-    [k: string]: any;
-  };
-  stats?: {
-    weeklyGoalMins?: number;
-    streakDays?: number;
-    [k: string]: any;
-  };
-
+  totals?: StudyDashboardTotalsRow[];
+  stats?: StudyStats;
   [k: string]: any;
 };
 
-export type WeeklyGoalUpdateResponse = {
-  weeklyGoalMins?: number;
-  [k: string]: any;
-};
 
 // ---------- Media Types ----------
 export type ApiAvatarMeta = {

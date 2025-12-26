@@ -204,7 +204,7 @@ export default function CreateSubjectModal({
                         <Palette className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
                         <input
                           value={color}
-                          onChange={(e) => setColor(e.target.value)}   // ✅ input → state
+                          onChange={(e) => setColor(e.target.value)} 
                           onBlur={() => setTouched(true)}
                           placeholder="#FFAA00"
                           className="

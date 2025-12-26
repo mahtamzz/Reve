@@ -22,6 +22,7 @@ import ConnectionsPage from "./pages/ConnectionsPage";
 import ProfilePage from "./pages/ProfilePage";
 import ProgressPage from "./pages/ProgressPage";
 import ManageSubjects from "./pages/ManageSubjects";
+import Help from "./pages/Help";
 import { Route, Routes } from "react-router-dom";
 import React from "react";
 
@@ -54,6 +55,7 @@ function App() {
       <Route path="/profile" element={<ProfilePage />} />
       <Route path="/progress" element={<ProgressPage />} />
       <Route path="/study/subjects" element={<ManageSubjects />} />
+      <Route path="/help" element={<Help/>}/>
     </Routes>
   );
 }

@@ -1,17 +1,12 @@
 // src/pages/FocusPage.tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Play, Square, RotateCcw, Sparkles, ChevronDown, Plus } from "lucide-react";
-import { AnimatePresence, motion } from "framer-motion";
-import { useNavigate } from "react-router-dom";
-
-import { useLocation } from "react-router-dom";
+import { motion } from "framer-motion";
+import { useNavigate, useLocation } from "react-router-dom";
 
 import { ApiError } from "@/api/client";
 import { useCreateSubject, useLogSession, useSubjects } from "@/hooks/useStudy";
 import CreateSubjectModal from "@/components/ui/CreateSubjectModal";
-
-const EASE_OUT: [number, number, number, number] = [0.16, 1, 0.3, 1];
-const EASE_IN_OUT: [number, number, number, number] = [0.65, 0, 0.35, 1];
 
 const LAST_SUBJECT_KEY = "study_last_subject_id_v1";
 const tickEverySeconds = 1;
@@ -29,8 +24,21 @@ function safeWriteLastSubject(id: string) {
   } catch {}
 }
 
+// ---- Wake Lock types (TS-safe) ----
+type WakeLockSentinelLike = {
+  released: boolean;
+  release: () => Promise<void>;
+  addEventListener?: (type: string, listener: () => void) => void;
+  removeEventListener?: (type: string, listener: () => void) => void;
+};
+
+function canUseWakeLock() {
+  return typeof navigator !== "undefined" && "wakeLock" in navigator;
+}
+
 export default function FocusPage() {
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [running, setRunning] = useState(false);
   const [time, setTime] = useState(0);
@@ -43,6 +51,7 @@ export default function FocusPage() {
 
   // ---- Study API ----
   const { data: subjects, isLoading: subjectsLoading, error: subjectsError } = useSubjects();
+
   const {
     mutateAsync: logSession,
     isPending: isSaving,
@@ -58,9 +67,85 @@ export default function FocusPage() {
   const [subjectId, setSubjectId] = useState<string | "">(() => safeReadLastSubject() ?? "");
   const [createOpen, setCreateOpen] = useState(false);
 
-  const location = useLocation();
+  // ---- Wake Lock state ----
+  const wakeLockRef = useRef<WakeLockSentinelLike | null>(null);
+  const [wakeLockError, setWakeLockError] = useState<string | null>(null);
 
+  const requestWakeLock = async () => {
+    setWakeLockError(null);
 
+    if (!canUseWakeLock()) return;
+
+    try {
+      const sentinel = (await navigator.wakeLock.request("screen")) as WakeLockSentinelLike;
+
+      // اگر قبلی وجود داشت آزادش کن
+      if (wakeLockRef.current && !wakeLockRef.current.released) {
+        try {
+          await wakeLockRef.current.release();
+        } catch {}
+      }
+
+      wakeLockRef.current = sentinel;
+
+      // بعضی مرورگرها event released دارند
+      const onReleased = () => {
+        // اگر تایمر هنوز running هست، وقتی released شد (مثلاً به دلیل سیستم)، دوباره می‌گیریم
+        // (re-acquire در visibilitychange هم انجام می‌شه)
+      };
+      sentinel.addEventListener?.("release", onReleased);
+    } catch (e: any) {
+      // معمولاً: NotAllowedError / SecurityError
+      setWakeLockError(e?.message ? String(e.message) : "Wake lock failed.");
+    }
+  };
+
+  const releaseWakeLock = async () => {
+    setWakeLockError(null);
+    const sentinel = wakeLockRef.current;
+    wakeLockRef.current = null;
+
+    if (!sentinel) return;
+    if (sentinel.released) return;
+
+    try {
+      await sentinel.release();
+    } catch {
+      // ignore
+    }
+  };
+
+  // اگر کاربر از تب خارج شد و برگشت، wake lock ممکنه drop بشه => دوباره بگیر
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === "visible" && running) {
+        // تلاش دوباره برای گرفتن wake lock
+        requestWakeLock();
+      }
+      // وقتی hidden شد، بعضی مرورگرها خودکار release می‌کنند؛ اینجا لازم نیست کاری کنیم
+    };
+
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [running]);
+
+  // وقتی running خاموش شد یا unmount شد => release
+  useEffect(() => {
+    if (!running) {
+      releaseWakeLock();
+      return;
+    }
+
+    // وقتی running روشن شد هم تلاش کن (به‌جز درخواست داخل toggle که با gesture است)
+    requestWakeLock();
+
+    return () => {
+      releaseWakeLock();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [running]);
+
+  // دریافت subjectId از navigation state
   useEffect(() => {
     const incoming = (location.state as any)?.subjectId as string | undefined;
     if (!incoming) return;
@@ -68,12 +153,11 @@ export default function FocusPage() {
     setSubjectId(incoming);
     safeWriteLastSubject(incoming);
 
-    // optional: clear state so refresh/back won't re-trigger
     navigate(location.pathname, { replace: true, state: null });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state]);
 
-
+  // پیش‌فرض: اولین subject
   useEffect(() => {
     if (subjectId) return;
     if (!subjects?.length) return;
@@ -81,8 +165,8 @@ export default function FocusPage() {
     safeWriteLastSubject(subjects[0].id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [subjects]);
-  
 
+  // timer loop
   useEffect(() => {
     if (!running) return;
 
@@ -101,14 +185,22 @@ export default function FocusPage() {
 
   const studiedSeconds = time;
 
-  const reset = () => {
+  const reset = async () => {
     setRunning(false);
     setTime(0);
     startedAtRef.current = null;
     baseAtStartRef.current = 0;
+    await releaseWakeLock();
   };
 
-  const toggle = () => {
+  const toggle = async () => {
+    // چون wake lock بهتره با gesture گرفته بشه، موقع Start همینجا می‌گیریم
+    if (!running) {
+      await requestWakeLock();
+    } else {
+      await releaseWakeLock();
+    }
+
     setRunning((v) => {
       const next = !v;
       if (next) {
@@ -130,6 +222,7 @@ export default function FocusPage() {
     const startedAtIso = new Date(Date.now() - durationMins * 60_000).toISOString();
 
     setRunning(false);
+    await releaseWakeLock();
 
     await logSession({
       subjectId,
@@ -142,7 +235,10 @@ export default function FocusPage() {
       state: { focusSeconds: studiedSeconds },
     });
 
-    reset();
+    // بعد از navigate هم reset
+    setTime(0);
+    startedAtRef.current = null;
+    baseAtStartRef.current = 0;
   };
 
   // ----- Create subject flow -----
@@ -152,7 +248,6 @@ export default function FocusPage() {
       color: payload.color ?? null,
     });
 
-    // created از mutateAsync برگشت داده میشه
     if (created?.id) {
       setSubjectId(created.id);
       safeWriteLastSubject(created.id);
@@ -180,26 +275,17 @@ export default function FocusPage() {
     return running
       ? {
           outer: "from-[#FBF7EA] via-[#EEF6E6] to-[#DDEED8]",
-          glow1: "bg-[#CFE2B9]/55",
-          glow2: "bg-[#BFD8A7]/45",
           dot: "bg-[#6E8F5B]",
           status: "Active",
           hint: "Session running — stay with it.",
-          wash:
-            "radial-gradient(1200px 640px at 16% 14%, rgba(251, 247, 234, 0.85), transparent 62%), radial-gradient(950px 560px at 82% 86%, rgba(207, 226, 185, 0.60), transparent 64%), radial-gradient(900px 520px at 62% 18%, rgba(255, 228, 200, 0.22), transparent 62%)",
         }
       : {
           outer: "from-[#FBF4D6] via-[#FAF2D0] to-[#F3E7B9]",
-          glow1: "bg-yellow-200/45",
-          glow2: "bg-amber-200/25",
           dot: "bg-yellow-600",
           status: "Idle",
           hint: "Ready when you are.",
-          wash:
-            "radial-gradient(1200px 600px at 20% 10%, rgba(250, 204, 21, 0.22), transparent 55%), radial-gradient(900px 500px at 80% 90%, rgba(251, 191, 36, 0.16), transparent 55%)",
         };
   }, [running]);
-
 
   return (
     <>
@@ -207,8 +293,6 @@ export default function FocusPage() {
         animate={{ opacity: 1 }}
         className={`min-h-screen relative overflow-hidden bg-gradient-to-br ${bg.outer} flex items-center justify-center`}
       >
-        {/* ... blobs / wash مثل قبل ... */}
-
         <motion.div className="relative w-[92%] max-w-[560px] rounded-[32px] bg-[#FBFAF3]/92 backdrop-blur border border-black/10 shadow-2xl">
           <div className="relative p-8">
             <div className="flex items-start justify-between gap-4">
@@ -222,6 +306,19 @@ export default function FocusPage() {
                 {bg.status}
               </span>
             </div>
+
+            {/* Wake lock hint (optional) */}
+            {running && !canUseWakeLock() ? (
+              <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-[11px] text-amber-800">
+                Your browser doesn’t support keeping the screen awake (Wake Lock). Consider using Chrome/Edge on HTTPS.
+              </div>
+            ) : null}
+
+            {running && wakeLockError ? (
+              <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-[11px] text-amber-800">
+                Couldn’t keep the screen awake: {wakeLockError}
+              </div>
+            ) : null}
 
             {/* Subject row */}
             <div className="mt-5">
@@ -279,13 +376,8 @@ export default function FocusPage() {
                 </select>
               </div>
 
-              {createErrMsg ? (
-                <p className="mt-2 text-xs text-rose-600">{createErrMsg}</p>
-              ) : null}
-
-              {subjectsError ? (
-                <p className="mt-2 text-xs text-rose-600">Failed to load subjects.</p>
-              ) : null}
+              {createErrMsg ? <p className="mt-2 text-xs text-rose-600">{createErrMsg}</p> : null}
+              {subjectsError ? <p className="mt-2 text-xs text-rose-600">Failed to load subjects.</p> : null}
             </div>
 
             {/* timer */}
@@ -311,7 +403,11 @@ export default function FocusPage() {
                 className="h-16 w-16 rounded-2xl border border-black/10 bg-white/70 shadow-sm"
                 aria-label={running ? "Stop" : "Start"}
               >
-                {running ? <Square className="h-6 w-6 mx-auto" /> : <Play className="h-6 w-6 mx-auto" />}
+                {running ? (
+                  <Square className="h-6 w-6 mx-auto" />
+                ) : (
+                  <Play className="h-6 w-6 mx-auto" />
+                )}
               </button>
 
               <div className="flex items-center gap-3">
@@ -347,12 +443,7 @@ export default function FocusPage() {
         </motion.div>
       </motion.div>
 
-      {/* Modal */}
-      <CreateSubjectModal
-        open={createOpen}
-        onClose={() => setCreateOpen(false)}
-        onCreate={handleCreateSubject}
-      />
+      <CreateSubjectModal open={createOpen} onClose={() => setCreateOpen(false)} onCreate={handleCreateSubject} />
     </>
   );
 }

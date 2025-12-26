@@ -110,7 +110,7 @@ export default function FullBodyBuddy({ label = "Let’s study!" }: { label?: st
           transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
           className="relative w-[250px] flex flex-col items-center"
         >
-          {/* head (in-flow) */}
+          {/* head */}
           <motion.div
             animate={{ x: headX, y: headY, rotate: headR }}
             transition={{ type: "spring", stiffness: 190, damping: 20 }}

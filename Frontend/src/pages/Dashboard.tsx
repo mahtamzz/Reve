@@ -1,17 +1,17 @@
+// src/pages/Dashboard.tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useLocation, useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { ApiError } from "@/api/client";
 
-import { useProfileMe } from "@/hooks/useProfileMe";
+import { useProfileMe, profileMeKey } from "@/hooks/useProfileMe";
 import { useUpdateProfileMe } from "@/hooks/useUpdateProfileMe";
-
-import { useSubjects, useStudyDashboard, useSessions } from "@/hooks/useStudy";
+import { useSubjects, useStudyDashboard, useSessions, studyKeys } from "@/hooks/useStudy";
 
 import Sidebar from "@/components/Dashboard/SidebarIcon";
 import Topbar from "@/components/Dashboard/DashboardHeader";
-
 import { WeeklyStudyChart } from "@/components/Dashboard/LineChart";
 import type { WeeklyPoint } from "@/components/Dashboard/LineChart";
 
@@ -19,31 +19,57 @@ import { SubjectCard } from "@/components/Dashboard/SubjectCard";
 import { ChallengeCard } from "@/components/Dashboard/ChallengeCard";
 import LookAtBuddy from "@/components/LookAtBuddy";
 
-// ----------------- utils -----------------
-function isoDate(d: Date) {
-  return d.toISOString().slice(0, 10);
+// ----------------- local date helpers (00:00 local) -----------------
+function startOfLocalDay(d: Date) {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
 }
-
-function lastNDays(n: number) {
+function addDays(d: Date, delta: number) {
+  const x = new Date(d);
+  x.setDate(x.getDate() + delta);
+  return x;
+}
+function localDateKey(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+function lastNLocalDays(n: number) {
   const out: string[] = [];
-  const now = new Date();
-  for (let i = n - 1; i >= 0; i--) {
-    const d = new Date(now);
-    d.setDate(now.getDate() - i);
-    out.push(isoDate(d));
-  }
+  const today0 = startOfLocalDay(new Date());
+  for (let i = n - 1; i >= 0; i--) out.push(localDateKey(addDays(today0, -i)));
   return out;
 }
 
+function readDurationMins(s: any): number {
+  const v = s.durationMins ?? s.duration_mins ?? s.duration ?? 0;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+function readStartedAtIso(s: any): string | null {
+  return (
+    (s.startedAt ??
+      s.started_at ??
+      s.createdAt ??
+      s.created_at ??
+      s.loggedAt ??
+      s.logged_at ??
+      s.date ??
+      s.timestamp ??
+      null) as string | null
+  );
+}
+
+function getHttpStatus(err: unknown): number | undefined {
+  return err instanceof ApiError ? err.status : (err as any)?.status;
+}
 function clamp(n: number, a: number, b: number) {
   return Math.max(a, Math.min(b, n));
 }
 
-function toNumber(v: any): number | null {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
-}
-
+// chart builders (fallback from sessions if dashboard series isn't available)
 function pickWeeklySeriesHours(dashboard: any): WeeklyPoint[] | null {
   const raw =
     dashboard?.weekly ??
@@ -57,136 +83,123 @@ function pickWeeklySeriesHours(dashboard: any): WeeklyPoint[] | null {
 
   const out: WeeklyPoint[] = [];
   for (const item of raw) {
-    const date = String(item?.date ?? item?.day ?? item?.d ?? "");
-    if (!date) continue;
+    const dateRaw = String(item?.date ?? item?.day ?? item?.d ?? "");
+    if (!dateRaw) continue;
 
-    const mins = toNumber(
-      item?.mins ?? item?.minutes ?? item?.durationMins ?? item?.duration_mins
-    );
-    const hours = toNumber(item?.hours);
-    const h = hours != null ? hours : mins != null ? mins / 60 : 0;
+    const mins = Number(item?.mins ?? item?.minutes ?? item?.durationMins ?? item?.duration_mins ?? 0);
+    const hoursMaybe = Number(item?.hours);
 
-    out.push({ date: date.slice(0, 10), hours: Math.max(0, h) });
+    const hours = Number.isFinite(hoursMaybe)
+      ? hoursMaybe
+      : Number.isFinite(mins)
+        ? mins / 60
+        : 0;
+
+    out.push({ date: dateRaw.slice(0, 10), hours: Math.max(0, hours) });
   }
 
   return out.length ? out : null;
 }
 
-function normalizeToLast7Days(series: WeeklyPoint[] | null): WeeklyPoint[] {
-  const days = lastNDays(7);
+function normalizeToLast7LocalDays(series: WeeklyPoint[] | null): WeeklyPoint[] {
+  const days = lastNLocalDays(7);
   const map = new Map<string, number>();
-  (series ?? []).forEach((p) => map.set(p.date, p.hours));
+  (series ?? []).forEach((p) => map.set(p.date.slice(0, 10), p.hours));
   return days.map((date) => ({ date, hours: map.get(date) ?? 0 }));
 }
 
-function buildWeeklyFromSessions(sessions: any[] | undefined): WeeklyPoint[] {
-  const days = lastNDays(7);
-  const minsByDay = new Map(days.map((d) => [d, 0]));
+function buildWeeklyFromSessionsLocal(sessions: any[] | undefined): WeeklyPoint[] {
+  const days = lastNLocalDays(7);
+  const minsByDay = new Map<string, number>(days.map((d) => [d, 0]));
 
   for (const s of sessions ?? []) {
-    const startedAt = (s as any).startedAt ?? (s as any).started_at ?? null;
-    const mins = Number((s as any).durationMins ?? (s as any).duration_mins ?? 0);
+    const startedAt = readStartedAtIso(s);
     if (!startedAt) continue;
 
-    const day = isoDate(new Date(startedAt));
-    if (!minsByDay.has(day)) continue;
-    minsByDay.set(day, (minsByDay.get(day) ?? 0) + (Number.isFinite(mins) ? mins : 0));
+    const dt = new Date(startedAt);
+    if (Number.isNaN(dt.getTime())) continue;
+
+    const dayKey = localDateKey(dt);
+    if (!minsByDay.has(dayKey)) continue;
+
+    minsByDay.set(dayKey, (minsByDay.get(dayKey) ?? 0) + readDurationMins(s));
   }
 
-  return days.map((date) => ({
-    date,
-    hours: (minsByDay.get(date) ?? 0) / 60,
-  }));
+  return days.map((date) => ({ date, hours: (minsByDay.get(date) ?? 0) / 60 }));
 }
 
-// ----------------- page -----------------
 export default function Dashboard() {
   const location = useLocation();
   const navigate = useNavigate();
+  const qc = useQueryClient();
 
-  // ✅ Hooks: always at top
+  const fromISO = useMemo(() => addDays(startOfLocalDay(new Date()), -6).toISOString(), []);
+  const toISO = useMemo(() => addDays(startOfLocalDay(new Date()), 1).toISOString(), []);
+
+  const sessionsParams = useMemo(
+    () => ({ from: fromISO, to: toISO, limit: 500, offset: 0 }),
+    [fromISO, toISO]
+  );
+
   const { data: me, isLoading: meLoading, error: meError } = useProfileMe();
   const { mutate: updateProfile, isPending: isUpdatingProfile, error: updateProfileError } =
     useUpdateProfileMe();
 
   const { data: dashboard, isLoading: dashLoading, error: dashError } = useStudyDashboard();
   const { data: subjects, isLoading: subjectsLoading, error: subjectsError } = useSubjects();
+  const { data: sessions, isLoading: sessionsLoading, error: sessionsError } = useSessions(sessionsParams);
 
-  // sessions last 7 days
-  const fromISO = useMemo(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 6);
-    d.setHours(0, 0, 0, 0);
-    return d.toISOString();
-  }, []);
-
-  const toISO = useMemo(() => {
-    const d = new Date();
-    d.setHours(23, 59, 59, 999);
-    return d.toISOString();
-  }, []);
-
-  const { data: sessions, isLoading: sessionsLoading, error: sessionsError } = useSessions({
-    from: fromISO,
-    to: toISO,
-    limit: 500,
-    offset: 0,
-  });
-
-  // local UI
-  const [score, setScore] = useState(0);
-  const [weekly, setWeekly] = useState<WeeklyPoint[]>(() => normalizeToLast7Days(null));
-  const [toast, setToast] = useState<{ points: number; minutes: number; hours: number } | null>(
-    null
-  );
-
-  // hydrate score from profile
-  useEffect(() => {
-    if (!me) return;
-    setScore(me.profile.xp);
-  }, [me]);
-
-  // weekly series from dashboard (fallback sessions)
-  useEffect(() => {
-    const seriesFromDash = pickWeeklySeriesHours(dashboard);
-    if (seriesFromDash?.length) {
-      setWeekly(normalizeToLast7Days(seriesFromDash));
-    } else {
-      setWeekly(buildWeeklyFromSessions(sessions));
-    }
+  const weekly: WeeklyPoint[] = useMemo(() => {
+    const fromDash = pickWeeklySeriesHours(dashboard);
+    if (fromDash?.length) return normalizeToLast7LocalDays(fromDash);
+    return buildWeeklyFromSessionsLocal(sessions as any[] | undefined);
   }, [dashboard, sessions]);
 
-  // toast after focus (UI only)
-  const consumedFocusRef = useRef("");
+  const totalHours = useMemo(() => weekly.reduce((sum, p) => sum + p.hours, 0), [weekly]);
+
+  const [toast, setToast] = useState<{ minutes: number; points: number; hours: number } | null>(null);
+
+  // ✅ after returning from FocusPage, refresh all dependent queries (server-authoritative)
+  const consumedRef = useRef<string>("");
+
   useEffect(() => {
     const st = location.state as any;
-    const focusSeconds: number | undefined = st?.focusSeconds;
-    if (!focusSeconds || focusSeconds <= 0) return;
+    const focusSecondsRaw: unknown = st?.focusSeconds;
+    if (focusSecondsRaw == null) return;
 
-    const key = String(focusSeconds);
-    if (consumedFocusRef.current === key) return;
-    consumedFocusRef.current = key;
+    let focusSeconds = Number(focusSecondsRaw);
+    if (!Number.isFinite(focusSeconds) || focusSeconds <= 0) return;
 
-    const hoursAdded = focusSeconds / 3600;
+    // guard: if minutes were passed by mistake
+    if (focusSeconds < 1000) focusSeconds = focusSeconds * 60;
+
+    const dedupeKey = `${focusSeconds}-${location.key ?? ""}`;
+    if (consumedRef.current === dedupeKey) return;
+    consumedRef.current = dedupeKey;
+
     const minutes = Math.max(1, Math.round(focusSeconds / 60));
-    const pointsAdded = Math.floor(focusSeconds / 300);
+    const points = Math.floor(minutes / 5); // just for toast (server computes real XP)
 
-    setToast({ points: Math.max(0, pointsAdded), minutes, hours: hoursAdded });
-    if (pointsAdded > 0) setScore((s) => s + pointsAdded);
+    setToast({ minutes, points: Math.max(0, points), hours: focusSeconds / 3600 });
 
-    // optimistic weekly add today
-    const days = lastNDays(7);
-    const today = days[days.length - 1];
-    setWeekly((prev) => {
-      const map = new Map(prev.map((p) => [p.date, p.hours]));
-      return days.map((date) => ({
-        date,
-        hours: (map.get(date) ?? 0) + (date === today ? hoursAdded : 0),
-      }));
+    // ✅ refresh: sessions/dashboard/profile/subjects
+    qc.invalidateQueries({
+      predicate: (q) =>
+        Array.isArray(q.queryKey) && q.queryKey[0] === "study" && q.queryKey[1] === "sessions",
+    });
+    qc.invalidateQueries({
+      predicate: (q) =>
+        Array.isArray(q.queryKey) && q.queryKey[0] === "study" && q.queryKey[1] === "dashboard",
     });
 
+    // ✅ FIX: must call subjects()
+    qc.invalidateQueries({ queryKey: studyKeys.subjects() });
+
+    // optional (keep if you want profile refreshed for other fields)
+    qc.invalidateQueries({ queryKey: profileMeKey });
+
     navigate(location.pathname, { replace: true, state: null });
-  }, [location.pathname, location.state, navigate]);
+  }, [location.pathname, location.state, location.key, navigate, qc]);
 
   useEffect(() => {
     if (!toast) return;
@@ -194,11 +207,15 @@ export default function Dashboard() {
     return () => window.clearTimeout(t);
   }, [toast]);
 
-  // ✅ derived values (still hooks, so must be before returns)
-  const totalHours = useMemo(() => weekly.reduce((s, x) => s + x.hours, 0), [weekly]);
+  const anyLoading = meLoading || dashLoading || subjectsLoading || sessionsLoading;
+  const anyError = meError || dashError || subjectsError || sessionsError;
 
-  // ----------------- returns after ALL hooks -----------------
-  const anyLoading = meLoading || dashLoading;
+  const status =
+    getHttpStatus(meError) ??
+    getHttpStatus(dashError) ??
+    getHttpStatus(subjectsError) ??
+    getHttpStatus(sessionsError);
+
   if (anyLoading) {
     return (
       <div className="min-h-screen bg-[#F7F8FA] flex items-center justify-center">
@@ -207,34 +224,23 @@ export default function Dashboard() {
     );
   }
 
-  const anyError = meError || dashError;
   if (anyError) {
-    const err = anyError as ApiError<any>;
     return (
       <div className="min-h-screen bg-[#F7F8FA] flex items-center justify-center">
         <p className="text-zinc-600">
-          {err?.status === 401 ? "Session expired. Please login again." : "Failed to load dashboard."}
+          {status === 401 ? "Session expired. Please login again." : "Failed to load dashboard."}
         </p>
       </div>
     );
   }
 
-  if (!me) {
-    return (
-      <div className="min-h-screen bg-[#F7F8FA] flex items-center justify-center">
-        <p className="text-zinc-600">No profile data.</p>
-      </div>
-    );
-  }
+  const profile = (me as any)?.profile ?? (me as any) ?? {};
+  const username: string = profile.display_name ?? profile.username ?? "User";
 
-  const { profile } = me;
-  const username = profile.display_name;
-  const streak = profile.streak;
-
-  const handleSaveTimezone = () => {
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || profile.timezone || "UTC";
-    updateProfile({ timezone: tz });
-  };
+  // ✅ XP / streak MUST come from Study dashboard (because Study service updates them)
+  const stats = (dashboard as any)?.stats ?? {};
+  const streak: number = Number(stats.streak_current ?? stats.streak ?? stats.streakDays ?? 0) || 0;
+  const xp: number = Number(stats.xp_total ?? stats.xp ?? stats.xpTotal ?? 0) || 0;
 
   const updateProfileErrMsg =
     updateProfileError && (updateProfileError as ApiError<any>)?.message
@@ -243,26 +249,22 @@ export default function Dashboard() {
         ? "Failed to update profile."
         : null;
 
+  const handleSaveTimezone = () => {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || profile.timezone || "UTC";
+    updateProfile({ timezone: tz });
+    qc.invalidateQueries({ queryKey: profileMeKey });
+  };
+
   return (
     <div className="min-h-screen bg-creamtext text-zinc-900">
       <div className="flex">
         <Sidebar activeKey="dashboard" onLogout={() => navigate("/login")} />
 
         <div className="flex-1 min-w-0 md:ml-64">
-          <Topbar
-            username={username}
-            profile={{
-              username,
-              email: "",
-              fullName: username,
-              role: "Student",
-              avatarUrl: null,
-            }}
-          />
+          <Topbar username={username} />
 
           <div className="mx-auto max-w-6xl px-4 py-6">
             <div className="grid grid-cols-12 gap-6">
-              {/* LEFT */}
               <section className="col-span-12 lg:col-span-5">
                 <div className="relative overflow-hidden rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
                   <div className="pointer-events-none absolute -top-12 -right-14 h-48 w-48 rounded-full bg-yellow-200/45 blur-3xl" />
@@ -272,7 +274,6 @@ export default function Dashboard() {
                     <p className="text-xl sm:text-2xl font-semibold tracking-tight text-zinc-900">
                       Welcome back, <span className="text-zinc-800">{username}</span>
                     </p>
-                    <p className="mt-1 text-sm text-zinc-600">Keep your routine steady and improve your focus.</p>
 
                     <div className="mt-6 grid grid-cols-2 gap-4">
                       <div className="rounded-2xl border border-zinc-200 bg-[#FFFBF2] p-4">
@@ -284,13 +285,13 @@ export default function Dashboard() {
                       <div className="rounded-2xl border border-zinc-200 bg-[#FFFBF2] p-4">
                         <p className="text-xs text-zinc-500">XP</p>
                         <motion.p
-                          key={score}
+                          key={xp}
                           initial={{ y: 6, opacity: 0 }}
                           animate={{ y: 0, opacity: 1 }}
                           transition={{ duration: 0.2, ease: "easeOut" }}
                           className="mt-1 text-3xl font-semibold text-emerald-600"
                         >
-                          {score}
+                          {xp}
                         </motion.p>
                         <p className="mt-1 text-[11px] text-zinc-500">total points</p>
                       </div>
@@ -302,7 +303,7 @@ export default function Dashboard() {
 
                     <div className="mt-5 rounded-2xl border border-zinc-200 bg-gradient-to-br from-yellow-50 to-white p-4">
                       <p className="text-xs text-zinc-500 truncate">
-                        Timezone: <span className="text-zinc-700">{profile.timezone}</span>
+                        Timezone: <span className="text-zinc-700">{profile.timezone ?? "—"}</span>
                       </p>
 
                       {updateProfileErrMsg ? (
@@ -329,7 +330,6 @@ export default function Dashboard() {
                 </div>
               </section>
 
-              {/* RIGHT */}
               <section className="col-span-12 lg:col-span-7">
                 <motion.div
                   initial={{ opacity: 0, y: 10, scale: 0.99 }}
@@ -340,14 +340,12 @@ export default function Dashboard() {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-sm font-semibold text-zinc-900">Weekly Study</p>
-                      <p className="mt-0.5 text-xs text-zinc-500">Last 7 days</p>
+                      <p className="mt-0.5 text-xs text-zinc-500">Last 7 days (local)</p>
                     </div>
 
                     <div className="rounded-2xl border border-zinc-200 bg-creamtext px-3 py-2">
                       <p className="text-[11px] text-zinc-500">Total</p>
-                      <p className="text-sm font-semibold text-zinc-900">
-                        {totalHours.toFixed(1)}h
-                      </p>
+                      <p className="text-sm font-semibold text-zinc-900">{totalHours.toFixed(1)}h</p>
                     </div>
                   </div>
 
@@ -358,9 +356,7 @@ export default function Dashboard() {
               </section>
             </div>
 
-            {/* ROW 2 */}
             <div className="mt-6 grid grid-cols-12 gap-6">
-              {/* Subjects */}
               <section className="col-span-12 lg:col-span-6 rounded-3xl bg-white p-6 shadow-sm border border-zinc-200">
                 <div className="flex items-center justify-between">
                   <div>
@@ -370,36 +366,25 @@ export default function Dashboard() {
 
                   <button
                     onClick={() => navigate("/study/subjects")}
-                    className="group relative overflow-hidden rounded-xl border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md hover:border-yellow-300 hover:text-zinc-900"
+                    className="rounded-xl border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 shadow-sm hover:border-yellow-300 hover:text-zinc-900 transition"
                   >
-                    <span className="pointer-events-none absolute inset-0 translate-x-[-120%] group-hover:translate-x-[120%] transition-transform duration-700 ease-in-out bg-[linear-gradient(90deg,transparent,rgba(250,204,21,0.18),transparent)]" />
-                    <span className="relative z-10 flex items-center gap-2">
-                      Manage
-                      <span className="h-1.5 w-1.5 rounded-full bg-zinc-300 group-hover:bg-yellow-500 transition-colors duration-300" />
-                    </span>
+                    Manage
                   </button>
                 </div>
 
-                {subjectsLoading || sessionsLoading ? (
-                  <div className="mt-4 text-sm text-zinc-600">Loading subjects…</div>
-                ) : subjectsError || sessionsError ? (
-                  <div className="mt-4 text-sm text-rose-600">Failed to load subjects.</div>
-                ) : (
-                  <div className="mt-4 grid grid-cols-2 gap-3">
-                    {(subjects ?? []).slice(0, 4).map((sub) => (
-                      <SubjectCard key={sub.id} subjectId={sub.id} title={sub.name} />
-                    ))}
+                <div className="mt-4 grid grid-cols-2 gap-3">
+                  {(subjects ?? []).slice(0, 4).map((sub: any) => (
+                    <SubjectCard key={sub.id} subjectId={sub.id} title={sub.name ?? sub.title} />
+                  ))}
 
-                    {(subjects ?? []).length === 0 ? (
-                      <div className="col-span-2 rounded-2xl border border-zinc-200 bg-[#FFFBF2] p-4 text-sm text-zinc-600">
-                        No subjects yet. Create one in “Manage”.
-                      </div>
-                    ) : null}
-                  </div>
-                )}
+                  {(subjects ?? []).length === 0 ? (
+                    <div className="col-span-2 rounded-2xl border border-zinc-200 bg-[#FFFBF2] p-4 text-sm text-zinc-600">
+                      No subjects yet. Create one in “Manage”.
+                    </div>
+                  ) : null}
+                </div>
               </section>
 
-              {/* Challenges */}
               <section className="col-span-12 lg:col-span-6 rounded-3xl bg-white p-6 shadow-sm border border-zinc-200">
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-semibold text-zinc-900">Challenges</p>
@@ -407,16 +392,8 @@ export default function Dashboard() {
                 </div>
 
                 <div className="mt-4 grid grid-cols-2 gap-4">
-                  <ChallengeCard
-                    title="Challenge 1"
-                    percent={55}
-                    description="Study at least 10 hours during this week"
-                  />
-                  <ChallengeCard
-                    title="Challenge 2"
-                    percent={92}
-                    description="Complete all planned tasks without skipping a day"
-                  />
+                  <ChallengeCard title="Challenge 1" percent={55} description="Study at least 10 hours during this week" />
+                  <ChallengeCard title="Challenge 2" percent={92} description="Complete all planned tasks without skipping a day" />
                 </div>
 
                 <div className="mt-4 rounded-2xl bg-[#FFFBF2] border border-zinc-200 p-4">
@@ -429,7 +406,6 @@ export default function Dashboard() {
             <footer className="mt-10 text-center text-xs text-zinc-400">REVE dashboard</footer>
           </div>
 
-          {/* Toast */}
           <AnimatePresence>
             {toast && (
               <motion.div
@@ -444,13 +420,7 @@ export default function Dashboard() {
                 <p className="mt-1 text-xs text-zinc-600">
                   Studied <span className="font-semibold text-zinc-900">{toast.minutes} min</span>
                   <br />
-                  {toast.points > 0 ? (
-                    <>
-                      XP <span className="font-semibold text-emerald-600">+{toast.points}</span>
-                    </>
-                  ) : (
-                    <span className="text-zinc-500">No XP (minimum 5 minutes)</span>
-                  )}
+                  XP <span className="font-semibold text-emerald-600">+{toast.points}</span>
                   {" · "}Today{" "}
                   <span className="font-semibold text-zinc-900">
                     +{clamp(toast.hours, 0, 24).toFixed(2)}h

@@ -5,19 +5,15 @@ import { Mail, User2, Camera, Check, X, Lock, ShieldAlert, Trash2 } from "lucide
 
 import Sidebar from "@/components/Dashboard/SidebarIcon";
 import Topbar from "@/components/Dashboard/DashboardHeader";
-import { fetchWithAuth } from "@/utils/fetchWithAuth";
-import { getAccessToken, logout } from "@/utils/authToken";
+
+import { logout, getAccessToken } from "@/utils/authToken";
+import { setAccessToken } from "@/utils/authToken";
+import { ApiError, authClient, profileClient } from "@/api/client";
 
 const EASE_OUT: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
-/** ====== Profile service endpoints ====== **/
-const API_GATEWAY = "http://localhost:8080/api";
-const ME_URL = `${API_GATEWAY}/auth/me`;
-const PROFILE_PATCH_URL = `${API_GATEWAY}/profile`;
-const PASSWORD_URL = `${API_GATEWAY}/profile/password`;
-
 /** ====== Media service endpoints (Swagger) ====== **/
-const MEDIA_ORIGIN = "http://localhost:3004";
+const MEDIA_ORIGIN = import.meta.env.VITE_API_MEDIA_ORIGIN || "http://localhost:3004";
 const MEDIA_AVATAR_URL = `${MEDIA_ORIGIN}/api/media/avatar`; // GET/POST/DELETE
 
 type UserProfile = {
@@ -248,33 +244,63 @@ function EditableRow({
   );
 }
 
-/** ====== Media helpers ====== **/
+/* ===========================
+   Media + refresh helpers
+   =========================== */
+
+const AUTH_BASE = (import.meta.env.VITE_API_AUTH_BASE || "http://localhost:3000/api").replace(/\/+$/, "");
+const REFRESH_URL = `${AUTH_BASE}/auth/refresh-token`;
+
+async function refreshAccessTokenOnce(): Promise<boolean> {
+  try {
+    const res = await fetch(REFRESH_URL, { method: "POST", credentials: "include" });
+    if (!res.ok) return false;
+
+    const ct = res.headers.get("content-type") || "";
+    if (ct.includes("application/json")) {
+      const data: any = await res.json().catch(() => null);
+      if (data?.token) setAccessToken(data.token);
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function mediaFetchWithRetry(input: RequestInfo, init: RequestInit = {}) {
+  const doReq = () =>
+    fetch(input, {
+      ...init,
+      credentials: "include",
+      headers: {
+        ...(init.headers || {}),
+        ...(getAccessToken() ? { Authorization: `Bearer ${getAccessToken()}` } : {}),
+      },
+    });
+
+  let res = await doReq();
+
+  if (res.status === 401) {
+    const ok = await refreshAccessTokenOnce();
+    if (!ok) return res;
+    res = await doReq();
+  }
+
+  return res;
+}
+
 async function mediaFetchAvatarBlob(): Promise<Blob | null> {
-  const token = getAccessToken();
-  if (!token) return null;
-
-  const res = await fetch(MEDIA_AVATAR_URL, {
-    method: "GET",
-    headers: { Authorization: `Bearer ${token}` },
-    credentials: "include",
-  });
-
+  const res = await mediaFetchWithRetry(MEDIA_AVATAR_URL, { method: "GET" });
   if (!res.ok) return null;
   return await res.blob();
 }
 
 async function mediaUploadAvatar(file: File): Promise<void> {
-  const token = getAccessToken();
-  if (!token) throw new Error("UNAUTHENTICATED");
-
   const fd = new FormData();
-  // ✅ طبق curl: -F 'file=@...'
   fd.append("file", file);
 
-  const res = await fetch(MEDIA_AVATAR_URL, {
+  const res = await mediaFetchWithRetry(MEDIA_AVATAR_URL, {
     method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
-    credentials: "include",
     body: fd,
   });
 
@@ -289,14 +315,7 @@ async function mediaUploadAvatar(file: File): Promise<void> {
 }
 
 async function mediaDeleteAvatar(): Promise<void> {
-  const token = getAccessToken();
-  if (!token) throw new Error("UNAUTHENTICATED");
-
-  const res = await fetch(MEDIA_AVATAR_URL, {
-    method: "DELETE",
-    headers: { Authorization: `Bearer ${token}` },
-    credentials: "include",
-  });
+  const res = await mediaFetchWithRetry(MEDIA_AVATAR_URL, { method: "DELETE" });
 
   if (!res.ok) {
     let msg = "Avatar delete failed.";
@@ -307,6 +326,10 @@ async function mediaDeleteAvatar(): Promise<void> {
     throw new Error(msg);
   }
 }
+
+/* ===========================
+   Settings Page
+   =========================== */
 
 export default function Settings() {
   const [loading, setLoading] = useState(true);
@@ -336,7 +359,6 @@ export default function Settings() {
     currentUrlRef.current = nextUrl;
     setAvatarSrc(nextUrl);
 
-    // قبلی رو نگه می‌داریم تا بعد از load تصویر revoke کنیم
     if (prev && prev !== nextUrl) pendingRevokeRef.current.push(prev);
   };
 
@@ -353,13 +375,11 @@ export default function Settings() {
     const blob = await mediaFetchAvatarBlob();
     if (!blob) {
       setAvatarObjectUrl(null);
-      // وقتی null شد هم pending رو می‌تونیم پاک کنیم
       revokePending();
       return;
     }
     const url = URL.createObjectURL(blob);
     setAvatarObjectUrl(url);
-    // revoke رو نمی‌زنیم تا وقتی img load بشه
   };
 
   // cleanup (StrictMode causes quick unmount/mount in dev)
@@ -368,7 +388,6 @@ export default function Settings() {
       const cur = currentUrlRef.current;
       const pend = [...pendingRevokeRef.current];
 
-      // ✅ به‌جای revoke فوری، با تاخیر انجام بده تا مرورگر وسط load گیر نکند
       window.setTimeout(() => {
         try {
           if (cur) URL.revokeObjectURL(cur);
@@ -388,17 +407,12 @@ export default function Settings() {
 
     const run = async () => {
       try {
-        const res = await fetchWithAuth(ME_URL);
-        if (!res.ok) {
-          await logout();
-          return;
-        }
-
-        const data = await res.json().catch(() => null);
+        // ✅ me از سرویس auth
+        const data: any = await authClient.get("/auth/me");
         const u = (data?.user ?? data) as any;
 
         const normalized: UserProfile = {
-          id: u.id,
+          id: u.id ?? u.uid ?? "",
           username: u.username ?? "",
           email: u.email ?? "",
           fullName: u.fullName ?? u.name ?? null,
@@ -420,27 +434,11 @@ export default function Settings() {
     return () => {
       mounted = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /** ====== Profile API ====== **/
   const patchProfile = async (payload: Partial<UserProfile>) => {
-    const res = await fetchWithAuth(PROFILE_PATCH_URL, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-
-    if (!res.ok) {
-      let msg = "Update failed.";
-      try {
-        const j = await res.json();
-        msg = j?.message ?? j?.error ?? msg;
-      } catch {}
-      throw new Error(msg);
-    }
-
-    const data = await res.json().catch(() => null);
+    const data: any = await profileClient.patch("/profile", payload);
     const u = (data?.user ?? data) as any;
 
     setMe((prev) =>
@@ -464,7 +462,8 @@ export default function Settings() {
       await patchProfile({ [field]: next } as any);
       setToast({ kind: "success", title: "Saved", message: `${field} updated successfully.` });
     } catch (e: any) {
-      setToast({ kind: "error", title: "Couldn’t save", message: e?.message ?? "Try again." });
+      const msg = e instanceof ApiError ? e.message : (e?.message ?? "Try again.");
+      setToast({ kind: "error", title: "Couldn’t save", message: msg });
       setMe((p) => (p ? { ...p, [field]: prevValue } : p));
     }
   };
@@ -475,7 +474,6 @@ export default function Settings() {
   const onAvatarSelected = async (file: File | null) => {
     if (!file) return;
 
-    // preview سریع
     const previewUrl = URL.createObjectURL(file);
     setAvatarObjectUrl(previewUrl);
 
@@ -523,26 +521,17 @@ export default function Settings() {
 
     setPwSaving(true);
     try {
-      const res = await fetchWithAuth(PASSWORD_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ currentPassword: pw.current, newPassword: pw.next }),
+      await profileClient.post("/profile/password", {
+        currentPassword: pw.current,
+        newPassword: pw.next,
       });
-
-      if (!res.ok) {
-        let msg = "Password update failed.";
-        try {
-          const j = await res.json();
-          msg = j?.message ?? j?.error ?? msg;
-        } catch {}
-        throw new Error(msg);
-      }
 
       setPwOpen(false);
       setPw({ current: "", next: "", confirm: "" });
       setToast({ kind: "success", title: "Password updated" });
     } catch (e: any) {
-      setToast({ kind: "error", title: "Couldn’t update password", message: e?.message ?? "Try again." });
+      const msg = e instanceof ApiError ? e.message : (e?.message ?? "Try again.");
+      setToast({ kind: "error", title: "Couldn’t update password", message: msg });
     } finally {
       setPwSaving(false);
     }
@@ -620,7 +609,6 @@ export default function Settings() {
                               src={avatarSrc}
                               alt="avatar"
                               className="h-full w-full object-cover"
-                              // ✅ وقتی تصویر جدید لود شد، URL های قبلی revoke شوند
                               onLoad={revokePending}
                             />
                           ) : (

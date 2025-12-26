@@ -1,8 +1,11 @@
 import { Search, Bell, Mail, User2, Settings2 } from "lucide-react";
 import CommandPalette from "../ui/CommandPalette";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
+
+import { authClient } from "@/api/client";
+import { getAccessToken, setAccessToken } from "@/utils/authToken";
 
 const EASE_OUT: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
@@ -13,6 +16,61 @@ type TopbarProfile = {
   role?: string;
   avatarUrl?: string | null;
 };
+
+function stripTrailingSlashes(url: string) {
+  return url.replace(/\/+$/, "");
+}
+
+const AUTH_BASE = stripTrailingSlashes(
+  import.meta.env.VITE_API_AUTH_BASE || "http://localhost:3000/api"
+);
+const REFRESH_URL = `${AUTH_BASE}/auth/refresh-token`;
+
+const MEDIA_ORIGIN = stripTrailingSlashes(
+  import.meta.env.VITE_API_MEDIA_ORIGIN || "http://localhost:3004"
+);
+const MEDIA_AVATAR_URL = `${MEDIA_ORIGIN}/api/media/avatar`;
+
+async function refreshAccessTokenOnce(): Promise<boolean> {
+  try {
+    const res = await fetch(REFRESH_URL, {
+      method: "POST",
+      credentials: "include",
+    });
+    if (!res.ok) return false;
+
+    const ct = res.headers.get("content-type") || "";
+    if (ct.includes("application/json")) {
+      const data: any = await res.json().catch(() => null);
+      if (data?.token) setAccessToken(data.token);
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function fetchAvatarBlobWithRetry(): Promise<Blob | null> {
+  const doReq = async () => {
+    const token = getAccessToken();
+    return fetch(MEDIA_AVATAR_URL, {
+      method: "GET",
+      credentials: "include",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+  };
+
+  let res = await doReq();
+
+  if (res.status === 401) {
+    const ok = await refreshAccessTokenOnce();
+    if (!ok) return null;
+    res = await doReq();
+  }
+
+  if (!res.ok) return null;
+  return await res.blob();
+}
 
 export default function Topbar({
   username,
@@ -25,17 +83,25 @@ export default function Topbar({
   const [profileOpen, setProfileOpen] = useState(false);
   const navigate = useNavigate();
 
+  // ✅ state داخلی برای وقتی profile پاس داده نشده
+  const [remoteProfile, setRemoteProfile] = useState<TopbarProfile | null>(null);
+  const [loadingProfile, setLoadingProfile] = useState(false);
+
+  // ✅ avatar blob url management
+  const avatarObjectUrlRef = useRef<string | null>(null);
+
   const p = useMemo<TopbarProfile>(() => {
-    return (
-      profile ?? {
-        username,
-        email: undefined,
-        fullName: username,
-        role: "Student",
-        avatarUrl: null,
-      }
-    );
-  }, [profile, username]);
+    if (profile) return profile;
+    if (remoteProfile) return remoteProfile;
+
+    return {
+      username,
+      email: undefined,
+      fullName: username,
+      role: "Student",
+      avatarUrl: null,
+    };
+  }, [profile, remoteProfile, username]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -51,6 +117,71 @@ export default function Topbar({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  // ✅ اگر profile از بیرون نیومده، از API بگیر
+  useEffect(() => {
+    if (profile) return; // parent خودش می‌ده
+    let mounted = true;
+
+    const run = async () => {
+      setLoadingProfile(true);
+      try {
+        // 1) me از سرویس auth
+        const data: any = await authClient.get("/auth/me");
+        const u = (data?.user ?? data) as any;
+
+        const next: TopbarProfile = {
+          username: u?.username ?? username,
+          email: u?.email ?? undefined,
+          fullName: u?.fullName ?? u?.name ?? u?.username ?? username,
+          role: u?.role ?? "Student",
+          avatarUrl: null,
+        };
+
+        // 2) avatar از سرویس media (blob)
+        const blob = await fetchAvatarBlobWithRetry();
+        if (blob) {
+          const objUrl = URL.createObjectURL(blob);
+
+          // revoke قبلی
+          if (avatarObjectUrlRef.current) {
+            try {
+              URL.revokeObjectURL(avatarObjectUrlRef.current);
+            } catch {}
+          }
+          avatarObjectUrlRef.current = objUrl;
+          next.avatarUrl = objUrl;
+        }
+
+        if (!mounted) return;
+        setRemoteProfile(next);
+      } catch {
+        // اگر session خراب بود، فقط fallback نگه دار
+        if (!mounted) return;
+        setRemoteProfile({
+          username,
+          fullName: username,
+          role: "Student",
+          avatarUrl: null,
+        });
+      } finally {
+        if (mounted) setLoadingProfile(false);
+      }
+    };
+
+    run();
+
+    return () => {
+      mounted = false;
+      // cleanup blob url
+      if (avatarObjectUrlRef.current) {
+        try {
+          URL.revokeObjectURL(avatarObjectUrlRef.current);
+        } catch {}
+        avatarObjectUrlRef.current = null;
+      }
+    };
+  }, [profile, username]);
 
   return (
     <>
@@ -121,8 +252,7 @@ export default function Topbar({
                 <Bell className="h-4 w-4 text-zinc-600 transition-transform duration-300 group-hover:-rotate-6" />
               </button>
 
-
-              {/* Profile (hover tooltip + click -> settings) */}
+              {/* Profile */}
               <div
                 className="relative"
                 onMouseEnter={() => setProfileOpen(true)}
@@ -156,7 +286,7 @@ export default function Topbar({
                       {p.fullName?.trim() || p.username}
                     </div>
                     <div className="mt-1 text-[11px] text-zinc-500 leading-none">
-                      {p.role ?? "Student"}
+                      {loadingProfile ? "Loading..." : (p.role ?? "Student")}
                     </div>
                   </div>
 
@@ -183,7 +313,6 @@ export default function Topbar({
                         z-40
                       "
                     >
-                      {/* accents */}
                       <div className="pointer-events-none absolute -top-12 -right-14 h-44 w-44 rounded-full bg-yellow-200/35 blur-3xl" />
                       <div className="pointer-events-none absolute -bottom-16 -left-16 h-52 w-52 rounded-full bg-sky-200/20 blur-3xl" />
 
@@ -203,7 +332,9 @@ export default function Topbar({
                             <p className="text-sm font-semibold text-zinc-900 truncate">
                               {p.fullName?.trim() || p.username}
                             </p>
-                            <p className="mt-0.5 text-xs text-zinc-500 truncate">{p.role ?? "Student"}</p>
+                            <p className="mt-0.5 text-xs text-zinc-500 truncate">
+                              {loadingProfile ? "Loading..." : (p.role ?? "Student")}
+                            </p>
 
                             <div className="mt-2 flex flex-wrap gap-2">
                               <span className="inline-flex items-center rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-[11px] font-semibold text-zinc-600">

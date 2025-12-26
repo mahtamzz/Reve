@@ -1,55 +1,82 @@
 // src/pages/DashboardAdmin.tsx
-import React, { useEffect, useState, useRef } from "react";
-import { fetchWithAuth } from "@/utils/fetchWithAuth";
+import React, { useEffect, useState } from "react";
 import { logout_admin } from "@/utils/authToken";
+import { ApiError, createApiClient } from "@/api/client";
 
 interface AdminUser {
-  id: number;
+  id: number | string;
   username: string;
   email: string;
   role?: string;
 }
 
+// ✅ اگر از قبل authClient داری، این بخش رو حذف کن و از همون import کن.
+// مثال: import { authClient } from "@/api/client";
+const AUTH_BASE = import.meta.env.VITE_API_AUTH_BASE || "http://localhost:3000/api";
+const authClient = createApiClient(AUTH_BASE).apiClient;
+
+// ✅ اگر Gateway داری (8080) و می‌خوای از اون بزنی، اینو بذار:
+const API_GATEWAY = import.meta.env.VITE_API_GATEWAY || "http://localhost:8080/api";
+// مسیر درست همونیه که داشتی:
+const ADMIN_ME_PATH = "/auth/admin/me";
+
+function getHttpStatus(err: unknown): number | undefined {
+  return err instanceof ApiError ? err.status : (err as any)?.status;
+}
+
 const DashboardAdmin: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<AdminUser | null>(null);
-  const fetchedRef = useRef(false);
 
   useEffect(() => {
-    if (fetchedRef.current) return; 
-    fetchedRef.current = true;
+    let mounted = true;
 
-    const fetchMe = async () => {
+    const run = async () => {
       try {
-        const res = await fetchWithAuth("http://localhost:8080/api/auth/admin/me");
+        // ✅ اینجا از Gateway می‌زنیم (8080) چون endpoint اونجاست.
+        // برای اینکار باید یه client مخصوص gateway بسازیم:
+        const gatewayClient = createApiClient(API_GATEWAY).apiClient;
 
-        if (!res.ok) {
-          console.error("ME ERROR STATUS (admin):", res.status);
+        const data: any = await gatewayClient.get(ADMIN_ME_PATH, {
+          auth: true,
+          retry: true,
+        });
+
+        const u = (data?.user ?? data) as any;
+
+        if (!u || u.role !== "admin") {
           await logout_admin();
           return;
         }
 
-        const data = await res.json();
-        console.log("ME RESPONSE (admin dashboard):", data);
-
-        const userData = data.user ?? data;
-
-        if (userData.role !== "admin") {
-          console.warn("User is NOT admin → redirecting");
-          await logout_admin();
-          return;
-        }
-
-        setUser(userData);
+        if (!mounted) return;
+        setUser({
+          id: u.id,
+          username: u.username ?? "",
+          email: u.email ?? "",
+          role: u.role,
+        });
       } catch (err) {
+        const status = getHttpStatus(err);
+
+        // ✅ اگه auth مشکل داشت → logout
+        if (status === 401 || status === 403) {
+          await logout_admin();
+          return;
+        }
+
         console.error("Admin /me failed:", err);
         await logout_admin();
       } finally {
-        setLoading(false);
+        if (mounted) setLoading(false);
       }
     };
 
-    fetchMe();
+    run();
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   if (loading) {
@@ -63,18 +90,14 @@ const DashboardAdmin: React.FC = () => {
   if (!user) {
     return (
       <div className="min-h-screen bg-loginbg font-serif text-brand-text flex items-center justify-center">
-        <p className="text-creamtext">
-          Admin session expired. Please log in again.
-        </p>
+        <p className="text-creamtext">Admin session expired. Please log in again.</p>
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-loginbg font-serif text-brand-text flex flex-col items-center">
-      <h1 className="mt-10 text-2xl text-creamtext">
-        Welcome Admin, {user.username}
-      </h1>
+      <h1 className="mt-10 text-2xl text-creamtext">Welcome Admin, {user.username}</h1>
 
       <button
         onClick={logout_admin}
