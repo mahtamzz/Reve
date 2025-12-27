@@ -1,9 +1,10 @@
 class VerifyOtp {
-    constructor({ userRepo, cache, tokenService, eventBus }) {
+    constructor({ userRepo, cache, tokenService, eventBus, refreshTokenStore }) {
         this.userRepo = userRepo;
         this.cache = cache;
         this.tokenService = tokenService;
         this.eventBus = eventBus;
+        this.refreshTokenStore = refreshTokenStore;
     }
 
     async execute({ email, otp }) {
@@ -39,6 +40,10 @@ class VerifyOtp {
             uid: user.id,
             username: user.username
         });
+
+        // ✅ STORE THE NEW jti (rotation baseline)
+        const refreshPayload = this.tokenService.verifyRefresh(refreshToken);
+        await this.refreshTokenStore.set(user.id, refreshPayload.jti, 7 * 24 * 60 * 60);
 
         return { user, accessToken, refreshToken };
     }

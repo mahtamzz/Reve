@@ -8,6 +8,7 @@ const CacheService = require("../infrastructure/cache/CacheService");
 
 const EmailService = require("../infrastructure/mail/EmailService");
 const JwtService = require("../infrastructure/auth/JwtService");
+const RefreshTokenStore = require("../infrastructure/auth/RefreshTokenStore");
 const EventBus = require("../infrastructure/messaging/EventBus");
 
 const UserRepositoryPg = require("../infrastructure/repositories/UserRepositoryPg");
@@ -62,6 +63,8 @@ async function createContainer() {
 
     const jwtService = new JwtService(process.env.JWT_SECRET);
 
+    const refreshTokenStore = new RefreshTokenStore(cacheService);
+
     const eventBus = new EventBus(process.env.RABBITMQ_URL);
     await eventBus.connect();
 
@@ -92,7 +95,8 @@ async function createContainer() {
         userRepo: userRepository,
         cache: cacheService,
         tokenService: jwtService,
-        eventBus
+        eventBus, 
+        refreshTokenStore
     });
 
     const resendOtp = new ResendOtpUC({
@@ -104,7 +108,8 @@ async function createContainer() {
         userRepo: userRepository,
         cache: cacheService,
         tokenService: jwtService,
-        hasher: { compare: (plain, hashed) => bcrypt.compare(plain, hashed) }
+        hasher: { compare: (plain, hashed) => bcrypt.compare(plain, hashed) }, 
+        refreshTokenStore
     });
 
     const sendLoginOtp = new SendLoginOtpUC({
@@ -116,7 +121,8 @@ async function createContainer() {
     const verifyLoginOtp = new VerifyLoginOtpUC({
         userRepo: userRepository,
         cache: cacheService,
-        tokenService: jwtService
+        tokenService: jwtService,
+        refreshTokenStore
     });
 
     const forgotPassword = new ForgotPasswordUC({
@@ -129,11 +135,12 @@ async function createContainer() {
         userRepo: userRepository,
         cache: cacheService,
         tokenService: jwtService,
-        hasher: { hash: (password) => bcrypt.hash(password, 10) }
+        hasher: { hash: (password) => bcrypt.hash(password, 10) },
+        refreshTokenStore
     });
 
-    const refreshToken = new RefreshTokenUC(jwtService, userRepository);
-    const googleAuth = new GoogleAuthUC(userRepository, jwtService);
+    const refreshToken = new RefreshTokenUC(jwtService, userRepository, refreshTokenStore);
+    const googleAuth = new GoogleAuthUC(userRepository, jwtService, refreshTokenStore);
 
     const adminLogin = new AdminLoginUC({
         adminRepo: adminRepository,
@@ -188,6 +195,7 @@ async function createContainer() {
         cacheService,
         emailService,
         jwtService,
+        refreshTokenStore,
         eventBus
     };
 }

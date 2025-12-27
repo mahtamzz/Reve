@@ -309,19 +309,13 @@ module.exports = function createAuthRoutes(container) {
      * @swagger
      * /api/auth/refresh-token:
      *   post:
-     *     summary: Refresh access token using refresh token cookie
+     *     summary: Refresh access token
      *     tags: [Auth]
-     *     parameters:
-     *       - in: header
-     *         name: Cookie
-     *         required: false
-     *         schema:
-     *           type: string
-     *         description: 'For Swagger testing: refreshToken=<token>'
-     *         example: 'refreshToken=YOUR_REFRESH_TOKEN_HERE'
+     *     security:
+     *       - bearerAuth: []
      *     responses:
      *       200:
-     *         description: New access token issued
+     *         description: New tokens issued
      *       401:
      *         description: Invalid refresh token
      */

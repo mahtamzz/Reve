@@ -1,9 +1,10 @@
 class ResetPassword {
-    constructor({ userRepo, cache, tokenService, hasher }) {
+    constructor({ userRepo, cache, tokenService, hasher, refreshTokenStore }) {
         this.userRepo = userRepo;
         this.cache = cache;
         this.tokenService = tokenService;
         this.hasher = hasher;
+        this.refreshTokenStore = refreshTokenStore;
     }
 
     async execute({ email, otp, newPassword }) {
@@ -29,6 +30,10 @@ class ResetPassword {
             uid: user.id,
             username: user.username
         });
+
+        // ✅ STORE THE NEW jti (rotation baseline)
+        const refreshPayload = this.tokenService.verifyRefresh(refreshToken);
+        await this.refreshTokenStore.set(user.id, refreshPayload.jti, 7 * 24 * 60 * 60);
 
         return { user, accessToken, refreshToken };
     }

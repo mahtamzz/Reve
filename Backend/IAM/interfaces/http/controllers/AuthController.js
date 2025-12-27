@@ -151,25 +151,35 @@ class AuthController {
 
     refreshToken = async (req, res) => {
         try {
-            const token = req.cookies.refreshToken;
+            const authHeader = req.headers.authorization || "";
+            const bearer =
+                authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
+
+            const cookieToken = req.cookies?.refreshToken; // still works for frontend
+            const token = bearer || cookieToken;
+
+            if (!token) {
+                return res.status(401).json({ message: "No refresh token provided" });
+            }
 
             const { user, accessToken, refreshToken } =
                 await this.refreshTokenUC.execute(token);
 
             setTokenCookie(res, accessToken, refreshToken);
 
-            // FOR SWAGGER TESTING -- DEV ONLY
+            // FOR SWAGGER TESTING -- use the current refresh token in the Authorize filed (not the the access token)
             console.log("🔁 [DEV] Refreshed access token:");
             console.log(accessToken);
 
             console.log("🔁 [DEV] Refreshed refresh token:");
             console.log(refreshToken);
 
-            res.json({ user });
+            return res.json({ user });
         } catch (err) {
-            res.status(401).json({ message: err.message });
+            return res.status(401).json({ message: err.message });
         }
     };
+
 
 
     /* ---------------- GOOGLE AUTH ---------------- */

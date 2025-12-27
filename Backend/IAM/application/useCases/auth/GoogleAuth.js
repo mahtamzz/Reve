@@ -1,8 +1,9 @@
 class GoogleAuth {
-    constructor({ userRepository, jwtService, eventBus }) {
+    constructor({ userRepository, jwtService, eventBus, refreshTokenStore }) {
         this.userRepository = userRepository;
         this.jwtService = jwtService;
         this.eventBus = eventBus;
+        this.refreshTokenStore = refreshTokenStore;
     }
 
     async execute(profile) {
@@ -50,6 +51,10 @@ class GoogleAuth {
             username: user.username,
             role: "user"
         });
+
+        // ✅ STORE THE NEW jti (rotation baseline)
+        const refreshPayload = this.tokenService.verifyRefresh(refreshToken);
+        await this.refreshTokenStore.set(user.id, refreshPayload.jti, 7 * 24 * 60 * 60);
 
         return { user, accessToken, refreshToken };
     }
