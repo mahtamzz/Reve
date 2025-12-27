@@ -31,7 +31,7 @@ function createApp(container) {
             },
             servers: [
                 {
-                    url: "http://localhost:3001/api/profile"
+                    url: "http://localhost:3001"
                 }
             ],
             components: {
@@ -51,11 +51,7 @@ function createApp(container) {
     };
 
     const swaggerSpec = swaggerJsdoc(swaggerOptions);
-    app.use(
-        "/api/profile/docs",
-        swaggerUi.serve,
-        swaggerUi.setup(swaggerSpec)
-    );
+    app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
     app.use("/api/profile", container.routers.profileRouter);
 

@@ -10,6 +10,7 @@ const EmailService = require("../infrastructure/mail/EmailService");
 const JwtService = require("../infrastructure/auth/JwtService");
 const RefreshTokenStore = require("../infrastructure/auth/RefreshTokenStore");
 const EventBus = require("../infrastructure/messaging/EventBus");
+const UserProfileEventsConsumer = require("../infrastructure/messaging/UserProfileEventsConsumer");
 
 const UserRepositoryPg = require("../infrastructure/repositories/UserRepositoryPg");
 const AdminRepositoryPg = require("../infrastructure/repositories/AdminRepositoryPg");
@@ -33,6 +34,7 @@ const AdminResetPasswordUC = require("../application/useCases/auth/AdminResetPas
 
 const GetCurrentUserUC = require("../application/useCases/users/GetCurrentUser");
 const GetCurrentAdminUC = require("../application/useCases/users/GetCurrentAdmin");
+const ChangePasswordUC = require("../application/useCases/users/ChangePassword");
 
 /* =========================
     ASYNC INITIALIZATION
@@ -95,7 +97,7 @@ async function createContainer() {
         userRepo: userRepository,
         cache: cacheService,
         tokenService: jwtService,
-        eventBus, 
+        eventBus,
         refreshTokenStore
     });
 
@@ -108,7 +110,7 @@ async function createContainer() {
         userRepo: userRepository,
         cache: cacheService,
         tokenService: jwtService,
-        hasher: { compare: (plain, hashed) => bcrypt.compare(plain, hashed) }, 
+        hasher: { compare: (plain, hashed) => bcrypt.compare(plain, hashed) },
         refreshTokenStore
     });
 
@@ -164,6 +166,20 @@ async function createContainer() {
     const getCurrentUser = new GetCurrentUserUC({ userRepo: userRepository });
     const getCurrentAdmin = new GetCurrentAdminUC({ adminRepo: adminRepository });
 
+    const changePassword = new ChangePasswordUC({
+        userRepo: userRepository,
+        hasher: {
+            compare: (plain, hashed) => bcrypt.compare(plain, hashed),
+            hash: (plain) => bcrypt.hash(plain, 10)
+        }
+    });
+
+
+    const userProfileEventsConsumer = new UserProfileEventsConsumer(
+        process.env.RABBITMQ_URL,
+        { userRepo: userRepository, cache: cacheService }
+    );
+
     /* EXPORT CONTAINER */
     return {
         // user
@@ -186,6 +202,7 @@ async function createContainer() {
         // identity
         getCurrentUser,
         getCurrentAdmin,
+        changePassword,
 
         // infrastructure
         userRepository,
@@ -196,7 +213,8 @@ async function createContainer() {
         emailService,
         jwtService,
         refreshTokenStore,
-        eventBus
+        eventBus,
+        userProfileEventsConsumer
     };
 }
 

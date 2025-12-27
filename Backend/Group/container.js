@@ -21,6 +21,8 @@ const GetGroupDetails = require("./application/useCases/DetailsRelated/GetGroupD
 const JoinGroup = require("./application/useCases/DetailsRelated/JoinGroup");
 const LeaveGroup = require("./application/useCases/DetailsRelated/LeaveGroup");
 const UpdateGroup = require("./application/useCases/DetailsRelated/UpdateGroup");
+const ListGroups = require("./application/useCases/DetailsRelated/ListGroups");
+const SearchGroups = require("./application/useCases/DetailsRelated/SearchGroups");
 
 /* USE CASES – Members */
 const ApproveJoinRequest = require("./application/useCases/MemberRelated/ApproveJoinRequest");
@@ -92,6 +94,10 @@ async function createContainer() {
         auditRepo
     );
 
+    const listGroups = new ListGroups(groupRepo);
+    const searchGroups = new SearchGroups(groupRepo);
+
+
     const approveJoinRequest = new ApproveJoinRequest(
         groupMemberRepo,
         joinRequestRepo,
@@ -122,6 +128,8 @@ async function createContainer() {
         joinGroup,
         leaveGroup,
         updateGroup,
+        listGroups,
+        searchGroups,
         approveJoinRequest,
         rejectJoinRequest,
         changeMemberRole,

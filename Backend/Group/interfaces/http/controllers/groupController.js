@@ -9,7 +9,9 @@ function createGroupController(useCases) {
         approveJoinRequest,
         rejectJoinRequest,
         changeMemberRole,
-        kickMember
+        kickMember,
+        listGroups,
+        searchGroups
     } = useCases;
 
     return {
@@ -147,7 +149,44 @@ function createGroupController(useCases) {
             } catch (err) {
                 next(err);
             }
-        }
+        },
+
+        async list(req, res, next) {
+            try {
+                const limit = Math.min(parseInt(req.query.limit || '20', 10), 100);
+                const offset = Math.max(parseInt(req.query.offset || '0', 10), 0);
+
+                const groups = await listGroups.execute({
+                    viewerUid: req.user.uid,
+                    limit,
+                    offset
+                });
+
+                res.json(groups);
+            } catch (err) {
+                next(err);
+            }
+        },
+
+        async search(req, res, next) {
+            try {
+                const q = req.query.q || '';
+                const limit = Math.min(parseInt(req.query.limit || '20', 10), 100);
+                const offset = Math.max(parseInt(req.query.offset || '0', 10), 0);
+
+                const groups = await searchGroups.execute({
+                    viewerUid: req.user.uid,
+                    q,
+                    limit,
+                    offset
+                });
+
+                res.json(groups);
+            } catch (err) {
+                next(err);
+            }
+        },
+
     };
 };
 

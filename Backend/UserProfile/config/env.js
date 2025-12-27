@@ -15,6 +15,10 @@ const env = {
     PGHOST: process.env.PGHOST || 'localhost',
     PGDATABASE: process.env.PGDATABASE || 'user_profile_db',
     PGPORT: process.env.PGPORT || 5432,
+
+    RABBITMQ_URL: process.env.RABBITMQ_URL || "amqp://localhost",
+
+    IAM_BASE_URL: process.env.IAM_BASE_URL || "http://iam_service:3000",
 };
 
 module.exports = env;

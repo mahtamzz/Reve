@@ -1,3 +1,4 @@
+const env = require("./config/env");
 const PgClient = require("./infrastructure/db/postgres");
 
 /* SHARED */
@@ -25,10 +26,13 @@ const UserProfileController = require("./interfaces/http/controllers/UserProfile
 const createProfileRouter = require("./interfaces/http/routes/profile.routes.js");
 
 /* EVENTS */
+const EventBus = require("./infrastructure/messaging/EventBus");
 const UserEventsConsumer = require("./infrastructure/messaging/UserEventsConsumer");
 
-async function createContainer() {
 
+const IamClient = require("./infrastructure/iam/IamClient");
+
+async function createContainer() {
     /* DB */
     const db = new PgClient({
         host: process.env.PGHOST,
@@ -44,30 +48,38 @@ async function createContainer() {
     const auditRepo = new PgAuditRepo({ pool: db });
 
     /* JWT */
-    const jwtVerifier = new JwtVerifier({
-        secret: process.env.JWT_SECRET
-    });
-
+    const jwtVerifier = new JwtVerifier({ secret: process.env.JWT_SECRET });
     const auth = authMiddleware(jwtVerifier);
 
+    /* EVENT BUS (publisher) */
+    const eventBus = new EventBus(process.env.RABBITMQ_URL);
+    await eventBus.connect();
+
     /* USE CASES */
-    const createUserProfileUC = new CreateUserProfile(
-        profileRepo,
-        prefsRepo,
-        auditRepo
-    );
+    const createUserProfileUC = new CreateUserProfile(profileRepo, prefsRepo, auditRepo);
 
     const getUserProfileUC = new GetUserProfile(profileRepo, prefsRepo);
-    const updateUserProfileUC = new UpdateUserProfile(profileRepo, auditRepo);
+    const updateUserProfileUC = new UpdateUserProfile(profileRepo, auditRepo, eventBus);
     const updateUserPreferencesUC = new UpdateUserPreferences(prefsRepo, auditRepo);
     const getDashboardUC = new GetDashboard(profileRepo, dailyRepo);
+
+    /* EVENT CONSUMER (subscriber) */
+    const userEventsConsumer = new UserEventsConsumer(
+        process.env.RABBITMQ_URL,
+        createUserProfileUC
+    );
+
+
+    const iamClient = new IamClient({ baseUrl: env.IAM_BASE_URL });
+
 
     /* CONTROLLER */
     const userProfileController = new UserProfileController({
         getProfile: getUserProfileUC,
         updateProfile: updateUserProfileUC,
         updatePreferences: updateUserPreferencesUC,
-        getDashboard: getDashboardUC
+        getDashboard: getDashboardUC,
+        iamClient
     });
 
     /* ROUTER */
@@ -77,19 +89,10 @@ async function createContainer() {
         controller: userProfileController
     });
 
-    /* EVENT CONSUMER */
-    const userEventsConsumer = new UserEventsConsumer(
-        process.env.RABBITMQ_URL,
-        createUserProfileUC
-    );
-
     return {
-        routers: {
-            profileRouter
-        },
-        consumers: {
-            userEventsConsumer
-        }
+        routers: { profileRouter },
+        consumers: { userEventsConsumer },
+        eventBus
     };
 }
 

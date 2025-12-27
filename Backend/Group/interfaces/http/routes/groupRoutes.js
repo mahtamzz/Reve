@@ -4,6 +4,10 @@ module.exports = function createGroupRoutes({ controller, auth }) {
     const router = express.Router();
 
     router.post("/", auth, controller.create);
+
+    router.get("/", auth, controller.list);
+    router.get("/search", auth, controller.search);
+
     router.get("/:groupId", auth, controller.getDetails);
     router.delete("/:groupId", auth, controller.remove);
     router.patch("/:groupId", auth, controller.update);
@@ -262,6 +266,149 @@ module.exports = function createGroupRoutes({ controller, auth }) {
      *       204:
      *         description: Member removed
      */
+    /**
+ * @swagger
+ * /api/groups:
+ *   get:
+ *     summary: List discoverable groups
+ *     description: >
+ *       Returns a paginated list of groups that can be discovered in the app.
+ *       Depending on product rules, this may include public and private groups but returns only summary fields.
+ *     tags: [Groups]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *           default: 20
+ *         description: Max number of groups to return.
+ *       - in: query
+ *         name: offset
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 0
+ *           default: 0
+ *         description: Number of groups to skip (pagination).
+ *     responses:
+ *       200:
+ *         description: A list of groups
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: string
+ *                     format: uuid
+ *                   name:
+ *                     type: string
+ *                   description:
+ *                     type: string
+ *                     nullable: true
+ *                   visibility:
+ *                     type: string
+ *                     enum: [public, private, invite_only]
+ *                   weekly_xp:
+ *                     type: integer
+ *                   minimum_dst_mins:
+ *                     type: integer
+ *                     nullable: true
+ *                   owner_uid:
+ *                     type: integer
+ *                   created_at:
+ *                     type: string
+ *                     format: date-time
+ *                   updated_at:
+ *                     type: string
+ *                     format: date-time
+ *       401:
+ *         description: Unauthorized
+ */
+    /**
+     * @swagger
+     * /api/groups/search:
+     *   get:
+     *     summary: Search discoverable groups
+     *     description: >
+     *       Searches groups by matching the query against group name and description.
+     *       Returns a paginated list of group summaries.
+     *     tags: [Groups]
+     *     security:
+     *       - bearerAuth: []
+     *     parameters:
+     *       - in: query
+     *         name: q
+     *         required: true
+     *         schema:
+     *           type: string
+     *           minLength: 1
+     *         description: Search query text.
+     *         example: "math focus"
+     *       - in: query
+     *         name: limit
+     *         required: false
+     *         schema:
+     *           type: integer
+     *           minimum: 1
+     *           maximum: 100
+     *           default: 20
+     *         description: Max number of groups to return.
+     *       - in: query
+     *         name: offset
+     *         required: false
+     *         schema:
+     *           type: integer
+     *           minimum: 0
+     *           default: 0
+     *         description: Number of groups to skip (pagination).
+     *     responses:
+     *       200:
+     *         description: A list of matching groups
+     *         content:
+     *           application/json:
+     *             schema:
+     *               type: array
+     *               items:
+     *                 type: object
+     *                 properties:
+     *                   id:
+     *                     type: string
+     *                     format: uuid
+     *                   name:
+     *                     type: string
+     *                   description:
+     *                     type: string
+     *                     nullable: true
+     *                   visibility:
+     *                     type: string
+     *                     enum: [public, private, invite_only]
+     *                   weekly_xp:
+     *                     type: integer
+     *                   minimum_dst_mins:
+     *                     type: integer
+     *                     nullable: true
+     *                   owner_uid:
+     *                     type: integer
+     *                   created_at:
+     *                     type: string
+     *                     format: date-time
+     *                   updated_at:
+     *                     type: string
+     *                     format: date-time
+     *       400:
+     *         description: Bad Request (missing or empty query)
+     *       401:
+     *         description: Unauthorized
+     */
+
 
     return router;
 };

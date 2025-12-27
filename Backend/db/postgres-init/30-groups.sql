@@ -91,6 +91,16 @@ CREATE TABLE group_audit_log (
 CREATE INDEX idx_group_audit_group ON group_audit_log(group_id);
 
 
+ALTER TABLE groups
+ADD COLUMN IF NOT EXISTS search_vector tsvector
+GENERATED ALWAYS AS (
+    setweight(to_tsvector('simple', coalesce(name,'')), 'A') ||
+    setweight(to_tsvector('simple', coalesce(description,'')), 'B')
+) STORED;
+
+CREATE INDEX IF NOT EXISTS idx_groups_search_vector
+ON groups USING GIN (search_vector);
+
 -- CREATE TABLE group_invites (
 --     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 

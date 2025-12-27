@@ -1,5 +1,16 @@
 const GroupRepository = require('../../domain/repositories/GroupRepository');
 
+const DISCOVERABLE_FIELDS = `
+    g.id,
+    g.name,
+    g.description,
+    g.visibility,
+    g.weekly_xp,
+    g.minimum_dst_mins,
+    g.owner_uid,
+    g.created_at,
+    g.updated_at
+`;
 class PgGroupRepository extends GroupRepository {
     constructor(db) {
         super();
@@ -100,6 +111,36 @@ class PgGroupRepository extends GroupRepository {
             [groupId]
         );
     }
+
+    async listDiscoverable({ limit = 20, offset = 0 }) {
+        const result = await this.db.query(
+            `
+            SELECT ${DISCOVERABLE_FIELDS}
+            FROM groups g
+            ORDER BY g.created_at DESC
+            LIMIT $1 OFFSET $2
+            `,
+            [limit, offset]
+        );
+        return result.rows;
+    }
+
+    async searchDiscoverable({ q, limit = 20, offset = 0 }) {
+        // FTS version (if you added search_vector)
+        const result = await this.db.query(
+            `
+            SELECT ${DISCOVERABLE_FIELDS}
+            FROM groups g
+            WHERE g.search_vector @@ websearch_to_tsquery('simple', $1)
+            ORDER BY g.created_at DESC
+            LIMIT $2 OFFSET $3
+            `,
+            [q, limit, offset]
+        );
+        return result.rows;
+    }
+
+
 }
 
 module.exports = PgGroupRepository;

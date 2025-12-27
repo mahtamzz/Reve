@@ -1,5 +1,5 @@
 require("dotenv").config();
-const createApp = require("./app");   // 👈 rename for clarity
+const createApp = require("./app");
 const initContainer = require("./container");
 const createAuthRoutes = require("./interfaces/http/routes/auth.routes");
 
@@ -9,6 +9,10 @@ async function start() {
     try {
         // 1️⃣ Initialize container (DB, Redis, RabbitMQ, etc.)
         const container = await initContainer();
+
+        // Start event consumer
+        await container.userProfileEventsConsumer.start();
+
 
         // 2️⃣ Create express app
         const app = createApp();   // ✅ THIS WAS MISSING

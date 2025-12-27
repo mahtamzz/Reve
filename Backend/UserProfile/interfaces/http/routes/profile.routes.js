@@ -12,6 +12,12 @@ module.exports = function createProfileRouter({
 
     router.patch("/preferences", auth, audit('preferences.updated'), controller.updatePreferencesInfo);
 
+    router.patch(
+        "/me/password",
+        auth, audit("password.changed"),
+        controller.changePassword
+    );
+
     return router;
 };
 
@@ -19,7 +25,7 @@ module.exports = function createProfileRouter({
 
 /**
  * @swagger
- * /me:
+ * /api/profile/me:
  *   get:
  *     summary: Get current user's profile
  *     tags: [Profile]
@@ -31,7 +37,7 @@ module.exports = function createProfileRouter({
  */
 /**
  * @swagger
- * /dashboard:
+ * /api/profile/dashboard:
  *   get:
  *     summary: Get user dashboard
  *     tags: [Profile]
@@ -43,23 +49,33 @@ module.exports = function createProfileRouter({
  */
 /**
  * @swagger
- * /me:
+ * /api/profile/me:
  *   patch:
  *     summary: Update user profile info
+ *     description: |
+ *       Updates profile fields and/or IAM fields.
+ *       - `username` updates IAM username and also syncs `display_name` in profile DB.
+ *       - `password` updates IAM password (not stored in profile DB).
  *     tags: [Profile]
  *     security:
  *       - bearerAuth: []
  *     requestBody:
- *       description: Fields to update in the user profile
  *       required: true
  *       content:
  *         application/json:
  *           schema:
  *             type: object
+ *             additionalProperties: false
  *             properties:
- *               display_name:
+ *               username:
  *                 type: string
- *                 example: "New Name"
+ *                 example: "new_username"
+ *               password:
+ *                 type: string
+ *                 format: password
+ *                 minLength: 8
+ *                 description: New password (write-only)
+ *                 example: "Str0ngPassw0rd!"
  *               avatar_media_id:
  *                 type: string
  *                 nullable: true
@@ -70,15 +86,18 @@ module.exports = function createProfileRouter({
  *               timezone:
  *                 type: string
  *                 example: "UTC"
- *             additionalProperties: false
  *     responses:
  *       204:
- *         description: Profile updated successfully
+ *         description: Updated successfully
+ *       400:
+ *         description: Validation error
+ *       401:
+ *         description: Unauthorized
  */
 
 /**
  * @swagger
- * /preferences:
+ * /api/profile/preferences:
  *   patch:
  *     summary: Update user preferences
  *     tags: [Profile]
@@ -99,4 +118,36 @@ module.exports = function createProfileRouter({
  *     responses:
  *       204:
  *         description: Preferences updated successfully
+ */
+
+/**
+ * @swagger
+ * /api/profile/me/password:
+ *   patch:
+ *     summary: Change current user's password
+ *     description: Verifies current password via IAM and updates to a new password.
+ *     tags: [Profile]
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [current_password, new_password]
+ *             additionalProperties: false
+ *             properties:
+ *               current_password:
+ *                 type: string
+ *                 format: password
+ *                 example: "OldPassw0rd!"
+ *               new_password:
+ *                 type: string
+ *                 format: password
+ *                 minLength: 8
+ *                 example: "NewStr0ngPassw0rd!"
+ *     responses:
+ *       204: { description: Password updated }
+ *       403: { description: Current password incorrect }
+ *       401: { description: Unauthorized }
  */

@@ -86,6 +86,8 @@ module.exports = function createAuthRoutes(container) {
     router.get("/me", authMiddleware, authController.me);
     router.get("/admin/me", adminAuthMiddleware, authController.adminMe);
 
+    router.patch("/me/password", authMiddleware, authController.changePassword);
+
     /**
  * @swagger
  * tags:

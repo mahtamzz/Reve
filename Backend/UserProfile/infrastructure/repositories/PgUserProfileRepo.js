@@ -47,23 +47,6 @@ class PgUserProfileRepository extends UserProfileRepository {
         );
     }
 
-    async incrementXp(uid, amount) {
-        await this.pool.query(
-            `UPDATE user_profiles
-             SET xp = xp + $1, updated_at = now()
-             WHERE uid = $2`,
-            [amount, uid]
-        );
-    }
-
-    async updateStreak(uid, streak) {
-        await this.pool.query(
-            `UPDATE user_profiles
-             SET streak = $1, updated_at = now()
-             WHERE uid = $2`,
-            [streak, uid]
-        );
-    }
 }
 
 module.exports = PgUserProfileRepository;

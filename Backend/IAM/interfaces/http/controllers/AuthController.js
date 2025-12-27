@@ -23,6 +23,7 @@ class AuthController {
         // identity
         this.getCurrentUserUC = deps.getCurrentUser;
         this.getCurrentCurrentAdminUC = deps.getCurrentAdmin;
+        this.changePasswordUC = deps.changePassword;
 
         // bind non–arrow methods
         this.refreshToken = this.refreshToken.bind(this);
@@ -252,6 +253,22 @@ class AuthController {
             res.status(404).json({ message: err.message });
         }
     };
+
+    /* ---------------- UPDATE INFO ---------------- */
+    changePassword = async (req, res) => {
+        try {
+            await this.changePasswordUC.execute({
+                uid: req.user.uid,
+                current_password: req.body.current_password,
+                new_password: req.body.new_password
+            });
+            res.status(204).end();
+        } catch (err) {
+            const code = err.message === "CURRENT_PASSWORD_INCORRECT" ? 403 : 400;
+            res.status(code).json({ message: err.message });
+        }
+    };
+
 }
 
 module.exports = AuthController;

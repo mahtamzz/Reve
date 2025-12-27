@@ -55,6 +55,39 @@ class UserRepositoryPg {
         return result.rows[0];
     }
 
+    async updateUsernameById(id, username) {
+        const result = await this.withRetry(() =>
+            this.pool.query(
+                `UPDATE users
+                SET username = $1
+                WHERE id = $2
+                RETURNING id, username, email`,
+                [username, id]
+            )
+        );
+
+        const updated = result.rows[0];
+        if (updated?.email) await this.cache.del(`user:${updated.email}`);
+        return updated;
+    }
+
+    async updatePasswordHashById(id, passwordHash) {
+        const result = await this.withRetry(() =>
+            this.pool.query(
+                `UPDATE users
+                SET password = $1
+                WHERE id = $2
+                RETURNING id, username, email`,
+                [passwordHash, id]
+            )
+        );
+
+        const updated = result.rows[0];
+        if (updated?.email) await this.cache.del(`user:${updated.email}`);
+        return updated;
+    }
+
+
     async findById(id) {
         const result = await this.withRetry(() =>
             this.pool.query(
@@ -89,8 +122,8 @@ class UserRepositoryPg {
         const result = await this.withRetry(() =>
             this.pool.query(
                 `INSERT INTO users (googleid, email, username)
-         VALUES ($1, $2, $3)
-         RETURNING *`,
+                VALUES ($1, $2, $3)
+                RETURNING *`,
                 [googleid, email, username]
             )
         );
@@ -101,6 +134,14 @@ class UserRepositoryPg {
 
         return user;
     }
+
+    async findAuthById(id) {
+        const result = await this.withRetry(() =>
+            this.pool.query("SELECT * FROM users WHERE id = $1 LIMIT 1", [id])
+        );
+        return result.rows[0] || null;
+    }
+
 }
 
 module.exports = UserRepositoryPg;
