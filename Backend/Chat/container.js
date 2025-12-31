@@ -21,7 +21,7 @@ const GroupClient = require("./infrastructure/group/GroupClient");
 const GroupEventsConsumer = require("./infrastructure/messaging/GroupEventsConsumer");
 
 /* SOCKET REGISTRY */
-const SocketRegistry = require("./interfaces/ws/socketRegistry");
+const SocketRegistry = require("./interfaces/http/ws/socketRegistry");
 
 /* CONTROLLER + ROUTES */
 const createChatController = require("./interfaces/http/controllers/chatController");

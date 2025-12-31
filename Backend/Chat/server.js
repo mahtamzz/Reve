@@ -2,7 +2,7 @@ const http = require("http");
 
 const createContainer = require("./container");
 const createApp = require("./app");
-const createSocketServer = require("./interfaces/ws/socketServer");
+const createSocketServer = require("./interfaces/http/ws/socketServer");
 const env = require("./config/env");
 
 async function start() {
