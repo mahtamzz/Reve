@@ -21,6 +21,8 @@ module.exports = function createGroupRoutes({ controller, auth }) {
     router.patch("/:groupId/members/:userId/role", auth, controller.changeRole);
     router.delete("/:groupId/members/:userId", auth, controller.kick);
 
+    router.get("/:groupId/members/me", auth, controller.getMyMembership);
+
     /**
      * @swagger
      * tags:
@@ -409,6 +411,40 @@ module.exports = function createGroupRoutes({ controller, auth }) {
      *         description: Unauthorized
      */
 
+    /**
+     * @swagger
+     * /api/groups/{groupId}/members/me:
+     *   get:
+     *     summary: Check if the current user is a member of the group
+     *     tags: [Groups]
+     *     security:
+     *       - bearerAuth: []
+     *     parameters:
+     *       - in: path
+     *         name: groupId
+     *         required: true
+     *         schema:
+     *           type: string
+     *     responses:
+     *       200:
+     *         description: Membership status
+     *         content:
+     *           application/json:
+     *             schema:
+     *               type: object
+     *               properties:
+     *                 groupId:
+     *                   type: string
+     *                 uid:
+     *                   type: integer
+     *                 isMember:
+     *                   type: boolean
+     *                 role:
+     *                   type: string
+     *                   nullable: true
+     *       401:
+     *         description: Unauthorized
+     */
 
     return router;
 };

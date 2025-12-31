@@ -88,6 +88,26 @@ services:
     ports:
       - "3004:3004"
 
+  chat_service:
+    build:
+      context: .
+      dockerfile: Chat/Dockerfile
+    container_name: chat_service
+    restart: always
+    env_file:
+      - ./Chat/.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+      redis:
+        condition: service_started
+      group_service:
+        condition: service_started
+    ports:
+      - "3006:3006"
+
   postgres:
     image: postgres:15
     container_name: postgres_db
@@ -127,6 +147,7 @@ services:
       - group_service
       - study_service
       - media_service
+      - chat_service
 
 volumes:
   pgdata:

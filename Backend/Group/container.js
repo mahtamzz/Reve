@@ -14,6 +14,9 @@ const PgJoinRequestRepo = require("./infrastructure/repositories/PgGroupJoinRequ
 const PgBanRepo = require("./infrastructure/repositories/PgGroupBanRepo");
 const PgAuditRepo = require("./infrastructure/repositories/PgGroupAuditRepo");
 
+/* EVENTS */
+const EventBus = require("./infrastructure/messaging/EventBus");
+
 /* USE CASES – Details */
 const CreateGroup = require("./application/useCases/DetailsRelated/CreateGroup");
 const DeleteGroup = require("./application/useCases/DetailsRelated/DeleteGroup");
@@ -29,6 +32,7 @@ const ApproveJoinRequest = require("./application/useCases/MemberRelated/Approve
 const RejectJoinRequest = require("./application/useCases/MemberRelated/RejectJoinRequest");
 const ChangeMemberRole = require("./application/useCases/MemberRelated/ChangeMemberRole");
 const KickMember = require("./application/useCases/MemberRelated/KickMember");
+const GetMyMembership = require("./application/useCases/MemberRelated/GetMyMembership");
 
 /* CONTROLLER + ROUTES */
 const createGroupController = require("./interfaces/http/controllers/groupController");
@@ -58,17 +62,23 @@ async function createContainer() {
 
     const auth = authMiddleware(jwtVerifier);
 
+    /* EVENTS */
+    const eventBus = new EventBus(process.env.RABBITMQ_URL, { exchange: "group.events" });
+    await eventBus.connect();
+
     /* USE CASES */
     const createGroup = new CreateGroup({
         groupRepo,
         membershipRepo: groupMemberRepo,
-        auditRepo
+        auditRepo,
+        eventBus
     });
 
     const deleteGroup = new DeleteGroup(
         groupRepo,
         groupMemberRepo,
-        auditRepo
+        auditRepo,
+        eventBus
     );
 
     const getGroupDetails = new GetGroupDetails(
@@ -85,7 +95,8 @@ async function createContainer() {
 
     const leaveGroup = new LeaveGroup(
         groupMemberRepo,
-        groupRepo
+        groupRepo,
+        eventBus
     );
 
     const updateGroup = new UpdateGroup(
@@ -101,7 +112,8 @@ async function createContainer() {
     const approveJoinRequest = new ApproveJoinRequest(
         groupMemberRepo,
         joinRequestRepo,
-        auditRepo
+        auditRepo,
+        eventBus
     );
 
     const rejectJoinRequest = new RejectJoinRequest(
@@ -117,8 +129,11 @@ async function createContainer() {
 
     const kickMember = new KickMember(
         groupMemberRepo,
-        auditRepo
+        auditRepo,
+        eventBus
     );
+
+    const getMyMembership = new GetMyMembership(groupMemberRepo);
 
     /* CONTROLLER */
     const controller = createGroupController({
@@ -133,7 +148,8 @@ async function createContainer() {
         approveJoinRequest,
         rejectJoinRequest,
         changeMemberRole,
-        kickMember
+        kickMember,
+        getMyMembership
     });
 
     /* ROUTER */

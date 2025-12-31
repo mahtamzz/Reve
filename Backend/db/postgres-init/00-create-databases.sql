@@ -8,4 +8,5 @@ CREATE DATABASE study_db;
 
 CREATE DATABASE media_db;
 
+CREATE DATABASE chat_db;
 
