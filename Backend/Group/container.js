@@ -33,6 +33,7 @@ const RejectJoinRequest = require("./application/useCases/MemberRelated/RejectJo
 const ChangeMemberRole = require("./application/useCases/MemberRelated/ChangeMemberRole");
 const KickMember = require("./application/useCases/MemberRelated/KickMember");
 const GetMyMembership = require("./application/useCases/MemberRelated/GetMyMembership");
+const ListMyGroups = require("./application/useCases/MemberRelated/ListMyGroups");
 
 /* CONTROLLER + ROUTES */
 const createGroupController = require("./interfaces/http/controllers/groupController");
@@ -135,6 +136,8 @@ async function createContainer() {
 
     const getMyMembership = new GetMyMembership(groupMemberRepo);
 
+    const listMyGroups = new ListMyGroups(groupMemberRepo);
+
     /* CONTROLLER */
     const controller = createGroupController({
         createGroup,
@@ -144,6 +147,7 @@ async function createContainer() {
         leaveGroup,
         updateGroup,
         listGroups,
+        listMyGroups,
         searchGroups,
         approveJoinRequest,
         rejectJoinRequest,

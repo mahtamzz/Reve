@@ -11,6 +11,7 @@ function createGroupController(useCases) {
         changeMemberRole,
         kickMember,
         listGroups,
+        listMyGroups,
         searchGroups,
         getMyMembership
     } = useCases;
@@ -199,6 +200,12 @@ function createGroupController(useCases) {
             } catch (err) {
                 next(err);
             }
+        },
+
+        async listMyGroups(req, res) {
+            const uid = req.user.uid;
+            const groups = await listMyGroups.execute(uid);
+            res.json(groups);
         },
 
     };

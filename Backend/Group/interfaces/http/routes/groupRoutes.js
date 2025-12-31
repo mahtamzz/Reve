@@ -6,6 +6,7 @@ module.exports = function createGroupRoutes({ controller, auth }) {
     router.post("/", auth, controller.create);
 
     router.get("/", auth, controller.list);
+    router.get("/me", auth, controller.listMyGroups);
     router.get("/search", auth, controller.search);
 
     router.get("/:groupId", auth, controller.getDetails);
@@ -442,6 +443,27 @@ module.exports = function createGroupRoutes({ controller, auth }) {
      *                 role:
      *                   type: string
      *                   nullable: true
+     *       401:
+     *         description: Unauthorized
+     */
+
+    /**
+     * @swagger
+     * /api/groups/me:
+     *   get:
+     *     summary: List groups the current user belongs to
+     *     tags: [Groups]
+     *     security:
+     *       - bearerAuth: []
+     *     responses:
+     *       200:
+     *         description: Groups the user is a member of
+     *         content:
+     *           application/json:
+     *             schema:
+     *               type: array
+     *               items:
+     *                 type: object
      *       401:
      *         description: Unauthorized
      */
