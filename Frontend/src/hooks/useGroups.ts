@@ -1,8 +1,6 @@
 // src/hooks/useGroups.ts
-
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { groupsApi, type CreateGroupBody } from "@/api/groups";
-import type { ApiGroupDetailsResponse } from "@/api/types";
 
 export const groupDetailsKey = (id: string) => ["groups", "details", id] as const;
 
@@ -15,18 +13,36 @@ export function useGroupDetails(id: string) {
   });
 }
 
+export const groupsDiscoverKey = (limit: number, offset: number) =>
+  ["groups", "discover", { limit, offset }] as const;
+
+export function useDiscoverGroups(limit: number, offset: number) {
+  return useQuery({
+    queryKey: groupsDiscoverKey(limit, offset),
+    queryFn: () => groupsApi.list({ limit, offset }),
+    retry: false,
+  });
+}
+
+export const groupsSearchKey = (q: string, limit: number, offset: number) =>
+  ["groups", "search", { q, limit, offset }] as const;
+
+export function useSearchGroups(q: string, limit: number, offset: number) {
+  return useQuery({
+    queryKey: groupsSearchKey(q, limit, offset),
+    queryFn: () => groupsApi.search({ q, limit, offset }),
+    enabled: q.trim().length > 0,
+    retry: false,
+  });
+}
+
 export function useCreateGroup() {
   const qc = useQueryClient();
 
   return useMutation({
     mutationFn: (body: CreateGroupBody) => groupsApi.create(body),
-    onSuccess: (created) => {
-      // ✅ چون details endpoint شکلش فرق داره، اینجا فقط invalidate می‌کنیم
-      // و اگر لازم شد بعداً با getDetails پر می‌کنیم.
+    onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["groups"] });
-
-      // می‌تونی optionally دیتای group رو زیر یک key جدا ذخیره کنی،
-      // ولی الان ما list نداریم و صفحه Groups بر اساس ids، details می‌گیرد.
     },
   });
 }

@@ -378,7 +378,7 @@ export default function Dashboard() {
                     key={sub.id}
                     subjectId={sub.id}
                     title={sub.name ?? sub.title}
-                    color={sub.color}     // ✅ اضافه شد
+                    color={sub.color}
                   />
                 ))}
 

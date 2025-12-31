@@ -24,7 +24,6 @@ function addDays(d: Date, delta: number) {
   x.setDate(x.getDate() + delta);
   return x;
 }
-// YYYY-MM-DD based on LOCAL time (نه UTC)
 function localDateKey(d: Date) {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -44,7 +43,6 @@ function getHttpStatus(err: unknown): number | undefined {
   return err instanceof ApiError ? err.status : (err as any)?.status;
 }
 
-// session field readers (support snake/camel)
 function readSubjectId(s: any): string {
   return (s.subjectId ?? s.subject_id ?? s.subject?.id ?? "") as string;
 }
@@ -104,7 +102,6 @@ export default function Analytics() {
     const subs = subjects ?? [];
     const sess = sessions ?? [];
 
-    // subjectId -> (YYYY-MM-DD local) -> total minutes
     const bySubject = new Map<string, Map<string, number>>();
 
     for (const s of sess as any[]) {
@@ -177,7 +174,7 @@ export default function Analytics() {
                   Analytics
                 </p>
                 <p className="mt-1 text-sm text-zinc-600">
-                  Weekly study per subject (last 7 days, from 00:00 local time)
+                  Weekly study per subject
                 </p>
               </div>
 

@@ -1,5 +1,4 @@
 // src/api/groups.ts
-
 import { groupsClient as apiClient } from "@/api/client";
 import type { ApiGroup, ApiGroupDetailsResponse, GroupVisibility } from "@/api/types";
 
@@ -13,21 +12,16 @@ export type CreateGroupBody = {
   minimumDstMins: number | null;
 };
 
-// پاسخ create در بک: خود group (همون چیزی که createGroup.execute برمی‌گردونه)
 export const groupsApi = {
-  // ✅ بک: GET /api/groups/:groupId -> { group, members }
   getDetails: (id: string) =>
     apiClient.get<ApiGroupDetailsResponse>(`${GROUPS_PREFIX}/${id}`),
 
-  // ✅ بک: POST /api/groups -> group
   create: (body: CreateGroupBody) =>
     apiClient.post<ApiGroup>(GROUPS_PREFIX, body),
 
-  // ✅ بک: DELETE /api/groups/:groupId -> 204
   remove: (groupId: string) =>
     apiClient.delete<void>(`${GROUPS_PREFIX}/${groupId}`),
 
-  // اگر بعداً لازم شد:
   update: (groupId: string, fields: Partial<CreateGroupBody>) =>
     apiClient.patch<ApiGroup>(`${GROUPS_PREFIX}/${groupId}`, fields),
 
@@ -36,4 +30,21 @@ export const groupsApi = {
 
   leave: (groupId: string) =>
     apiClient.post<void>(`${GROUPS_PREFIX}/${groupId}/leave`),
+
+  list: (params: { limit?: number; offset?: number } = {}) => {
+    const limit = params.limit ?? 20;
+    const offset = params.offset ?? 0;
+    return apiClient.get<ApiGroup[]>(
+      `${GROUPS_PREFIX}?limit=${encodeURIComponent(limit)}&offset=${encodeURIComponent(offset)}`
+    );
+  },
+
+  search: (params: { q: string; limit?: number; offset?: number }) => {
+    const q = params.q ?? "";
+    const limit = params.limit ?? 20;
+    const offset = params.offset ?? 0;
+    return apiClient.get<ApiGroup[]>(
+      `${GROUPS_PREFIX}/search?q=${encodeURIComponent(q)}&limit=${encodeURIComponent(limit)}&offset=${encodeURIComponent(offset)}`
+    );
+  },
 };

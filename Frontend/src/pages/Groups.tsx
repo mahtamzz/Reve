@@ -3,20 +3,19 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { Plus, Search, Trash2 } from "lucide-react";
+import { Plus, Search, Hash } from "lucide-react";
 import { useQueries } from "@tanstack/react-query";
 
-import { ApiError } from "@/api/client";
+import { ApiError, groupsClient } from "@/api/client";
 import type { ApiGroup } from "@/api/types";
 
 import Sidebar from "@/components/Dashboard/SidebarIcon";
-import Topbar from "@/components/Dashboard/DashboardHeader";
 import CreateGroupModal from "@/components/Groups/CreateGroupModal";
 import { logout } from "@/utils/authToken";
 import { GroupCard } from "@/components/Groups/GroupCard";
 
 import { useMyGroupIds } from "@/hooks/useMyGroupIds";
-import { useCreateGroup, useDeleteGroup, groupDetailsKey } from "@/hooks/useGroups";
+import { groupDetailsKey, useCreateGroup, useDeleteGroup, useDiscoverGroups } from "@/hooks/useGroups";
 import { groupsApi } from "@/api/groups";
 
 type CreateGroupPayload = {
@@ -47,19 +46,81 @@ function getHttpStatus(err: unknown): number | undefined {
   return err instanceof ApiError ? err.status : (err as any)?.status;
 }
 
+function matchLoose(g: ApiGroup, q: string) {
+  const qq = q.trim().toLowerCase();
+  if (!qq) return true;
+  const name = (g.name || "").toLowerCase();
+  const desc = (g.description || "").toLowerCase();
+  return name.includes(qq) || desc.includes(qq);
+}
+
+function escapeRegExp(s: string) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function Highlight({ text, q }: { text: string; q: string }) {
+  const qq = q.trim();
+  if (!qq) return <>{text}</>;
+
+  const re = new RegExp(escapeRegExp(qq), "ig");
+  const parts = text.split(re);
+  const matches = text.match(re) ?? [];
+
+  if (matches.length === 0) return <>{text}</>;
+
+  const out: React.ReactNode[] = [];
+  for (let i = 0; i < parts.length; i++) {
+    out.push(<span key={`p-${i}`}>{parts[i]}</span>);
+    if (i < matches.length) {
+      out.push(
+        <span
+          key={`m-${i}`}
+          className="rounded-md bg-yellow-100 px-1 py-0.5 font-semibold text-zinc-900"
+        >
+          {matches[i]}
+        </span>
+      );
+    }
+  }
+  return <>{out}</>;
+}
+
+async function fetchDiscoverPage(limit: number, offset: number) {
+  return groupsClient.get<ApiGroup[]>(`/groups?limit=${limit}&offset=${offset}`);
+}
+
 export default function Groups() {
   const navigate = useNavigate();
+
+  // search input
   const [query, setQuery] = useState("");
+  const [debouncedQ, setDebouncedQ] = useState("");
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedQ(query.trim()), 120);
+    return () => window.clearTimeout(t);
+  }, [query]);
+
+  // dropdown (autocomplete)
+  const [openSuggest, setOpenSuggest] = useState(false);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  // suggestion data (client-side)
+  const [suggestions, setSuggestions] = useState<ApiGroup[]>([]);
+  const [suggestLoading, setSuggestLoading] = useState(false);
+  const [suggestError, setSuggestError] = useState(false);
+  const lastSuggestQRef = useRef<string>("");
+
+  // create modal
   const [createOpen, setCreateOpen] = useState(false);
   const newCardIdRef = useRef<string | null>(null);
 
+  // --------- My Groups (localStorage ids -> getDetails) ----------
   const { ids, add: addId, remove: removeId } = useMyGroupIds();
 
-  // برای جلوگیری از remove چندباره یک id (در رندرهای متعدد)
   const cleanedIdsRef = useRef<Set<string>>(new Set());
 
-  // ✅ هر id -> getDetails (برمی‌گردونه {group, members})
-  const groupQueries = useQueries({
+  const myGroupQueries = useQueries({
     queries: ids.map((id) => ({
       queryKey: groupDetailsKey(id),
       queryFn: () => groupsApi.getDetails(id),
@@ -68,9 +129,8 @@ export default function Groups() {
     })),
   });
 
-  // یک snapshot پایدار از errorها بسازیم تا useEffect بی‌دلیل روی هر رندر تریگر نشه
-  const errorPairs = useMemo(() => {
-    return groupQueries
+  const myErrorPairs = useMemo(() => {
+    return myGroupQueries
       .map((q, idx) => {
         if (!q.isError) return null;
         const id = ids[idx];
@@ -79,26 +139,23 @@ export default function Groups() {
         return { id, status };
       })
       .filter(Boolean) as Array<{ id: string; status?: number }>;
-  }, [groupQueries, ids]);
+  }, [myGroupQueries, ids]);
 
   useEffect(() => {
-    for (const { id, status } of errorPairs) {
-      // گروه حذف شده یا دسترسی نداری → از localStorage پاکش کن
+    for (const { id, status } of myErrorPairs) {
       if (status === 404 || status === 403) {
-        // فقط یک‌بار برای هر id
         if (!cleanedIdsRef.current.has(id)) {
           cleanedIdsRef.current.add(id);
           removeId(id);
         }
       }
     }
-  }, [errorPairs, removeId]);
+  }, [myErrorPairs, removeId]);
 
-  const isLoading = groupQueries.some((q) => q.isLoading);
+  const myGroupsLoading = myGroupQueries.some((q) => q.isLoading);
 
-  // خطاهای “واقعی” (نه 403/404هایی که داریم پاک می‌کنیم)
-  const realErrors = useMemo(() => {
-    return groupQueries
+  const myGroupsRealErrors = useMemo(() => {
+    return myGroupQueries
       .map((q) => {
         if (!q.isError) return null;
         const status = getHttpStatus(q.error);
@@ -106,20 +163,16 @@ export default function Groups() {
         return { status, error: q.error };
       })
       .filter(Boolean) as Array<{ status?: number; error: unknown }>;
-  }, [groupQueries]);
+  }, [myGroupQueries]);
 
-  const hasRealError = realErrors.length > 0;
-
-  const groups: ApiGroup[] = groupQueries
+  const myGroups: ApiGroup[] = myGroupQueries
     .map((q) => q.data?.group)
     .filter(Boolean) as ApiGroup[];
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return groups;
-    return groups.filter((g) => g.name.toLowerCase().includes(q));
-  }, [groups, query]);
+  const discoverQuery = useDiscoverGroups(20, 0);
+  const allGroups = (discoverQuery.data ?? []) as ApiGroup[];
 
+  // --------- Mutations ----------
   const createMutation = useCreateGroup();
   const deleteMutation = useDeleteGroup();
 
@@ -127,9 +180,9 @@ export default function Groups() {
   const createError = createMutation.error;
 
   const isDeleting = deleteMutation.isPending;
+  const deleteError = deleteMutation.error;
 
   const handleCreateGroup = async (payload: CreateGroupPayload) => {
-    // ✅ invites فعلاً به بک نفرست (در بک endpointش نداریم)
     const created = await createMutation.mutateAsync({
       name: payload.name,
       description: payload.description || null,
@@ -154,92 +207,318 @@ export default function Groups() {
     });
   };
 
+  // UI lists
+  const myCards = useMemo(() => myGroups.map(mapApiGroupToCard), [myGroups]);
+  const allCards = useMemo(() => allGroups.map(mapApiGroupToCard), [allGroups]);
+
+  // close suggest on outside click
+  useEffect(() => {
+    if (!openSuggest) return;
+    const onDown = (e: MouseEvent) => {
+      const el = wrapRef.current;
+      if (!el) return;
+      if (!el.contains(e.target as Node)) setOpenSuggest(false);
+    };
+    window.addEventListener("mousedown", onDown);
+    return () => window.removeEventListener("mousedown", onDown);
+  }, [openSuggest]);
+
+  // ESC closes suggest
+  useEffect(() => {
+    if (!openSuggest) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpenSuggest(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [openSuggest]);
+
+  useEffect(() => {
+    const q = debouncedQ.trim();
+    lastSuggestQRef.current = q;
+
+    if (!q || !openSuggest) {
+      setSuggestions([]);
+      setSuggestLoading(false);
+      setSuggestError(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      setSuggestLoading(true);
+      setSuggestError(false);
+
+      try {
+        const LIMIT = 50;
+        const MAX_PAGES = 10; 
+        const TARGET = 8;
+
+        const found: ApiGroup[] = [];
+        const seen = new Set<string>();
+
+        for (let page = 0; page < MAX_PAGES; page++) {
+          // اگر query عوض شد، stop
+          if (cancelled) return;
+          if (lastSuggestQRef.current !== q) return;
+
+          const offset = page * LIMIT;
+          const rows = await fetchDiscoverPage(LIMIT, offset);
+
+          // match substring
+          for (const g of rows) {
+            if (!g?.id || seen.has(g.id)) continue;
+            if (matchLoose(g, q)) {
+              seen.add(g.id);
+              found.push(g);
+              if (found.length >= TARGET) break;
+            }
+          }
+
+          if (found.length >= TARGET) break;
+          // اگر دیتای صفحه کمتر از limit بود یعنی ته لیستیم
+          if (rows.length < LIMIT) break;
+        }
+
+        if (cancelled) return;
+        if (lastSuggestQRef.current !== q) return;
+
+        setSuggestions(found);
+      } catch {
+        if (cancelled) return;
+        setSuggestError(true);
+        setSuggestions([]);
+      } finally {
+        if (!cancelled) setSuggestLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedQ, openSuggest]);
+
+  const openFromSuggest = (g: ApiGroup) => {
+    setOpenSuggest(false);
+    navigate(`/groups/${g.id}`, { state: { groupName: g.name } });
+  };
+
+  const showSuggest = openSuggest && debouncedQ.trim().length > 0;
+
   return (
     <div className="min-h-screen bg-creamtext text-zinc-900">
       <div className="flex">
         <Sidebar activeKey="groups" onLogout={logout} />
-        <div className="flex-1 min-w-0 md:ml-64">
 
+        <div className="flex-1 min-w-0 md:ml-64">
           <div className="mx-auto max-w-6xl px-4 py-10">
+            {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
               <div>
-                <p className="text-sm text-zinc-500">My Groups</p>
+                <p className="text-sm text-zinc-500">Groups</p>
                 <h1 className="mt-1 text-2xl sm:text-3xl font-semibold tracking-tight text-zinc-900">
                   Groups
                 </h1>
                 <p className="mt-1 text-sm text-zinc-600">
-                  Find a group to study with and stay accountable.
+                  Type to get instant suggestions (name/description).
                 </p>
               </div>
 
-              <div className="w-full sm:w-[420px]">
+              {/* Search */}
+              <div className="w-full sm:w-[420px]" ref={wrapRef}>
                 <div className="relative">
                   <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
                   <input
+                    ref={inputRef}
                     value={query}
-                    onChange={(e) => setQuery(e.target.value)}
+                    onChange={(e) => {
+                      setQuery(e.target.value);
+                      setOpenSuggest(true);
+                    }}
+                    onFocus={() => setOpenSuggest(true)}
                     placeholder="Search groups..."
-                    className="w-full rounded-2xl border border-zinc-200 bg-white pl-11 pr-4 py-3 text-sm text-zinc-700 shadow-sm outline-none focus:ring-2 focus:ring-yellow-300/60"
+                    className="
+                      w-full rounded-2xl border border-zinc-200 bg-white
+                      pl-11 pr-4 py-3 text-sm text-zinc-700 shadow-sm outline-none
+                      focus:ring-2 focus:ring-yellow-300/60
+                    "
                   />
+
+                  {/* ✅ شیک‌تر: dropdown واقعی */}
+                  <AnimatePresence>
+                    {showSuggest && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 8, scale: 0.99 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 8, scale: 0.99 }}
+                        transition={{ duration: 0.16, ease: "easeOut" }}
+                        className="
+                          absolute left-0 right-0 top-[calc(100%+10px)]
+                          z-50 overflow-hidden
+                          rounded-3xl border border-zinc-200/80
+                          bg-white/90 backdrop-blur-xl
+                          shadow-[0_18px_60px_-35px_rgba(0,0,0,0.55)]
+                        "
+                        role="dialog"
+                        aria-label="Group suggestions"
+                      >
+                        <div className="max-h-[340px] overflow-auto">
+                          {suggestLoading ? (
+                            <div className="px-4 py-4 text-sm text-zinc-600">
+                              Searching…
+                            </div>
+                          ) : suggestError ? (
+                            <div className="px-4 py-4 text-sm text-rose-700">
+                              Couldn’t load suggestions.
+                            </div>
+                          ) : suggestions.length === 0 ? (
+                            <div className="px-4 py-4 text-sm text-zinc-600">
+                              No suggestions.
+                            </div>
+                          ) : (
+                            <ul className="p-2">
+                              {suggestions.map((g) => (
+                                <li key={g.id}>
+                                  <button
+                                    type="button"
+                                    onClick={() => openFromSuggest(g)}
+                                    className="
+                                      w-full text-left
+                                      rounded-2xl px-3 py-3
+                                      hover:bg-yellow-50/60
+                                      transition
+                                      flex items-start gap-3
+                                    "
+                                  >
+                                    <span className="mt-0.5 h-9 w-9 shrink-0 rounded-2xl border border-zinc-200 bg-white flex items-center justify-center">
+                                      <Hash className="h-4 w-4 text-zinc-500" />
+                                    </span>
+
+                                    <div className="min-w-0 flex-1">
+                                      <p className="text-sm font-semibold text-zinc-900 truncate">
+                                        <Highlight text={g.name} q={debouncedQ} />
+                                      </p>
+                                      <p className="mt-0.5 text-xs text-zinc-500 line-clamp-1">
+                                        <Highlight text={g.description || "No description"} q={debouncedQ} />
+                                      </p>
+                                    </div>
+
+                                    <span
+                                      className="
+                                        shrink-0 text-[10px] font-semibold
+                                        rounded-full border border-zinc-200
+                                        bg-white px-2 py-1 text-zinc-600
+                                      "
+                                    >
+                                      {g.visibility}
+                                    </span>
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+
+                        {/* خط جداکننده ملایم */}
+                        <div className="h-px bg-gradient-to-r from-transparent via-zinc-200 to-transparent" />
+
+                        <div className="px-4 py-3 flex items-center justify-between">
+                          <button
+                            type="button"
+                            onClick={() => setOpenSuggest(false)}
+                            className="text-xs font-semibold text-zinc-500 hover:text-zinc-900 transition"
+                          >
+                            Close
+                          </button>
+                          <span className="text-[11px] text-zinc-500">
+                            Press <span className="font-semibold">Esc</span> to close
+                          </span>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
               </div>
             </div>
 
+            {/* Errors */}
             {createError && (
               <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
                 Failed to create group.
               </div>
             )}
 
-            {isLoading && <div className="mt-6 text-sm text-zinc-600">Loading groups…</div>}
-
-            {hasRealError && (
+            {deleteError && (
               <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-                Some groups failed to load due to a server/network error.
+                Failed to delete group. (Maybe you are not the owner.)
               </div>
             )}
 
-            {!filtered.length && !isLoading ? (
-              <div className="mt-10 rounded-3xl border border-zinc-200 bg-white p-10 text-center">
-                <p className="text-sm font-semibold text-zinc-900">No groups yet</p>
-                <p className="mt-1 text-sm text-zinc-600">Create a group to see it here.</p>
+            {/* -------- My Groups Section -------- */}
+            <div className="mt-10">
+              <div className="flex items-end justify-between gap-4">
+                <div>
+                  <p className="text-sm font-semibold text-zinc-900">My Groups</p>
+                  <p className="mt-0.5 text-xs text-zinc-500">
+                    Groups you created or previously opened (stored locally).
+                  </p>
+                </div>
               </div>
-            ) : (
-              <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-                <AnimatePresence mode="popLayout">
-                  {filtered.map((g) => {
-                    const uiGroup = mapApiGroupToCard(g);
 
-                    return (
+              {myGroupsLoading && (
+                <div className="mt-4 text-sm text-zinc-600">Loading your groups…</div>
+              )}
+
+              {myGroupsRealErrors.length > 0 && (
+                <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                  Some of your groups failed to load due to server/network error.
+                </div>
+              )}
+
+              {!myCards.length && !myGroupsLoading ? (
+                <div className="mt-6 rounded-3xl border border-zinc-200 bg-white p-10 text-center">
+                  <p className="text-sm font-semibold text-zinc-900">No groups yet</p>
+                  <p className="mt-1 text-sm text-zinc-600">Create a group to see it here.</p>
+                </div>
+              ) : (
+                <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <AnimatePresence mode="popLayout">
+                    {myCards.map((uiGroup) => (
                       <motion.div
-                        key={g.id}
+                        key={uiGroup.id}
                         layout
-                        id={`group-card-${g.id}`}
+                        id={`group-card-${uiGroup.id}`}
                         initial={{ opacity: 0, y: 10, scale: 0.98 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 10, scale: 0.98 }}
                         transition={{ duration: 0.25, ease: "easeOut" }}
                         className={
-                          newCardIdRef.current === g.id
+                          newCardIdRef.current === uiGroup.id
                             ? "ring-2 ring-yellow-300/60 rounded-3xl"
                             : ""
                         }
                       >
-                        <div className="relative">
                         <GroupCard
                           group={uiGroup as any}
-                          onClick={() => navigate(`/groups/${g.id}`, { state: { groupName: g.name } })}
-                          onDelete={() => handleDelete(g.id)}
+                          onClick={() =>
+                            navigate(`/groups/${uiGroup.id}`, {
+                              state: { groupName: uiGroup.name },
+                            })
+                          }
+                          onDelete={() => handleDelete(uiGroup.id)}
                           deleteDisabled={isDeleting}
                         />
-                        </div>
                       </motion.div>
-                    );
-                  })}
-                </AnimatePresence>
-              </div>
-            )}
+                    ))}
+                  </AnimatePresence>
+                </div>
+              )}
+            </div>
 
+
+
+            {/* Floating Create Button */}
             <button
               type="button"
               onClick={() => setCreateOpen(true)}
@@ -263,6 +542,10 @@ export default function Groups() {
                 <div className="text-xs text-zinc-500">Create and invite</div>
               </div>
             </button>
+
+            <footer className="mt-12 text-center text-xs text-zinc-400">
+              REVE dashboard
+            </footer>
           </div>
         </div>
       </div>
