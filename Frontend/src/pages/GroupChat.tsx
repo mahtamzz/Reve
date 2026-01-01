@@ -1,9 +1,7 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
-
 import EmojiPicker, { EmojiClickData, Theme } from "emoji-picker-react";
-
 
 import {
   ArrowLeft,
@@ -20,10 +18,11 @@ import { useNavigate, useParams, useLocation } from "react-router-dom";
 import Sidebar from "@/components/Dashboard/SidebarIcon";
 import Topbar from "@/components/Dashboard/DashboardHeader";
 import { logout } from "@/utils/authToken";
+import { useGroupChatSocket } from "@/hooks/useGroupChatSocket";
 
 const EASE_OUT: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
-type Message = {
+type UiMessage = {
   id: string;
   user: string;
   avatar?: string;
@@ -31,6 +30,11 @@ type Message = {
   mine?: boolean;
   time: string;
 };
+
+function formatTime(iso: string) {
+  const d = new Date(iso);
+  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
 
 export default function GroupChat() {
   const { groupId } = useParams<{ groupId: string }>();
@@ -49,61 +53,46 @@ export default function GroupChat() {
     return () => document.removeEventListener("mousedown", onClickOutside);
   }, []);
 
-
   const groupName =
     (location.state as { groupName?: string } | null)?.groupName ?? "Group Chat";
 
   const [input, setInput] = useState("");
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "1",
-      user: "nafas",
-      text: "Hey everyone 👋 Ready to study?",
-      time: "09:30",
-    },
-    {
-      id: "2",
-      user: "me",
-      text: "Yes! Let’s start with math 📚",
-      mine: true,
-      time: "09:31",
-    },
-  ]);
 
-  const fileInputRef = useRef(null);
-
-  const handleButtonClick = () => {
-    fileInputRef.current.click();
-  };
-
-  const handleFileChange = (event) => {
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const handleButtonClick = () => fileInputRef.current?.click();
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
-    console.log(files); // فایل‌ها اینجا در دسترس‌اند
+    console.log(files);
   };
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
+  const { messages: serverMessages, connected, joined, lastError, send } = useGroupChatSocket({
+    groupId,
+    limit: 50,
+  });
+
+  const uiMessages: UiMessage[] = useMemo(() => {
+    if (!groupId) return [];
+    return (serverMessages || []).map((m) => ({
+      id: String(m.id),
+      user: String(m.sender_uid),
+      text: m.text,
+      mine: false, // چون uid خود کاربر را اینجا نداریم، برای MVP ساده می‌گذاریم false
+      time: formatTime(m.created_at),
+    }));
+  }, [serverMessages, groupId]);
+
+  // بهتر: پیام‌های من را با یک heuristic علامت بزنیم (اگر accessToken uid را داری می‌تونیم دقیق کنیم)
+  // فعلاً ساده: اگر ارسال می‌کنی، UI خودش با message:new میاد و همچنان mine=false می‌مونه.
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages]);
+  }, [uiMessages.length]);
 
   const sendMessage = () => {
-    if (!input.trim()) return;
-
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: crypto.randomUUID(),
-        user: "me",
-        text: input.trim(),
-        mine: true,
-        time: new Date().toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-      },
-    ]);
-
+    if (!input.trim() || !groupId) return;
+    send(input.trim());
     setInput("");
   };
 
@@ -150,8 +139,17 @@ export default function GroupChat() {
                             {groupName}
                           </p>
                           <p className="text-xs text-zinc-500 truncate">
-                            Group · {groupId}
+                            Group · {groupId} ·{" "}
+                            <span className="font-semibold">
+                              {connected ? (joined ? "Joined" : "Connecting...") : "Offline"}
+                            </span>
                           </p>
+                          {lastError ? (
+                            <p className="text-xs text-red-600 mt-1">
+                              {lastError.code}
+                              {lastError.message ? `: ${lastError.message}` : ""}
+                            </p>
+                          ) : null}
                         </div>
                       </div>
 
@@ -179,7 +177,7 @@ export default function GroupChat() {
                   >
                     <div className="min-h-full flex flex-col justify-end">
                       <AnimatePresence initial={false}>
-                        {messages.map((m) => (
+                        {uiMessages.map((m) => (
                           <motion.div
                             key={m.id}
                             initial={{ opacity: 0, y: 10, scale: 0.98 }}
@@ -222,68 +220,68 @@ export default function GroupChat() {
                   {/* Input */}
                   <div className="shrink-0 border-t border-zinc-200 bg-white px-4 py-3">
                     <div className="flex items-center gap-3">
-                    <div className="relative" ref={emojiRef}>
-                    <button
-                      type="button"
-                      onClick={() => setEmojiOpen((v) => !v)}
-                      className="text-zinc-400 hover:text-zinc-600 transition"
-                    >
-                      <Smile className="h-5 w-5" />
-                    </button>
+                      <div className="relative" ref={emojiRef}>
+                        <button
+                          type="button"
+                          onClick={() => setEmojiOpen((v) => !v)}
+                          className="text-zinc-400 hover:text-zinc-600 transition"
+                        >
+                          <Smile className="h-5 w-5" />
+                        </button>
 
-
-                    {emojiOpen && (
-                      <div className="absolute bottom-12 left-0 z-50">
-                        <EmojiPicker
-                          theme={Theme.LIGHT}
-                          onEmojiClick={(emojiData: EmojiClickData) => {
-                            setInput((prev) => prev + emojiData.emoji);
-                            setEmojiOpen(false);
-                          }}
-                          width={320}
-                          height={380}
-                        />
+                        {emojiOpen && (
+                          <div className="absolute bottom-12 left-0 z-50">
+                            <EmojiPicker
+                              theme={Theme.LIGHT}
+                              onEmojiClick={(emojiData: EmojiClickData) => {
+                                setInput((prev) => prev + emojiData.emoji);
+                                setEmojiOpen(false);
+                              }}
+                              width={320}
+                              height={380}
+                            />
+                          </div>
+                        )}
                       </div>
-                    )}
 
-                  </div>
+                      <button
+                        type="button"
+                        onClick={handleButtonClick}
+                        className="text-zinc-400 hover:text-zinc-600 transition"
+                      >
+                        <Paperclip className="h-5 w-5" />
+                      </button>
 
-                  {/* دکمه */}
-                  <button
-                    type="button"
-                    onClick={handleButtonClick}
-                    className="text-zinc-400 hover:text-zinc-600 transition"
-                  >
-                    <Paperclip className="h-5 w-5" />
-                  </button>
-
-                  {/* input مخفی */}
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    className="hidden"
-                    multiple
-                    accept="image/*,.pdf,.doc,.docx,.zip,.rar"
-                    onChange={handleFileChange}
-                  />
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        className="hidden"
+                        multiple
+                        accept="image/*,.pdf,.doc,.docx,.zip,.rar"
+                        onChange={handleFileChange}
+                      />
 
                       <input
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
                         onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-                        placeholder="Type a message…"
+                        placeholder={joined ? "Type a message…" : "Join the group to chat…"}
+                        disabled={!joined}
                         className="
                           flex-1 bg-transparent outline-none
                           text-sm placeholder:text-zinc-400
+                          disabled:opacity-50
                         "
                       />
 
                       <button
                         onClick={sendMessage}
+                        disabled={!joined}
                         className="
                           rounded-xl bg-yellow-400 p-2
                           text-white hover:bg-yellow-500
                           transition-colors
+                          disabled:opacity-50 disabled:hover:bg-yellow-400
                         "
                       >
                         <Send className="h-4 w-4" />
@@ -304,12 +302,8 @@ export default function GroupChat() {
                   "
                 >
                   <div className="p-4 border-b border-zinc-200">
-                    <p className="text-sm font-semibold text-zinc-900">
-                      {groupName}
-                    </p>
-                    <p className="mt-1 text-xs text-zinc-500">
-                      Members · Online
-                    </p>
+                    <p className="text-sm font-semibold text-zinc-900">{groupName}</p>
+                    <p className="mt-1 text-xs text-zinc-500">Members · Online</p>
 
                     <div className="mt-3 flex items-center gap-2 text-zinc-600">
                       <Users className="h-4 w-4" />
@@ -319,35 +313,26 @@ export default function GroupChat() {
 
                   <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
                     <div className="rounded-2xl border border-zinc-200 bg-white p-3">
-                      <p className="text-xs font-semibold text-zinc-700">
-                        About
-                      </p>
+                      <p className="text-xs font-semibold text-zinc-700">About</p>
                       <p className="mt-1 text-xs text-zinc-500 leading-relaxed">
-                        Working together, sharing ideas and communicating
-                        effectively.
+                        Working together, sharing ideas and communicating effectively.
                       </p>
                     </div>
 
                     <div className="rounded-2xl border border-zinc-200 bg-white p-3">
-                      <p className="text-xs font-semibold text-zinc-700">
-                        Shared files
-                      </p>
+                      <p className="text-xs font-semibold text-zinc-700">Shared files</p>
                       <div className="mt-2 space-y-2">
-                        {["terms_of_reference.docx", "contract.xlsx", "logo.svg"].map(
-                          (f) => (
-                            <div
-                              key={f}
-                              className="flex items-center justify-between rounded-xl bg-zinc-50 px-3 py-2"
-                            >
-                              <span className="text-xs text-zinc-600 truncate">
-                                {f}
-                              </span>
-                              <button className="text-xs font-semibold text-yellow-600 hover:text-yellow-700">
-                                View
-                              </button>
-                            </div>
-                          )
-                        )}
+                        {["terms_of_reference.docx", "contract.xlsx", "logo.svg"].map((f) => (
+                          <div
+                            key={f}
+                            className="flex items-center justify-between rounded-xl bg-zinc-50 px-3 py-2"
+                          >
+                            <span className="text-xs text-zinc-600 truncate">{f}</span>
+                            <button className="text-xs font-semibold text-yellow-600 hover:text-yellow-700">
+                              View
+                            </button>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   </div>

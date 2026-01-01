@@ -120,3 +120,9 @@ export type ApiAvatarMeta = {
 
   [k: string]: any;
 };
+
+export type ApiJoinRequest = {
+  group_id: string;
+  uid: string | number;
+  created_at: string;
+};

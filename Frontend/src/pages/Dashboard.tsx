@@ -3,6 +3,9 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
+import { Bell, ChevronRight } from "lucide-react";
+import { useJoinRequestNotifications } from "@/hooks/useJoinRequestNotifications";
+
 
 import { ApiError } from "@/api/client";
 
@@ -69,6 +72,37 @@ function clamp(n: number, a: number, b: number) {
   return Math.max(a, Math.min(b, n));
 }
 
+function playSoftNotify() {
+  try {
+    const Ctx = (window.AudioContext || (window as any).webkitAudioContext);
+    if (!Ctx) return;
+
+    const ctx = new Ctx();
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+
+    o.type = "sine";
+    o.frequency.value = 660; // pleasant
+    g.gain.value = 0.0001;
+
+    o.connect(g);
+    g.connect(ctx.destination);
+
+    const now = ctx.currentTime;
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.exponentialRampToValueAtTime(0.05, now + 0.02); // quick fade in
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.25); // fade out
+
+    o.start(now);
+    o.stop(now + 0.28);
+
+    o.onended = () => ctx.close().catch(() => {});
+  } catch {
+    // ignore
+  }
+}
+
+
 // chart builders (fallback from sessions if dashboard series isn't available)
 function pickWeeklySeriesHours(dashboard: any): WeeklyPoint[] | null {
   const raw =
@@ -133,6 +167,28 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const qc = useQueryClient();
 
+  const joinNotif = useJoinRequestNotifications();
+
+  const [joinToastOpen, setJoinToastOpen] = useState(false);
+  const lastJoinCountRef = useRef<number>(0);
+
+  useEffect(() => {
+    if (joinNotif.loading || joinNotif.error) return;
+
+    const c = joinNotif.count;
+    const prev = lastJoinCountRef.current;
+
+    if (c > prev) {
+      setJoinToastOpen(true);
+      playSoftNotify();
+    }
+
+    lastJoinCountRef.current = c;
+
+    if (c === 0) setJoinToastOpen(false);
+  }, [joinNotif.count, joinNotif.loading, joinNotif.error]);
+
+
   const fromISO = useMemo(() => addDays(startOfLocalDay(new Date()), -6).toISOString(), []);
   const toISO = useMemo(() => addDays(startOfLocalDay(new Date()), 1).toISOString(), []);
 
@@ -159,7 +215,6 @@ export default function Dashboard() {
 
   const [toast, setToast] = useState<{ minutes: number; points: number; hours: number } | null>(null);
 
-  // ✅ after returning from FocusPage, refresh all dependent queries (server-authoritative)
   const consumedRef = useRef<string>("");
 
   useEffect(() => {
@@ -182,7 +237,6 @@ export default function Dashboard() {
 
     setToast({ minutes, points: Math.max(0, points), hours: focusSeconds / 3600 });
 
-    // ✅ refresh: sessions/dashboard/profile/subjects
     qc.invalidateQueries({
       predicate: (q) =>
         Array.isArray(q.queryKey) && q.queryKey[0] === "study" && q.queryKey[1] === "sessions",
@@ -192,10 +246,8 @@ export default function Dashboard() {
         Array.isArray(q.queryKey) && q.queryKey[0] === "study" && q.queryKey[1] === "dashboard",
     });
 
-    // ✅ FIX: must call subjects()
     qc.invalidateQueries({ queryKey: studyKeys.subjects() });
 
-    // optional (keep if you want profile refreshed for other fields)
     qc.invalidateQueries({ queryKey: profileMeKey });
 
     navigate(location.pathname, { replace: true, state: null });
@@ -237,7 +289,6 @@ export default function Dashboard() {
   const profile = (me as any)?.profile ?? (me as any) ?? {};
   const username: string = profile.display_name ?? profile.username ?? "User";
 
-  // ✅ XP / streak MUST come from Study dashboard (because Study service updates them)
   const stats = (dashboard as any)?.stats ?? {};
   const streak: number = Number(stats.streak_current ?? stats.streak ?? stats.streakDays ?? 0) || 0;
   const xp: number = Number(stats.xp_total ?? stats.xp ?? stats.xpTotal ?? 0) || 0;
@@ -248,12 +299,6 @@ export default function Dashboard() {
       : updateProfileError
         ? "Failed to update profile."
         : null;
-
-  const handleSaveTimezone = () => {
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || profile.timezone || "UTC";
-    updateProfile({ timezone: tz });
-    qc.invalidateQueries({ queryKey: profileMeKey });
-  };
 
   return (
     <div className="min-h-screen bg-creamtext text-zinc-900">
@@ -311,19 +356,6 @@ export default function Dashboard() {
                       ) : null}
 
                       <div className="mt-3 flex justify-end">
-                        <button
-                          onClick={handleSaveTimezone}
-                          disabled={isUpdatingProfile}
-                          className="
-                            rounded-xl border border-zinc-200 bg-white
-                            px-3 py-1.5 text-xs font-medium text-zinc-700
-                            hover:border-yellow-300 hover:text-zinc-900
-                            transition-colors
-                            disabled:opacity-60 disabled:cursor-not-allowed
-                          "
-                        >
-                          {isUpdatingProfile ? "Saving..." : "Save timezone"}
-                        </button>
                       </div>
                     </div>
                   </div>
@@ -385,7 +417,7 @@ export default function Dashboard() {
 
                   {(subjects ?? []).length === 0 ? (
                     <div className="col-span-2 rounded-2xl border border-zinc-200 bg-[#FFFBF2] p-4 text-sm text-zinc-600">
-                      No subjects yet. Create one in “Manage”.
+                      No subjects yet.
                     </div>
                   ) : null}
                 </div>
@@ -411,6 +443,73 @@ export default function Dashboard() {
 
             <footer className="mt-10 text-center text-xs text-zinc-400">REVE dashboard</footer>
           </div>
+          <AnimatePresence>
+            {joinToastOpen && joinNotif.latest && (
+              <motion.button
+                type="button"
+                initial={{ opacity: 0, y: 16, scale: 0.96 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 16, scale: 0.96 }}
+                transition={{ duration: 0.25, ease: "easeOut" }}
+                onClick={() => {
+                  const g = joinNotif.latest!;
+                  setJoinToastOpen(false);
+                  navigate(`/groups/${g.groupId}`, {
+                    state: { groupName: g.groupName, openRequests: true },
+                  });
+                }}
+                className="
+                  fixed right-6 top-24 z-[60] w-[360px]
+                  rounded-3xl border border-zinc-200 bg-white shadow-xl
+                  p-4 text-left
+                  hover:-translate-y-0.5 hover:shadow-2xl transition
+                "
+              >
+                <div className="flex items-start gap-3">
+                  <span className="h-10 w-10 rounded-2xl border border-zinc-200 bg-[#FFFBF2] flex items-center justify-center">
+                    <Bell className="h-5 w-5 text-amber-700" />
+                  </span>
+
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-zinc-900">
+                      New join request{joinNotif.count > 1 ? "s" : ""}
+                    </p>
+                    <p className="mt-1 text-xs text-zinc-600">
+                      <span className="font-semibold text-zinc-900">{joinNotif.latest.groupName}</span>
+                      {" · "}
+                      User #{String(joinNotif.latest.uid)}
+                    </p>
+
+                    <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1 text-[11px] font-semibold text-zinc-700">
+                      {joinNotif.count} pending
+                    </div>
+                  </div>
+
+                  <span className="mt-1 inline-flex items-center text-xs font-semibold text-zinc-500">
+                    Review <ChevronRight className="h-4 w-4" />
+                  </span>
+                </div>
+
+                <div className="mt-3 flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setJoinToastOpen(false);
+                    }}
+                    className="text-xs font-semibold text-zinc-500 hover:text-zinc-800 transition"
+                  >
+                    Dismiss
+                  </button>
+
+                  <span className="text-[11px] text-zinc-400">
+                    Auto-updates every 15s
+                  </span>
+                </div>
+              </motion.button>
+            )}
+          </AnimatePresence>
+
 
           <AnimatePresence>
             {toast && (

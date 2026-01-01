@@ -1,6 +1,7 @@
 // src/api/groups.ts
 import { groupsClient as apiClient } from "@/api/client";
-import type { ApiGroup, ApiGroupDetailsResponse, GroupVisibility } from "@/api/types";
+import type { ApiGroup, ApiGroupDetailsResponse, GroupVisibility, ApiJoinRequest } from "@/api/types";
+
 
 const GROUPS_PREFIX = "/groups";
 
@@ -10,6 +11,13 @@ export type CreateGroupBody = {
   visibility: GroupVisibility;
   weeklyXp: number | null;
   minimumDstMins: number | null;
+};
+
+export type ApiMyMembership = {
+  groupId: string;
+  uid: string | number;
+  isMember: boolean;
+  role: "owner" | "admin" | "member" | null;
 };
 
 export const groupsApi = {
@@ -38,6 +46,14 @@ export const groupsApi = {
       `${GROUPS_PREFIX}?limit=${encodeURIComponent(limit)}&offset=${encodeURIComponent(offset)}`
     );
   },
+  listJoinRequests: (groupId: string) =>
+    apiClient.get<ApiJoinRequest[]>(`/groups/${groupId}/requests`),
+
+  approveJoinRequest: (groupId: string, userId: string | number) =>
+    apiClient.post<void>(`/groups/${groupId}/requests/${userId}/approve`),
+
+  rejectJoinRequest: (groupId: string, userId: string | number) =>
+    apiClient.post<void>(`/groups/${groupId}/requests/${userId}/reject`),
 
   search: (params: { q: string; limit?: number; offset?: number }) => {
     const q = params.q ?? "";
@@ -47,4 +63,9 @@ export const groupsApi = {
       `${GROUPS_PREFIX}/search?q=${encodeURIComponent(q)}&limit=${encodeURIComponent(limit)}&offset=${encodeURIComponent(offset)}`
     );
   },
+
+  getMyMembership: (groupId: string) =>
+    apiClient.get<ApiMyMembership>(`${GROUPS_PREFIX}/${groupId}/members/me`),
+
+  listMine: () => apiClient.get<ApiGroup[]>(`${GROUPS_PREFIX}/me`),
 };

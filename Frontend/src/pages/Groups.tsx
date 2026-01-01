@@ -4,9 +4,8 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { Plus, Search, Hash } from "lucide-react";
-import { useQueries } from "@tanstack/react-query";
 
-import { ApiError, groupsClient } from "@/api/client";
+import { groupsClient } from "@/api/client";
 import type { ApiGroup } from "@/api/types";
 
 import Sidebar from "@/components/Dashboard/SidebarIcon";
@@ -14,9 +13,7 @@ import CreateGroupModal from "@/components/Groups/CreateGroupModal";
 import { logout } from "@/utils/authToken";
 import { GroupCard } from "@/components/Groups/GroupCard";
 
-import { useMyGroupIds } from "@/hooks/useMyGroupIds";
-import { groupDetailsKey, useCreateGroup, useDeleteGroup, useDiscoverGroups } from "@/hooks/useGroups";
-import { groupsApi } from "@/api/groups";
+import { useCreateGroup, useDeleteGroup, useDiscoverGroups, useMyGroups } from "@/hooks/useGroups";
 
 type CreateGroupPayload = {
   name: string;
@@ -40,10 +37,6 @@ function mapApiGroupToCard(g: ApiGroup) {
     score: 0,
     goal,
   };
-}
-
-function getHttpStatus(err: unknown): number | undefined {
-  return err instanceof ApiError ? err.status : (err as any)?.status;
 }
 
 function matchLoose(g: ApiGroup, q: string) {
@@ -115,60 +108,13 @@ export default function Groups() {
   const [createOpen, setCreateOpen] = useState(false);
   const newCardIdRef = useRef<string | null>(null);
 
-  // --------- My Groups (localStorage ids -> getDetails) ----------
-  const { ids, add: addId, remove: removeId } = useMyGroupIds();
+  // ✅ My Groups from API (/groups/me)
+  const myGroupsQuery = useMyGroups();
+  const myGroupsLoading = myGroupsQuery.isLoading;
+  const myGroupsError = myGroupsQuery.isError ? myGroupsQuery.error : null;
+  const myGroups: ApiGroup[] = (myGroupsQuery.data ?? []) as ApiGroup[];
 
-  const cleanedIdsRef = useRef<Set<string>>(new Set());
-
-  const myGroupQueries = useQueries({
-    queries: ids.map((id) => ({
-      queryKey: groupDetailsKey(id),
-      queryFn: () => groupsApi.getDetails(id),
-      enabled: Boolean(id),
-      retry: false,
-    })),
-  });
-
-  const myErrorPairs = useMemo(() => {
-    return myGroupQueries
-      .map((q, idx) => {
-        if (!q.isError) return null;
-        const id = ids[idx];
-        if (!id) return null;
-        const status = getHttpStatus(q.error);
-        return { id, status };
-      })
-      .filter(Boolean) as Array<{ id: string; status?: number }>;
-  }, [myGroupQueries, ids]);
-
-  useEffect(() => {
-    for (const { id, status } of myErrorPairs) {
-      if (status === 404 || status === 403) {
-        if (!cleanedIdsRef.current.has(id)) {
-          cleanedIdsRef.current.add(id);
-          removeId(id);
-        }
-      }
-    }
-  }, [myErrorPairs, removeId]);
-
-  const myGroupsLoading = myGroupQueries.some((q) => q.isLoading);
-
-  const myGroupsRealErrors = useMemo(() => {
-    return myGroupQueries
-      .map((q) => {
-        if (!q.isError) return null;
-        const status = getHttpStatus(q.error);
-        if (status === 403 || status === 404) return null;
-        return { status, error: q.error };
-      })
-      .filter(Boolean) as Array<{ status?: number; error: unknown }>;
-  }, [myGroupQueries]);
-
-  const myGroups: ApiGroup[] = myGroupQueries
-    .map((q) => q.data?.group)
-    .filter(Boolean) as ApiGroup[];
-
+  // Discover groups (public list)
   const discoverQuery = useDiscoverGroups(20, 0);
   const allGroups = (discoverQuery.data ?? []) as ApiGroup[];
 
@@ -191,7 +137,6 @@ export default function Groups() {
       minimumDstMins: payload.minDailyMinutes ?? null,
     });
 
-    addId(created.id);
     newCardIdRef.current = created.id;
     setQuery("");
 
@@ -202,9 +147,7 @@ export default function Groups() {
   };
 
   const handleDelete = (id: string) => {
-    deleteMutation.mutate(id, {
-      onSuccess: () => removeId(id),
-    });
+    deleteMutation.mutate(id);
   };
 
   // UI lists
@@ -233,6 +176,7 @@ export default function Groups() {
     return () => window.removeEventListener("keydown", onKey);
   }, [openSuggest]);
 
+  // suggestions: client-side scan over discover pages (kept as-is)
   useEffect(() => {
     const q = debouncedQ.trim();
     lastSuggestQRef.current = q;
@@ -252,21 +196,19 @@ export default function Groups() {
 
       try {
         const LIMIT = 50;
-        const MAX_PAGES = 10; 
+        const MAX_PAGES = 10;
         const TARGET = 8;
 
         const found: ApiGroup[] = [];
         const seen = new Set<string>();
 
         for (let page = 0; page < MAX_PAGES; page++) {
-          // اگر query عوض شد، stop
           if (cancelled) return;
           if (lastSuggestQRef.current !== q) return;
 
           const offset = page * LIMIT;
           const rows = await fetchDiscoverPage(LIMIT, offset);
 
-          // match substring
           for (const g of rows) {
             if (!g?.id || seen.has(g.id)) continue;
             if (matchLoose(g, q)) {
@@ -277,7 +219,6 @@ export default function Groups() {
           }
 
           if (found.length >= TARGET) break;
-          // اگر دیتای صفحه کمتر از limit بود یعنی ته لیستیم
           if (rows.length < LIMIT) break;
         }
 
@@ -345,7 +286,6 @@ export default function Groups() {
                     "
                   />
 
-                  {/* ✅ شیک‌تر: dropdown واقعی */}
                   <AnimatePresence>
                     {showSuggest && (
                       <motion.div
@@ -365,17 +305,13 @@ export default function Groups() {
                       >
                         <div className="max-h-[340px] overflow-auto">
                           {suggestLoading ? (
-                            <div className="px-4 py-4 text-sm text-zinc-600">
-                              Searching…
-                            </div>
+                            <div className="px-4 py-4 text-sm text-zinc-600">Searching…</div>
                           ) : suggestError ? (
                             <div className="px-4 py-4 text-sm text-rose-700">
                               Couldn’t load suggestions.
                             </div>
                           ) : suggestions.length === 0 ? (
-                            <div className="px-4 py-4 text-sm text-zinc-600">
-                              No suggestions.
-                            </div>
+                            <div className="px-4 py-4 text-sm text-zinc-600">No suggestions.</div>
                           ) : (
                             <ul className="p-2">
                               {suggestions.map((g) => (
@@ -400,7 +336,10 @@ export default function Groups() {
                                         <Highlight text={g.name} q={debouncedQ} />
                                       </p>
                                       <p className="mt-0.5 text-xs text-zinc-500 line-clamp-1">
-                                        <Highlight text={g.description || "No description"} q={debouncedQ} />
+                                        <Highlight
+                                          text={g.description || "No description"}
+                                          q={debouncedQ}
+                                        />
                                       </p>
                                     </div>
 
@@ -420,7 +359,6 @@ export default function Groups() {
                           )}
                         </div>
 
-                        {/* خط جداکننده ملایم */}
                         <div className="h-px bg-gradient-to-r from-transparent via-zinc-200 to-transparent" />
 
                         <div className="px-4 py-3 flex items-center justify-between">
@@ -459,9 +397,8 @@ export default function Groups() {
             <div className="mt-10">
               <div className="flex items-end justify-between gap-4">
                 <div>
-                  <p className="text-sm font-semibold text-zinc-900">My Groups</p>
                   <p className="mt-0.5 text-xs text-zinc-500">
-                    Groups you created or previously opened (stored locally).
+                    Groups you belong to.
                   </p>
                 </div>
               </div>
@@ -470,7 +407,7 @@ export default function Groups() {
                 <div className="mt-4 text-sm text-zinc-600">Loading your groups…</div>
               )}
 
-              {myGroupsRealErrors.length > 0 && (
+              {myGroupsError && (
                 <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
                   Some of your groups failed to load due to server/network error.
                 </div>
@@ -516,8 +453,6 @@ export default function Groups() {
               )}
             </div>
 
-
-
             {/* Floating Create Button */}
             <button
               type="button"
@@ -543,9 +478,7 @@ export default function Groups() {
               </div>
             </button>
 
-            <footer className="mt-12 text-center text-xs text-zinc-400">
-              REVE dashboard
-            </footer>
+            <footer className="mt-12 text-center text-xs text-zinc-400">REVE dashboard</footer>
           </div>
         </div>
       </div>
