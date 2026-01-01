@@ -18,17 +18,19 @@ import { useNavigate, useParams, useLocation } from "react-router-dom";
 import Sidebar from "@/components/Dashboard/SidebarIcon";
 import Topbar from "@/components/Dashboard/DashboardHeader";
 import { logout } from "@/utils/authToken";
-import { useGroupChatSocket } from "@/hooks/useGroupChatSocket";
+
+import { useGroupChatSocket, type ChatMessage } from "@/hooks/useGroupChatSocket";
+import { useGroupDetails } from "@/hooks/useGroupDetails";
+import { useMyMembership } from "@/hooks/useMyMembership";
 
 const EASE_OUT: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
 type UiMessage = {
   id: string;
-  user: string;
-  avatar?: string;
   text: string;
-  mine?: boolean;
   time: string;
+  mine: boolean;
+  senderAvatar?: string | null;
 };
 
 function formatTime(iso: string) {
@@ -36,14 +38,89 @@ function formatTime(iso: string) {
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
+function pickMemberUid(m: any): string | number | null {
+  return (m?.uid ?? m?.userId ?? m?.user_id ?? m?.id ?? null) as any;
+}
+
+function pickMemberName(m: any): string | null {
+  const v = (m?.displayName || m?.name || m?.username || null) as any;
+  return typeof v === "string" && v.trim() ? v.trim() : null;
+}
+
+function pickMemberUsername(m: any): string | null {
+  const u = (m?.username || m?.handle || m?.user_name || null) as any;
+  return typeof u === "string" && u.trim() ? u.trim() : null;
+}
+
+function pickMemberAvatar(m: any): string | null {
+  return (m?.avatarUrl || m?.avatar_url || null) as any;
+}
+
+function initialsFromName(name: string) {
+  const cleaned = name.trim().replace(/\s+/g, " ");
+  if (!cleaned) return "?";
+  const parts = cleaned.split(" ");
+  const a = parts[0]?.[0] || "";
+  const b = parts.length > 1 ? parts[parts.length - 1]?.[0] || "" : "";
+  const ini = (a + b).toUpperCase();
+  return ini || "?";
+}
+
+function toNum(x: any): number | null {
+  const n = Number(x);
+  return Number.isFinite(n) ? n : null;
+}
+
+function isMineMessage(senderUid: any, myUid: any): boolean {
+  if (senderUid == null || myUid == null) return false;
+  if (String(senderUid) === String(myUid)) return true;
+
+  const a = toNum(senderUid);
+  const b = toNum(myUid);
+  if (a != null && b != null && a === b) return true;
+
+  return false;
+}
+
 export default function GroupChat() {
   const { groupId } = useParams<{ groupId: string }>();
   const location = useLocation();
   const navigate = useNavigate();
 
+  const groupName =
+    (location.state as { groupName?: string } | null)?.groupName ?? "Group Chat";
+
+  // ✅ uid خودم از group-service
+  const membershipQ = useMyMembership(groupId);
+  const myUid = membershipQ.data?.uid ?? null;
+
+  // group details (members)
+  const detailsQ = useGroupDetails(groupId);
+  const group = detailsQ.data?.group;
+  const members = detailsQ.data?.members || [];
+  const memberCount = members.length;
+
+  // map uid -> avatar
+  const memberAvatarMap = useMemo(() => {
+    const map = new Map<string, string | null>();
+    for (const m of members) {
+      const uid = pickMemberUid(m);
+      if (uid == null) continue;
+      map.set(String(uid), pickMemberAvatar(m));
+    }
+    return map;
+  }, [members]);
+
+  // socket chat
+  const { messages: serverMessages, connected, joined, lastError, send } =
+    useGroupChatSocket({
+      groupId,
+      limit: 50,
+    });
+
+  // emoji
   const [emojiOpen, setEmojiOpen] = useState(false);
   const emojiRef = useRef<HTMLDivElement | null>(null);
-
   useEffect(() => {
     const onClickOutside = (e: MouseEvent) => {
       if (!emojiRef.current) return;
@@ -53,11 +130,8 @@ export default function GroupChat() {
     return () => document.removeEventListener("mousedown", onClickOutside);
   }, []);
 
-  const groupName =
-    (location.state as { groupName?: string } | null)?.groupName ?? "Group Chat";
-
+  // input
   const [input, setInput] = useState("");
-
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const handleButtonClick = () => fileInputRef.current?.click();
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -65,26 +139,24 @@ export default function GroupChat() {
     console.log(files);
   };
 
+  // scroll bottom
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
-  const { messages: serverMessages, connected, joined, lastError, send } = useGroupChatSocket({
-    groupId,
-    limit: 50,
-  });
-
   const uiMessages: UiMessage[] = useMemo(() => {
-    if (!groupId) return [];
-    return (serverMessages || []).map((m) => ({
-      id: String(m.id),
-      user: String(m.sender_uid),
-      text: m.text,
-      mine: false, // چون uid خود کاربر را اینجا نداریم، برای MVP ساده می‌گذاریم false
-      time: formatTime(m.created_at),
-    }));
-  }, [serverMessages, groupId]);
+    return (serverMessages || []).map((m: ChatMessage) => {
+      const senderUid = m.sender_uid;
+      const mine = isMineMessage(senderUid, myUid);
+      const senderAvatar = memberAvatarMap.get(String(senderUid)) ?? null;
 
-  // بهتر: پیام‌های من را با یک heuristic علامت بزنیم (اگر accessToken uid را داری می‌تونیم دقیق کنیم)
-  // فعلاً ساده: اگر ارسال می‌کنی، UI خودش با message:new میاد و همچنان mine=false می‌مونه.
+      return {
+        id: String(m.id),
+        text: m.text,
+        time: formatTime(m.created_at),
+        mine,
+        senderAvatar,
+      };
+    });
+  }, [serverMessages, myUid, memberAvatarMap]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -95,6 +167,31 @@ export default function GroupChat() {
     send(input.trim());
     setInput("");
   };
+
+  // ✅ Members UI data (professional)
+  const memberCards = useMemo(() => {
+    return members.map((m, idx) => {
+      const uid = pickMemberUid(m);
+      const name = pickMemberName(m);
+      const username = pickMemberUsername(m);
+      const avatar = pickMemberAvatar(m);
+      const online = Boolean(m?.online);
+
+      const display =
+        name || username || (uid != null ? `User #${String(uid)}` : `Member ${idx + 1}`);
+
+      const subtitle =
+        username && name
+          ? `@${username.replace(/^@/, "")}`
+          : uid != null
+            ? `ID: ${String(uid)}`
+            : "";
+
+      const isMe = uid != null && myUid != null && isMineMessage(uid, myUid);
+
+      return { uid, display, subtitle, avatar, online, isMe };
+    });
+  }, [members, myUid]);
 
   return (
     <div className="h-screen overflow-hidden bg-creamtext text-zinc-900">
@@ -138,16 +235,23 @@ export default function GroupChat() {
                           <p className="truncate text-sm font-semibold text-zinc-900">
                             {groupName}
                           </p>
-                          <p className="text-xs text-zinc-500 truncate">
-                            Group · {groupId} ·{" "}
-                            <span className="font-semibold">
+
+                          {/* فقط تعداد اعضا */}
+                          <div className="flex items-center gap-2 text-xs text-zinc-500">
+                            <Users className="h-4 w-4" />
+                            <span>
+                              {detailsQ.isLoading ? "Loading members..." : `${memberCount} members`}
+                            </span>
+
+                            <span className="text-zinc-300">•</span>
+                            <span className="font-medium">
                               {connected ? (joined ? "Joined" : "Connecting...") : "Offline"}
                             </span>
-                          </p>
+                          </div>
+
                           {lastError ? (
                             <p className="text-xs text-red-600 mt-1">
-                              {lastError.code}
-                              {lastError.message ? `: ${lastError.message}` : ""}
+                              {lastError.message || lastError.code}
                             </p>
                           ) : null}
                         </div>
@@ -184,31 +288,52 @@ export default function GroupChat() {
                             animate={{ opacity: 1, y: 0, scale: 1 }}
                             exit={{ opacity: 0 }}
                             transition={{ duration: 0.2, ease: "easeOut" }}
-                            className={`mb-3 flex ${
-                              m.mine ? "justify-end" : "justify-start"
-                            }`}
+                            className={`mb-3 flex ${m.mine ? "justify-end" : "justify-start"}`}
                           >
+                            {/* Avatar (others) */}
+                            {!m.mine && (
+                              <div className="mr-2 mt-1 h-8 w-8 overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-100 flex items-center justify-center text-xs font-bold text-zinc-600">
+                                {m.senderAvatar ? (
+                                  <img
+                                    src={m.senderAvatar}
+                                    alt="user"
+                                    className="h-full w-full object-cover"
+                                  />
+                                ) : (
+                                  "?"
+                                )}
+                              </div>
+                            )}
+
                             <div
                               className={`
                                 max-w-[78%] rounded-3xl px-4 py-2
                                 text-sm shadow-sm break-words
-                                ${
-                                  m.mine
-                                    ? "bg-gradient-to-br from-yellow-400 to-amber-500 text-white"
-                                    : "bg-zinc-100 text-zinc-900"
-                                }
+                                ${m.mine
+                                  ? "bg-gradient-to-br from-yellow-400 to-amber-500 text-white"
+                                  : "bg-zinc-100 text-zinc-900"}
                               `}
                             >
-                              {!m.mine && (
-                                <p className="mb-0.5 text-[11px] font-semibold opacity-70">
-                                  {m.user}
-                                </p>
-                              )}
                               <p>{m.text}</p>
                               <p className="mt-1 text-[10px] opacity-70 text-right">
                                 {m.time}
                               </p>
                             </div>
+
+                            {/* Avatar (mine) */}
+                            {m.mine && (
+                              <div className="ml-2 mt-1 h-8 w-8 overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-100 flex items-center justify-center text-xs font-bold text-zinc-600">
+                                {m.senderAvatar ? (
+                                  <img
+                                    src={m.senderAvatar}
+                                    alt="me"
+                                    className="h-full w-full object-cover"
+                                  />
+                                ) : (
+                                  "ME"
+                                )}
+                              </div>
+                            )}
                           </motion.div>
                         ))}
                       </AnimatePresence>
@@ -303,7 +428,9 @@ export default function GroupChat() {
                 >
                   <div className="p-4 border-b border-zinc-200">
                     <p className="text-sm font-semibold text-zinc-900">{groupName}</p>
-                    <p className="mt-1 text-xs text-zinc-500">Members · Online</p>
+                    <p className="mt-1 text-xs text-zinc-500">
+                      Members · {detailsQ.isLoading ? "..." : memberCount}
+                    </p>
 
                     <div className="mt-3 flex items-center gap-2 text-zinc-600">
                       <Users className="h-4 w-4" />
@@ -315,24 +442,81 @@ export default function GroupChat() {
                     <div className="rounded-2xl border border-zinc-200 bg-white p-3">
                       <p className="text-xs font-semibold text-zinc-700">About</p>
                       <p className="mt-1 text-xs text-zinc-500 leading-relaxed">
-                        Working together, sharing ideas and communicating effectively.
+                        {group?.description?.trim()
+                          ? group.description
+                          : "Working together, sharing ideas and communicating effectively."}
                       </p>
                     </div>
 
+                    {/* ✅ Professional members list */}
                     <div className="rounded-2xl border border-zinc-200 bg-white p-3">
-                      <p className="text-xs font-semibold text-zinc-700">Shared files</p>
-                      <div className="mt-2 space-y-2">
-                        {["terms_of_reference.docx", "contract.xlsx", "logo.svg"].map((f) => (
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-semibold text-zinc-700">Members</p>
+                        {membershipQ.isLoading ? (
+                          <span className="text-[11px] text-zinc-400">Loading…</span>
+                        ) : null}
+                      </div>
+
+                      <div className="mt-3 space-y-2">
+                        {memberCards.map((m) => (
                           <div
-                            key={f}
-                            className="flex items-center justify-between rounded-xl bg-zinc-50 px-3 py-2"
+                            key={m.uid != null ? String(m.uid) : m.display}
+                            className={`
+                              flex items-center gap-3 rounded-2xl
+                              border border-zinc-200 bg-zinc-50 px-3 py-2
+                              ${m.isMe ? "ring-1 ring-yellow-300" : ""}
+                            `}
                           >
-                            <span className="text-xs text-zinc-600 truncate">{f}</span>
-                            <button className="text-xs font-semibold text-yellow-600 hover:text-yellow-700">
-                              View
-                            </button>
+                            <div className="relative h-10 w-10 rounded-2xl overflow-hidden border border-zinc-200 bg-white grid place-items-center">
+                              {m.avatar ? (
+                                <img
+                                  src={m.avatar}
+                                  alt={m.display}
+                                  className="h-full w-full object-cover"
+                                />
+                              ) : (
+                                <span className="text-xs font-bold text-zinc-600">
+                                  {initialsFromName(m.display)}
+                                </span>
+                              )}
+
+                              {/* online dot (if provided) */}
+                              <span
+                                className={`
+                                  absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white
+                                  ${m.online ? "bg-emerald-500" : "bg-zinc-300"}
+                                `}
+                              />
+                            </div>
+
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="truncate text-sm font-semibold text-zinc-900">
+                                  {m.display}
+                                  {m.isMe ? (
+                                    <span className="ml-2 text-[11px] font-semibold text-yellow-700">
+                                      (You)
+                                    </span>
+                                  ) : null}
+                                </p>
+                              </div>
+
+                              {m.subtitle ? (
+                                <p className="truncate text-[11px] text-zinc-500 mt-0.5">
+                                  {m.subtitle}
+                                </p>
+                              ) : (
+                                <p className="truncate text-[11px] text-zinc-400 mt-0.5">
+                                  Member
+                                </p>
+                              )}
+                            </div>
                           </div>
                         ))}
+
+                        {!memberCards.length && !detailsQ.isLoading ? (
+                          <p className="text-xs text-zinc-500">No members found.</p>
+                        ) : null}
                       </div>
                     </div>
                   </div>

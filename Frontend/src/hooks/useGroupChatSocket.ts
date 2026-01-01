@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getChatSocket, resetChatSocket } from "@/realtime/chatSocket";
+import { getChatSocket } from "@/realtime/chatSocket";
 
 export type ChatMessage = {
   id: string;
@@ -24,7 +24,6 @@ export function useGroupChatSocket({ groupId, limit = 50 }: UseGroupChatSocketOp
   const socket = useMemo(() => getChatSocket(), []);
   const joinedRef = useRef(false);
 
-  // connect + listeners
   useEffect(() => {
     if (!groupId) return;
 
@@ -46,19 +45,16 @@ export function useGroupChatSocket({ groupId, limit = 50 }: UseGroupChatSocketOp
 
     const onListResult = (payload: { groupId: string; messages: ChatMessage[] }) => {
       if (payload.groupId !== groupId) return;
-      // بک: newest-first -> برای UI ما oldest-first بهتره، پس reverse
-      const ordered = [...payload.messages].reverse();
-      setMessages(ordered);
+      // بک newest-first -> UI oldest-first
+      setMessages([...payload.messages].reverse());
     };
 
     const onNewMessage = (msg: ChatMessage) => {
       if (msg.group_id !== groupId) return;
       setMessages((prev) => {
-        // جلوگیری از تکرار با client_message_id (اگر بود)
+        // dedupe by client_message_id if present
         if (msg.client_message_id) {
-          const exists = prev.some(
-            (m) => m.client_message_id && m.client_message_id === msg.client_message_id
-          );
+          const exists = prev.some((m) => m.client_message_id === msg.client_message_id);
           if (exists) return prev;
         }
         return [...prev, msg];
@@ -88,7 +84,6 @@ export function useGroupChatSocket({ groupId, limit = 50 }: UseGroupChatSocketOp
     socket.on("group:revoked", onRevoked);
     socket.on("group:deleted", onDeleted);
 
-    // connect + join
     if (!socket.connected) socket.connect();
     socket.emit("group:join", { groupId });
 
@@ -114,25 +109,5 @@ export function useGroupChatSocket({ groupId, limit = 50 }: UseGroupChatSocketOp
     socket.emit("message:send", { groupId, text: trimmed, clientMessageId });
   }
 
-  // helper: manual refresh
-  function refresh(before: string | null = null) {
-    if (!groupId) return;
-    if (!joinedRef.current) return;
-    socket.emit("messages:list", { groupId, limit, before });
-  }
-
-  function disconnectAll() {
-    resetChatSocket();
-  }
-
-  return {
-    socket,
-    connected,
-    joined,
-    messages,
-    lastError,
-    send,
-    refresh,
-    disconnectAll,
-  };
+  return { connected, joined, messages, lastError, send };
 }

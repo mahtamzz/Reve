@@ -1,5 +1,4 @@
 // src/pages/GroupDetails.tsx
-
 import React, { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
@@ -68,14 +67,44 @@ function placeholderAvatar(seed: string) {
   return `https://api.dicebear.com/7.x/identicon/svg?seed=${s}`;
 }
 
-function mapMember(m: ApiGroupMember, idx: number): Member {
-  const id = String(m.id ?? m.uid ?? m.userId ?? idx);
-  const name = String(m.username ?? m.displayName ?? m.name ?? `Member ${idx + 1}`);
-  const avatarUrl = String(m.avatarUrl ?? m.avatar_url ?? placeholderAvatar(id));
-  const time = String(m.time ?? m.studyTime ?? m.study_time ?? "--:--:--");
-  const online = Boolean(m.online);
+function pickUid(m: ApiGroupMember, idx: number): string {
+  return String((m as any)?.uid ?? (m as any)?.userId ?? (m as any)?.user_id ?? (m as any)?.id ?? idx);
+}
 
-  return { id, name, avatarUrl, time, online };
+function pickName(m: ApiGroupMember, uid: string): string {
+  const v =
+    (m as any)?.displayName ||
+    (m as any)?.name ||
+    (m as any)?.username ||
+    null;
+
+  if (typeof v === "string" && v.trim()) return v.trim();
+
+  // ✅ fallback حرفه‌ای
+  return `User #${uid}`;
+}
+
+function pickAvatar(m: ApiGroupMember, uid: string): string {
+  const v = (m as any)?.avatarUrl || (m as any)?.avatar_url || null;
+  if (typeof v === "string" && v.trim()) return v.trim();
+  return placeholderAvatar(uid);
+}
+
+function pickTime(m: ApiGroupMember): string {
+  const v = (m as any)?.time ?? (m as any)?.studyTime ?? (m as any)?.study_time ?? null;
+  if (typeof v === "string" && v.trim()) return v.trim();
+  return "--:--:--";
+}
+
+function mapMember(m: ApiGroupMember, idx: number): Member {
+  const uid = pickUid(m, idx);
+  const name = pickName(m, uid);
+  const avatarUrl = pickAvatar(m, uid);
+  const time = pickTime(m);
+  const online = Boolean((m as any)?.online);
+
+  // MemberCard انتظارش: { id, name, avatarUrl, time, online }
+  return { id: uid, name, avatarUrl, time, online };
 }
 
 function getHttpStatus(err: unknown): number | undefined {
@@ -87,36 +116,27 @@ export default function GroupDetails() {
   const navigate = useNavigate();
   const location = useLocation();
 
+  const gid = groupId || "";
   const groupNameFromState = (location.state as { groupName?: string } | null)?.groupName;
 
   const [membersOpen, setMembersOpen] = useState(false);
   const [joinNotice, setJoinNotice] = useState<string | null>(null);
 
-  const gid = groupId || "";
-
-  // ✅ 1) membership check (always)
   const membershipQ = useMyMembership(gid);
   const isMember = Boolean(membershipQ.data?.isMember);
 
-  // ✅ 2) fetch group details:
-  // - if member => definitely fetch
-  // - if not member => try fetch anyway (public ok, private may 403)
   const detailsQ = useGroupDetails(gid, Boolean(gid));
   const { data, isLoading, isError, error } = detailsQ;
 
   useEffect(() => {
     if (!membersOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setMembersOpen(false);
-    };
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setMembersOpen(false);
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [membersOpen]);
 
   const group = data?.group;
-
   const title = group?.name ?? groupNameFromState ?? "Group";
-
   const visibility = group?.visibility ?? "private";
   const isPrivate = visibility === "private";
 
@@ -126,7 +146,6 @@ export default function GroupDetails() {
       ? "This is a private group. Join to see full details."
       : "A focused space to study together, keep streaks, and stay accountable.");
 
-  // member-only computed
   const members = useMemo(() => (data?.members ?? []).map(mapMember), [data?.members]);
   const previewMembers = useMemo(() => members.slice(0, 4), [members]);
 
@@ -140,11 +159,7 @@ export default function GroupDetails() {
     setJoinNotice(null);
     try {
       const res = await joinMutation.mutateAsync(gid);
-      if (res.status === "requested") {
-        setJoinNotice("Join request sent. Wait for approval.");
-      } else {
-        setJoinNotice("Joined successfully!");
-      }
+      setJoinNotice(res.status === "requested" ? "Join request sent. Wait for approval." : "Joined successfully!");
     } catch (e) {
       const st = getHttpStatus(e);
       if (st === 401) setJoinNotice("Please login again.");
@@ -153,13 +168,10 @@ export default function GroupDetails() {
   };
 
   const goToChat = () => {
-    const name = group?.name ?? groupNameFromState ?? "Group";
-    navigate(`/groups/${gid}/chat`, { state: { groupName: name } });
+    navigate(`/groups/${gid}/chat`, { state: { groupName: title } });
   };
 
   const showMemberUi = isMember;
-
-  // If details failed with 403/404 for non-members, preview still works
   const detailsStatus = isError ? getHttpStatus(error) : undefined;
   const detailsBlocked = !showMemberUi && (detailsStatus === 403 || detailsStatus === 404);
 
@@ -181,18 +193,14 @@ export default function GroupDetails() {
                   type="button"
                   onClick={() => navigate("/groups")}
                   className="
-                    group relative overflow-hidden
                     rounded-xl border border-zinc-200 bg-white
                     px-3 py-2 text-xs font-semibold text-zinc-700
-                    shadow-sm transition-all duration-300
-                    hover:-translate-y-0.5 hover:shadow-md
-                    hover:border-yellow-300 hover:text-zinc-900
-                    flex items-center gap-2 w-fit
+                    shadow-sm hover:border-yellow-300 hover:text-zinc-900 transition
+                    inline-flex items-center gap-2
                   "
                 >
-                  <span className="pointer-events-none absolute inset-0 translate-x-[-120%] group-hover:translate-x-[120%] transition-transform duration-700 ease-in-out bg-[linear-gradient(90deg,transparent,rgba(250,204,21,0.18),transparent)]" />
-                  <ArrowLeft className="h-4 w-4 relative" />
-                  <span className="relative">Back</span>
+                  <ArrowLeft className="h-4 w-4" />
+                  Back
                 </button>
 
                 {showMemberUi ? (
@@ -200,18 +208,14 @@ export default function GroupDetails() {
                     type="button"
                     onClick={goToChat}
                     className="
-                      group relative overflow-hidden
                       rounded-xl border border-zinc-200 bg-white
                       px-3 py-2 text-xs font-semibold text-zinc-700
-                      shadow-sm transition-all duration-300
-                      hover:-translate-y-0.5 hover:shadow-md
-                      hover:border-yellow-300 hover:text-zinc-900
-                      flex items-center gap-2 w-fit
+                      shadow-sm hover:border-yellow-300 hover:text-zinc-900 transition
+                      inline-flex items-center gap-2
                     "
                   >
-                    <span className="pointer-events-none absolute inset-0 translate-x-[-120%] group-hover:translate-x-[120%] transition-transform duration-700 ease-in-out bg-[linear-gradient(90deg,transparent,rgba(250,204,21,0.18),transparent)]" />
-                    <MessageCircle className="h-4 w-4 relative" />
-                    <span className="relative">Open Group Chat</span>
+                    <MessageCircle className="h-4 w-4" />
+                    Open Group Chat
                   </button>
                 ) : (
                   <button
@@ -221,8 +225,7 @@ export default function GroupDetails() {
                     className="
                       rounded-xl border border-zinc-200 bg-white
                       px-4 py-2 text-xs font-semibold text-zinc-800
-                      shadow-sm transition
-                      hover:-translate-y-0.5 hover:shadow-md hover:border-yellow-300
+                      shadow-sm hover:border-yellow-300 transition
                       disabled:opacity-60 disabled:cursor-not-allowed
                       inline-flex items-center gap-2
                     "
@@ -234,9 +237,7 @@ export default function GroupDetails() {
               </div>
 
               <div className="mt-4">
-                <p className="text-sm text-zinc-500">
-                  Groups / {showMemberUi ? "Details" : "Preview"}
-                </p>
+                <p className="text-sm text-zinc-500">Groups / {showMemberUi ? "Details" : "Preview"}</p>
 
                 <div className="mt-1 flex items-center gap-2">
                   <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-zinc-900">
@@ -267,95 +268,8 @@ export default function GroupDetails() {
               </div>
             </motion.div>
 
-            {/* --------- Preview UI (non-member) --------- */}
-            {!showMemberUi ? (
-              <motion.div
-                initial={{ opacity: 0, y: 10, scale: 0.99 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                transition={{ duration: 0.35, ease: EASE_OUT }}
-                className="relative mt-6 rounded-3xl bg-white p-6 shadow-sm border border-zinc-200 overflow-hidden"
-              >
-                <div className="pointer-events-none absolute -top-16 -right-20 h-56 w-56 rounded-full bg-yellow-200/30 blur-3xl" />
-                <div className="pointer-events-none absolute -bottom-24 -left-20 h-64 w-64 rounded-full bg-yellow-100/50 blur-3xl" />
-
-                <div className="relative grid grid-cols-12 gap-6">
-                  <div className="col-span-12 lg:col-span-7">
-                    <div className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
-                      <MiniSectionTitle
-                        title="Group preview"
-                        subtitle={
-                          isPrivate
-                            ? "Private groups hide member list until you join."
-                            : "Public group — you can join instantly."
-                        }
-                        right="Preview"
-                      />
-
-                      <div className="mt-4 grid grid-cols-2 gap-4">
-                        <StatCard
-                          label="Weekly XP goal"
-                          value={weeklyXp ?? 0}
-                          suffix="xp"
-                          valueClassName="text-sky-600"
-                        />
-                        <StatCard
-                          label="Minimum daily"
-                          value={minimumDailyMinutes == null ? "—" : minimumDailyMinutes}
-                          suffix="min"
-                          valueClassName="text-amber-600"
-                        />
-                      </div>
-
-                      <div className="mt-5 rounded-2xl border border-zinc-200 bg-gradient-to-br from-yellow-50/70 to-white p-4">
-                        <p className="text-xs font-semibold text-zinc-900">Join to access</p>
-                        <p className="mt-1 text-[11px] text-zinc-500">
-                          Members list, chat, and group progress.
-                        </p>
-
-                        <button
-                          type="button"
-                          onClick={handleJoin}
-                          disabled={joining || membershipQ.isLoading}
-                          className="
-                            mt-4 w-full rounded-2xl border border-zinc-200 bg-[#FFFBF2]
-                            px-4 py-3 text-sm font-semibold text-zinc-800
-                            hover:border-yellow-300 hover:bg-yellow-50 transition-colors
-                            disabled:opacity-60 disabled:cursor-not-allowed
-                            flex items-center justify-between
-                          "
-                        >
-                          <span className="flex items-center gap-2">
-                            {isPrivate ? <Lock className="h-4 w-4" /> : <Globe className="h-4 w-4" />}
-                            {joining ? "Joining..." : isPrivate ? "Request to join" : "Join group"}
-                          </span>
-                          <span className="text-xs text-zinc-500">→</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="col-span-12 lg:col-span-5 space-y-6">
-                    <div className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
-                      <MiniSectionTitle title="Your buddy" subtitle="Stay consistent." right="Tip" />
-                      <div className="mt-4 rounded-3xl border border-zinc-200 bg-white/60 backdrop-blur p-1 shadow-sm">
-                        <LookAtBuddy label="Your study buddy" />
-                      </div>
-                    </div>
-
-                    <div className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
-                      <MiniSectionTitle title="Members" subtitle="Hidden until you join" right="Locked" />
-                      <div className="mt-4 rounded-3xl border border-zinc-200 bg-[#FFFBF2] p-5">
-                        <p className="text-sm text-zinc-600">
-                          Join the group to view members.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-            ) : (
+            {showMemberUi ? (
               <>
-                {/* --------- Member UI (existing details) --------- */}
                 <div className="mt-5 max-w-md">
                   <div className="rounded-3xl border border-zinc-200 bg-white/60 backdrop-blur p-1 shadow-sm">
                     <LookAtBuddy label="Your study buddy" />
@@ -387,7 +301,6 @@ export default function GroupDetails() {
                               <p className="text-xs font-semibold text-zinc-900">Minimum daily study time</p>
                               <p className="mt-1 text-[11px] text-zinc-500">Consistency beats intensity.</p>
                             </div>
-
                             <span className="inline-flex items-center rounded-full border border-yellow-200 bg-yellow-100/60 px-2.5 py-1 text-[11px] font-semibold text-yellow-800">
                               Goal
                             </span>
@@ -405,7 +318,7 @@ export default function GroupDetails() {
 
                     <div className="col-span-12 lg:col-span-5 space-y-6">
                       <div className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
-                        <MiniSectionTitle title="Members" subtitle={`${members.length} members`} right="Online" />
+                        <MiniSectionTitle title="Members" subtitle={`${members.length} members`} right="Team" />
 
                         <div className="mt-4 rounded-3xl border border-zinc-200 bg-[#FFFBF2] p-5">
                           <div className="grid grid-cols-2 gap-x-4 gap-y-8">
@@ -483,11 +396,8 @@ export default function GroupDetails() {
                         "
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <div className="relative p-6 border-b border-zinc-200">
-                          <div className="pointer-events-none absolute -top-16 -right-20 h-56 w-56 rounded-full bg-yellow-200/30 blur-3xl" />
-                          <div className="pointer-events-none absolute -bottom-24 -left-20 h-64 w-64 rounded-full bg-yellow-100/50 blur-3xl" />
-
-                          <div className="relative flex items-start justify-between gap-4">
+                        <div className="p-6 border-b border-zinc-200">
+                          <div className="flex items-start justify-between gap-4">
                             <div>
                               <p className="text-sm text-zinc-500">Members</p>
                               <p className="mt-1 text-xl font-semibold text-zinc-900">
@@ -526,6 +436,12 @@ export default function GroupDetails() {
                   )}
                 </AnimatePresence>
               </>
+            ) : (
+              <div className="mt-6 rounded-3xl border border-zinc-200 bg-white p-6">
+                <p className="text-sm text-zinc-600">
+                  {detailsBlocked ? "Private group preview. Join to see members and full details." : "Join to see members."}
+                </p>
+              </div>
             )}
 
             <footer className="mt-10 text-center text-xs text-zinc-400">REVE dashboard</footer>
