@@ -47,6 +47,22 @@ class PgUserProfileRepository extends UserProfileRepository {
         );
     }
 
+    async getPublicProfilesByUids(uids) {
+        if (!uids.length) return [];
+
+        const result = await this.pool.query(
+            `
+        SELECT uid, display_name, timezone
+        FROM user_profiles
+        WHERE uid = ANY($1::int[])
+        `,
+            [uids]
+        );
+
+        return result.rows;
+    }
+
+
 }
 
 module.exports = PgUserProfileRepository;

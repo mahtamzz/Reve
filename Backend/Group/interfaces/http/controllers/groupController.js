@@ -13,7 +13,9 @@ function createGroupController(useCases) {
         listGroups,
         listMyGroups,
         searchGroups,
-        getMyMembership
+        getMyMembership,
+        listJoinRequests,
+        listGroupMembers
     } = useCases;
 
     return {
@@ -206,6 +208,32 @@ function createGroupController(useCases) {
             const uid = req.user.uid;
             const groups = await listMyGroups.execute(uid);
             res.json(groups);
+        },
+
+        async listJoinRequests(req, res, next) {
+            try {
+                const result = await listJoinRequests.execute({
+                    actorUid: req.user.uid,
+                    groupId: req.params.groupId
+                });
+
+                res.json(result);
+            } catch (err) {
+                next(err);
+            }
+        },
+
+        async listMembers(req, res, next) {
+            try {
+                const result = await listGroupMembers.execute({
+                    viewerUid: req.user.uid,
+                    groupId: req.params.groupId
+                });
+
+                res.json(result);
+            } catch (err) {
+                next(err);
+            }
         },
 
     };

@@ -18,6 +18,10 @@ class UserProfileRepository {
     updateStreak(uid, streak) {
         throw new Error('Not implemented');
     }
+
+    getPublicProfilesByUids(uids) {
+        throw new Error("Not implemented");
+    }
 }
 
 module.exports = UserProfileRepository;

@@ -17,10 +17,32 @@ module.exports = function createChatRoutes({ controller, auth }) {
                 list: "messages:list { groupId, limit?, before? }",
                 newMessage: "message:new (server broadcast)",
                 revoked: "group:revoked (server push)",
-                deleted: "group:deleted (server push)"
+                deleted: "group:deleted (server push)",
+                presence: {
+                    check: "GET /api/chat/presence?userIds=uid1,uid2,... (auth required)",
+                    updateEvent: "presence:update { uid, status } (server broadcast)"
+                }
             }
         });
     });
+
+    router.get("/presence", auth, async (req, res, next) => {
+        try {
+            const userIdsParam = String(req.query.userIds || "");
+            const uids = userIdsParam
+                .split(",")
+                .map((s) => s.trim())
+                .filter(Boolean);
+
+            if (uids.length === 0) return res.json({});
+
+            const map = await presenceStore.getOnlineMap(uids);
+            res.json(map);
+        } catch (err) {
+            next(err);
+        }
+    });
+
 
     /**
      * @swagger

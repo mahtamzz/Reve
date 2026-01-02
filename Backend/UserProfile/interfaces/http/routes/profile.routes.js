@@ -18,6 +18,9 @@ module.exports = function createProfileRouter({
         controller.changePassword
     );
 
+    router.post("/public/batch", auth, controller.getPublicProfilesBatchHandler);
+
+
     return router;
 };
 

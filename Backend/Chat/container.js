@@ -27,6 +27,8 @@ const SocketRegistry = require("./interfaces/http/ws/socketRegistry");
 const createChatController = require("./interfaces/http/controllers/chatController");
 const createChatRoutes = require("./interfaces/http/routes/chatRoutes");
 
+const createPresenceStore = require("./infrastructure/cache/presenceStore");
+
 async function createContainer() {
     /* DB */
     const db = new PgClient({
@@ -43,6 +45,8 @@ async function createContainer() {
         port: process.env.REDIS_PORT || 6379
     });
     const cache = await redis.connect();
+
+    const presenceStore = createPresenceStore(cache);
 
     /* REPOS */
     const messageRepo = new PgChatMessageRepo(db);
@@ -78,7 +82,8 @@ async function createContainer() {
 
     const chatRouter = createChatRoutes({
         controller,
-        auth
+        auth,
+        presenceStore
     });
 
     return {
@@ -86,6 +91,7 @@ async function createContainer() {
         useCases: { sendGroupMessage, listGroupMessages },
         clients: { groupClient },
         socketRegistry,
+        presenceStore, 
         consumers: { groupEventsConsumer },
         routers: { chatRouter }
     };

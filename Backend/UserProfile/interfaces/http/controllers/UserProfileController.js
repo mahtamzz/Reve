@@ -4,13 +4,15 @@ class UserProfileController {
         updateProfile,
         updatePreferences,
         getDashboard,
-        iamClient
+        iamClient,
+        getPublicProfilesBatch
     }) {
         this.getProfile = getProfile;
         this.updateProfile = updateProfile;
         this.updatePreferences = updatePreferences;
         this.getDashboard = getDashboard;
         this.iamClient = iamClient;
+        this.getPublicProfilesBatch = getPublicProfilesBatch;
     }
 
     getMe = async (req, res) => {
@@ -46,6 +48,17 @@ class UserProfileController {
             new_password: req.body.new_password
         });
         res.status(204).end();
+    };
+
+    getPublicProfilesBatchHandler = async (req, res) => {
+        const uids = Array.isArray(req.body.uids) ? req.body.uids : [];
+
+        // basic sanity: ensure ints & dedupe
+        const cleaned = [...new Set(uids.map(n => parseInt(n, 10)).filter(Number.isFinite))];
+
+        const items = await this.getPublicProfilesBatch.execute({ uids: cleaned });
+
+        res.json({ items });
     };
 }
 

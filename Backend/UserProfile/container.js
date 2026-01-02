@@ -18,6 +18,7 @@ const GetUserProfile = require("./application/useCases/GetUserProfile");
 const UpdateUserProfile = require("./application/useCases/UpdateUserProfile");
 const UpdateUserPreferences = require("./application/useCases/UpdateUserPreferences");
 const GetDashboard = require("./application/useCases/GetDashboard");
+const GetPublicProfilesBatch = require("./application/useCases/GetPublicProfilesBatch");
 
 /* CONTROLLERS */
 const UserProfileController = require("./interfaces/http/controllers/UserProfileController");
@@ -62,6 +63,7 @@ async function createContainer() {
     const updateUserProfileUC = new UpdateUserProfile(profileRepo, auditRepo, eventBus);
     const updateUserPreferencesUC = new UpdateUserPreferences(prefsRepo, auditRepo);
     const getDashboardUC = new GetDashboard(profileRepo, dailyRepo);
+    const getPublicProfilesBatch = new GetPublicProfilesBatch(profileRepo);
 
     /* EVENT CONSUMER (subscriber) */
     const userEventsConsumer = new UserEventsConsumer(
@@ -79,7 +81,8 @@ async function createContainer() {
         updateProfile: updateUserProfileUC,
         updatePreferences: updateUserPreferencesUC,
         getDashboard: getDashboardUC,
-        iamClient
+        iamClient,
+        getPublicProfilesBatch
     });
 
     /* ROUTER */

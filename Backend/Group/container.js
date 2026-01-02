@@ -17,6 +17,9 @@ const PgAuditRepo = require("./infrastructure/repositories/PgGroupAuditRepo");
 /* EVENTS */
 const EventBus = require("./infrastructure/messaging/EventBus");
 
+
+const UserProfileClient = require("./infrastructure/UserProfileClient");
+
 /* USE CASES – Details */
 const CreateGroup = require("./application/useCases/DetailsRelated/CreateGroup");
 const DeleteGroup = require("./application/useCases/DetailsRelated/DeleteGroup");
@@ -34,6 +37,8 @@ const ChangeMemberRole = require("./application/useCases/MemberRelated/ChangeMem
 const KickMember = require("./application/useCases/MemberRelated/KickMember");
 const GetMyMembership = require("./application/useCases/MemberRelated/GetMyMembership");
 const ListMyGroups = require("./application/useCases/MemberRelated/ListMyGroups");
+const ListJoinRequests = require("./application/useCases/MemberRelated/ListJoinRequests");
+const ListGroupMembers = require("./application/useCases/MemberRelated/ListGroupMembers");
 
 /* CONTROLLER + ROUTES */
 const createGroupController = require("./interfaces/http/controllers/groupController");
@@ -66,6 +71,11 @@ async function createContainer() {
     /* EVENTS */
     const eventBus = new EventBus(process.env.RABBITMQ_URL, { exchange: "group.events" });
     await eventBus.connect();
+
+
+    const userProfileClient = new UserProfileClient({
+        baseUrl: process.env.USER_PROFILE_BASE_URL
+    });
 
     /* USE CASES */
     const createGroup = new CreateGroup({
@@ -138,6 +148,17 @@ async function createContainer() {
 
     const listMyGroups = new ListMyGroups(groupMemberRepo);
 
+    const listJoinRequests = new ListJoinRequests(
+        groupMemberRepo,
+        joinRequestRepo
+    );
+
+    const listGroupMembers = new ListGroupMembers(
+        groupRepo,
+        groupMemberRepo,
+        userProfileClient
+    );
+
     /* CONTROLLER */
     const controller = createGroupController({
         createGroup,
@@ -153,7 +174,9 @@ async function createContainer() {
         rejectJoinRequest,
         changeMemberRole,
         kickMember,
-        getMyMembership
+        getMyMembership,
+        listJoinRequests,
+        listGroupMembers
     });
 
     /* ROUTER */

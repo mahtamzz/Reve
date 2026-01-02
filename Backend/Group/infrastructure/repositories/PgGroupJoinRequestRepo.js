@@ -24,7 +24,7 @@ class PgGroupJoinRequestRepository extends GroupJoinRequestRepository {
     async listByGroup(groupId) {
         const result = await this.db.query(
             `
-            SELECT *
+            SELECT group_id, uid, created_at
             FROM group_join_requests
             WHERE group_id = $1
             ORDER BY created_at ASC

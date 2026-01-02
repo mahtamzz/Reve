@@ -47,7 +47,6 @@ CREATE TABLE group_join_requests (
     group_id    UUID NOT NULL,
     uid         INT NOT NULL,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-    decided_at  TIMESTAMPTZ,
     CONSTRAINT fk_group_join_requests_group
         FOREIGN KEY (group_id)
         REFERENCES groups(id)

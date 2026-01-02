@@ -12,16 +12,14 @@ class RedisClient {
             }
         });
 
-        this.client.on("connect", () => console.log("Redis connected!"));
-        this.client.on("error", (err) => console.error("Redis Error:", err));
+        this.client.on("connect", () => console.log("Redis connected"));
+        this.client.on("error", (err) => console.error("Redis error:", err));
     }
 
     async connect() {
-        if (!this.client.isOpen) await this.client.connect();
-        return this.client;
-    }
-
-    getClient() {
+        if (!this.client.isOpen) {
+            await this.client.connect();
+        }
         return this.client;
     }
 }
