@@ -87,6 +87,8 @@ services:
         condition: service_healthy
     ports:
       - "3004:3004"
+    volumes:
+      - media_uploads:/app/Media/uploads
 
   chat_service:
     build:
@@ -151,3 +153,4 @@ services:
 
 volumes:
   pgdata:
+  media_uploads:
