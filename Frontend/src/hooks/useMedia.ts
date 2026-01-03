@@ -8,9 +8,17 @@ type UseMediaState = {
   uploading: boolean;
   deleting: boolean;
   error: string | null;
-  meta: ApiAvatarMeta | null;
+
+  // ✅ چون بک meta واقعی نداره، این یا null میشه یا { exists: true }
+  meta: (ApiAvatarMeta & { exists?: boolean }) | null;
+
+  // ✅ برای <img src>
   avatarUrl: string;
 };
+
+function normalizeErr(e: any) {
+  return e?.details?.message || e?.message || "Error";
+}
 
 export function useMedia(autoLoad: boolean = true) {
   const [state, setState] = useState<UseMediaState>(() => ({
@@ -19,17 +27,27 @@ export function useMedia(autoLoad: boolean = true) {
     deleting: false,
     error: null,
     meta: null,
-    avatarUrl: getAvatarUrl(),
+    avatarUrl: getAvatarUrl({ bustCache: true }),
   }));
 
   const loadMeta = useCallback(async () => {
     setState((s) => ({ ...s, loading: true, error: null }));
     try {
       const meta = await getAvatarMeta();
-      setState((s) => ({ ...s, meta, loading: false, avatarUrl: getAvatarUrl() }));
+      setState((s) => ({
+        ...s,
+        meta,
+        loading: false,
+        avatarUrl: getAvatarUrl({ bustCache: true }),
+      }));
       return meta;
     } catch (e: any) {
-      setState((s) => ({ ...s, meta: null, loading: false, error: e?.message || "Error" }));
+      setState((s) => ({
+        ...s,
+        meta: null,
+        loading: false,
+        error: normalizeErr(e),
+      }));
       return null;
     }
   }, []);
@@ -37,16 +55,16 @@ export function useMedia(autoLoad: boolean = true) {
   const upload = useCallback(async (file: File) => {
     setState((s) => ({ ...s, uploading: true, error: null }));
     try {
-      const meta = await uploadAvatar(file);
+      const meta = await uploadAvatar(file); // ✅ بک 201 json
       setState((s) => ({
         ...s,
-        meta,
+        meta: meta as any,
         uploading: false,
         avatarUrl: getAvatarUrl({ bustCache: true }),
       }));
       return meta;
     } catch (e: any) {
-      setState((s) => ({ ...s, uploading: false, error: e?.message || "Error" }));
+      setState((s) => ({ ...s, uploading: false, error: normalizeErr(e) }));
       throw e;
     }
   }, []);
@@ -54,7 +72,7 @@ export function useMedia(autoLoad: boolean = true) {
   const remove = useCallback(async () => {
     setState((s) => ({ ...s, deleting: true, error: null }));
     try {
-      await deleteAvatar();
+      await deleteAvatar(); // ✅ بک 204
       setState((s) => ({
         ...s,
         meta: null,
@@ -62,7 +80,7 @@ export function useMedia(autoLoad: boolean = true) {
         avatarUrl: getAvatarUrl({ bustCache: true }),
       }));
     } catch (e: any) {
-      setState((s) => ({ ...s, deleting: false, error: e?.message || "Error" }));
+      setState((s) => ({ ...s, deleting: false, error: normalizeErr(e) }));
       throw e;
     }
   }, []);
@@ -77,7 +95,8 @@ export function useMedia(autoLoad: boolean = true) {
       loadMeta,
       upload,
       remove,
-      refreshAvatar: () => setState((s) => ({ ...s, avatarUrl: getAvatarUrl({ bustCache: true }) })),
+      refreshAvatar: () =>
+        setState((s) => ({ ...s, avatarUrl: getAvatarUrl({ bustCache: true }) })),
     }),
     [state, loadMeta, upload, remove]
   );

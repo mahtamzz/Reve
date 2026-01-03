@@ -1,14 +1,17 @@
+// src/hooks/useUpdateProfileMe.ts
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { profileApi } from "@/api/profile";
-import { profileMeKey } from "@/hooks/useProfileMe";
+import { profileInfoApi, type UpdateProfileInfoPayload } from "@/api/profileInfo";
+import { profileMeKey } from "./useProfileMe";
+import { profileInfoDashboardKey } from "./useProfileInfoDashboard";
 
 export function useUpdateProfileMe() {
-  const queryClient = useQueryClient();
+  const qc = useQueryClient();
 
   return useMutation({
-    mutationFn: profileApi.updateMe,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: profileMeKey });
+    mutationFn: (payload: UpdateProfileInfoPayload) => profileInfoApi.updateProfileInfo(payload),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: profileMeKey });
+      await qc.invalidateQueries({ queryKey: profileInfoDashboardKey });
     },
   });
 }

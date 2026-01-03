@@ -1,85 +1,88 @@
 // src/api/profileInfo.ts
-import { profileClient } from "@/api/client";
+import { profileClient as apiClient } from "@/api/client";
 
-const PROFILE_INFO_PREFIX =
-  (import.meta.env.VITE_PROFILE_INFO_PREFIX as string | undefined) ?? "/profile";
-
-function withPrefix(path: string) {
-  if (!PROFILE_INFO_PREFIX) return path;
-  const p = PROFILE_INFO_PREFIX.startsWith("/")
-    ? PROFILE_INFO_PREFIX
-    : `/${PROFILE_INFO_PREFIX}`;
-  return `${p}${path.startsWith("/") ? path : `/${path}`}`;
-}
-
-/* ===================== TYPES ===================== */
-
-export type ProfileInfo = {
-  uid: string;
-  display_name: string | null;
+export type Profile = {
+  uid: number;
+  display_name: string;
+  avatar_media_id: string | number | null;
+  weekly_goal: number | null;
+  xp: number;
+  streak: number;
   timezone: string;
+  created_at: string;
+  updated_at: string;
 
-  avatar_media_id?: string | null;
-  weekly_goal?: number | null;
-
-  xp?: number;
-  streak?: number;
-
-  created_at?: string;
-  updated_at?: string;
+  // optional fields (if backend adds later)
+  username?: string;
+  email?: string;
+  avatar_url?: string | null;
+  cover_url?: string | null;
+  bio?: string | null;
+  location?: string | null;
+  website?: string | null;
 
   [k: string]: any;
 };
 
-export type ProfileInfoPreferences = {
-  // مطابق use-case بک
-  isProfilePublic?: boolean;
-  showStreak?: boolean;
-
-  // اگر snake_case هم داری
-  is_subject_public?: boolean | null;
-
+export type Preferences = Record<string, any> & {
+  uid: number;
   created_at?: string;
   updated_at?: string;
-
-  [k: string]: any;
 };
 
 export type ProfileInfoMeResponse = {
-  profile: ProfileInfo;
-  preferences: ProfileInfoPreferences | null;
+  profile: Profile;
+  preferences: Preferences | null;
 };
 
 export type ProfileInfoDashboardResponse = {
-  profile: ProfileInfo;
+  profile: Profile;
   todayStudyMinutes: number;
 };
 
 export type UpdateProfileInfoPayload = {
-  // مهم: snake_case
-  display_name?: string;
-  avatar_media_id?: string | null;
+  display_name?: string | null;
   weekly_goal?: number | null;
   timezone?: string;
+
+  // tolerate camelCase too (backend supports some)
+  displayName?: string | null;
+  weeklyGoal?: number | null;
 };
 
-export type UpdateProfileInfoPreferencesPayload =
-  Partial<ProfileInfoPreferences>;
+function normalizeProfile(raw: any): Profile {
+  if (!raw || typeof raw !== "object") return raw as Profile;
 
-/* ===================== API ===================== */
+  return {
+    ...raw,
+    uid: Number(raw.uid),
+    display_name: raw.display_name ?? raw.displayName ?? "",
+    avatar_media_id: raw.avatar_media_id ?? raw.avatarMediaId ?? null,
+    weekly_goal: raw.weekly_goal ?? raw.weeklyGoal ?? null,
+    xp: Number(raw.xp ?? 0),
+    streak: Number(raw.streak ?? raw.streak_current ?? 0),
+    timezone: raw.timezone ?? "UTC",
+  } as Profile;
+}
 
 export const profileInfoApi = {
-  getMe: () =>
-    profileClient.get<ProfileInfoMeResponse>(withPrefix("/me")),
+  getMe: async (): Promise<ProfileInfoMeResponse> => {
+    const res = await apiClient.get<any>("/profile/me");
+    return {
+      profile: normalizeProfile(res?.profile),
+      preferences: (res?.preferences ?? null) as Preferences | null,
+    };
+  },
 
-  getDashboard: () =>
-    profileClient.get<ProfileInfoDashboardResponse>(
-      withPrefix("/dashboard")
-    ),
+  getDashboard: async (): Promise<ProfileInfoDashboardResponse> => {
+    const res = await apiClient.get<any>("/profile/dashboard");
+    return {
+      profile: normalizeProfile(res?.profile),
+      todayStudyMinutes: Number(res?.todayStudyMinutes ?? 0),
+    };
+  },
 
-  updateProfileInfo: (payload: UpdateProfileInfoPayload) =>
-    profileClient.patch<void>(withPrefix("/me"), payload),
-
-  updatePreferences: (payload: UpdateProfileInfoPreferencesPayload) =>
-    profileClient.patch<void>(withPrefix("/preferences"), payload),
+  updateProfileInfo: async (payload: UpdateProfileInfoPayload): Promise<void> => {
+    await apiClient.patch<void>("/profile/me", payload);
+  },
 };

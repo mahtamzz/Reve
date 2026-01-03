@@ -77,7 +77,7 @@ class UpdateUserProfile {
         await this.auditRepo.log({
             actorUid: uid,
             action: "PROFILE_UPDATED",
-            metadata: auditMeta
+            metadata: { updates: profileUpdates, iamChanges }
         });
 
         // 3) Publish event to IAM if needed

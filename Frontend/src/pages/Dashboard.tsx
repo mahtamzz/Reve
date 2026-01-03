@@ -3,9 +3,8 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { Bell, ChevronRight } from "lucide-react";
+import { Bell, ChevronRight, Menu, X } from "lucide-react";
 import { useJoinRequestNotifications } from "@/hooks/useJoinRequestNotifications";
-
 
 import { ApiError } from "@/api/client";
 
@@ -82,7 +81,7 @@ function playSoftNotify() {
     const g = ctx.createGain();
 
     o.type = "sine";
-    o.frequency.value = 660; // pleasant
+    o.frequency.value = 660;
     g.gain.value = 0.0001;
 
     o.connect(g);
@@ -90,8 +89,8 @@ function playSoftNotify() {
 
     const now = ctx.currentTime;
     g.gain.setValueAtTime(0.0001, now);
-    g.gain.exponentialRampToValueAtTime(0.05, now + 0.02); // quick fade in
-    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.25); // fade out
+    g.gain.exponentialRampToValueAtTime(0.05, now + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.25);
 
     o.start(now);
     o.stop(now + 0.28);
@@ -101,7 +100,6 @@ function playSoftNotify() {
     // ignore
   }
 }
-
 
 // chart builders (fallback from sessions if dashboard series isn't available)
 function pickWeeklySeriesHours(dashboard: any): WeeklyPoint[] | null {
@@ -167,8 +165,27 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const qc = useQueryClient();
 
-  const joinNotif = useJoinRequestNotifications();
+  // ----------------- Mobile Drawer -----------------
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
+  useEffect(() => {
+    if (mobileSidebarOpen) document.body.style.overflow = "hidden";
+    else document.body.style.overflow = "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [mobileSidebarOpen]);
+
+  useEffect(() => {
+    if (!mobileSidebarOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMobileSidebarOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mobileSidebarOpen]);
+
+  const joinNotif = useJoinRequestNotifications();
   const [joinToastOpen, setJoinToastOpen] = useState(false);
   const lastJoinCountRef = useRef<number>(0);
 
@@ -184,10 +201,8 @@ export default function Dashboard() {
     }
 
     lastJoinCountRef.current = c;
-
     if (c === 0) setJoinToastOpen(false);
   }, [joinNotif.count, joinNotif.loading, joinNotif.error]);
-
 
   const fromISO = useMemo(() => addDays(startOfLocalDay(new Date()), -6).toISOString(), []);
   const toISO = useMemo(() => addDays(startOfLocalDay(new Date()), 1).toISOString(), []);
@@ -212,9 +227,7 @@ export default function Dashboard() {
   }, [dashboard, sessions]);
 
   const totalHours = useMemo(() => weekly.reduce((sum, p) => sum + p.hours, 0), [weekly]);
-
   const [toast, setToast] = useState<{ minutes: number; points: number; hours: number } | null>(null);
-
   const consumedRef = useRef<string>("");
 
   useEffect(() => {
@@ -225,7 +238,6 @@ export default function Dashboard() {
     let focusSeconds = Number(focusSecondsRaw);
     if (!Number.isFinite(focusSeconds) || focusSeconds <= 0) return;
 
-    // guard: if minutes were passed by mistake
     if (focusSeconds < 1000) focusSeconds = focusSeconds * 60;
 
     const dedupeKey = `${focusSeconds}-${location.key ?? ""}`;
@@ -233,7 +245,7 @@ export default function Dashboard() {
     consumedRef.current = dedupeKey;
 
     const minutes = Math.max(1, Math.round(focusSeconds / 60));
-    const points = Math.floor(minutes / 5); // just for toast (server computes real XP)
+    const points = Math.floor(minutes / 5);
 
     setToast({ minutes, points: Math.max(0, points), hours: focusSeconds / 3600 });
 
@@ -247,7 +259,6 @@ export default function Dashboard() {
     });
 
     qc.invalidateQueries({ queryKey: studyKeys.subjects() });
-
     qc.invalidateQueries({ queryKey: profileMeKey });
 
     navigate(location.pathname, { replace: true, state: null });
@@ -303,7 +314,79 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-creamtext text-zinc-900">
       <div className="flex">
-        <Sidebar activeKey="dashboard" onLogout={() => navigate("/login")} />
+        {/* Desktop sidebar */}
+        <div className="hidden md:block">
+          <Sidebar activeKey="dashboard" onLogout={() => navigate("/login")} />
+        </div>
+
+        {/* Mobile hamburger */}
+        <button
+          type="button"
+          onClick={() => setMobileSidebarOpen(true)}
+          className={cx(
+            "md:hidden fixed left-4 top-4 z-[90]",
+            "inline-flex h-10 w-10 items-center justify-center",
+            "rounded-2xl border border-zinc-200 bg-white shadow-sm",
+            "active:scale-95 transition",
+            mobileSidebarOpen ? "opacity-0 pointer-events-none" : "opacity-100"
+          )}
+          aria-label="Open menu"
+        >
+          <Menu className="h-5 w-5 text-zinc-800" />
+        </button>
+
+        {/* Mobile Drawer */}
+        <AnimatePresence>
+          {mobileSidebarOpen && (
+            <>
+              <motion.div
+                className="md:hidden fixed inset-0 z-[80] bg-black/40"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setMobileSidebarOpen(false)}
+              />
+
+              <motion.aside
+                className="
+                  md:hidden fixed left-0 top-0 z-[85] h-full
+                  w-[280px] max-w-[85vw]
+                  shadow-2xl
+                "
+                initial={{ x: -320 }}
+                animate={{ x: 0 }}
+                exit={{ x: -320 }}
+                transition={{ type: "tween", duration: 0.22, ease: "easeOut" }}
+              >
+                <div className="relative h-full bg-white">
+                  <button
+                    type="button"
+                    onClick={() => setMobileSidebarOpen(false)}
+                    className="
+                      absolute right-3 top-3 z-10
+                      inline-flex h-9 w-9 items-center justify-center
+                      rounded-2xl border border-zinc-200 bg-white shadow-sm
+                      active:scale-95 transition
+                    "
+                    aria-label="Close menu"
+                  >
+                    <X className="h-5 w-5 text-zinc-800" />
+                  </button>
+
+                  <Sidebar
+                    variant="drawer"
+                    activeKey="dashboard"
+                    onLogout={() => {
+                      setMobileSidebarOpen(false);
+                      navigate("/login");
+                    }}
+                    onNavigate={() => setMobileSidebarOpen(false)}
+                  />
+                </div>
+              </motion.aside>
+            </>
+          )}
+        </AnimatePresence>
 
         <div className="flex-1 min-w-0 md:ml-64">
           <Topbar username={username} />
@@ -354,9 +437,6 @@ export default function Dashboard() {
                       {updateProfileErrMsg ? (
                         <p className="mt-2 text-xs text-rose-600">{updateProfileErrMsg}</p>
                       ) : null}
-
-                      <div className="mt-3 flex justify-end">
-                      </div>
                     </div>
                   </div>
                 </div>
@@ -405,15 +485,14 @@ export default function Dashboard() {
                 </div>
 
                 <div className="mt-4 grid grid-cols-2 gap-3">
-                {(subjects ?? []).slice(0, 4).map((sub: any) => (
-                  <SubjectCard
-                    key={sub.id}
-                    subjectId={sub.id}
-                    title={sub.name ?? sub.title}
-                    color={sub.color}
-                  />
-                ))}
-
+                  {(subjects ?? []).slice(0, 4).map((sub: any) => (
+                    <SubjectCard
+                      key={sub.id}
+                      subjectId={sub.id}
+                      title={sub.name ?? sub.title}
+                      color={sub.color}
+                    />
+                  ))}
 
                   {(subjects ?? []).length === 0 ? (
                     <div className="col-span-2 rounded-2xl border border-zinc-200 bg-[#FFFBF2] p-4 text-sm text-zinc-600">
@@ -443,6 +522,7 @@ export default function Dashboard() {
 
             <footer className="mt-10 text-center text-xs text-zinc-400">REVE dashboard</footer>
           </div>
+
           <AnimatePresence>
             {joinToastOpen && joinNotif.latest && (
               <motion.button
@@ -502,14 +582,11 @@ export default function Dashboard() {
                     Dismiss
                   </button>
 
-                  <span className="text-[11px] text-zinc-400">
-                    Auto-updates every 15s
-                  </span>
+                  <span className="text-[11px] text-zinc-400">Auto-updates every 15s</span>
                 </div>
               </motion.button>
             )}
           </AnimatePresence>
-
 
           <AnimatePresence>
             {toast && (
@@ -545,4 +622,9 @@ export default function Dashboard() {
       </div>
     </div>
   );
+}
+
+// local helper for cx in this file
+function cx(...classes: Array<string | false | undefined | null>) {
+  return classes.filter(Boolean).join(" ");
 }

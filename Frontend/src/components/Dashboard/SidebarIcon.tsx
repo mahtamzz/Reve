@@ -6,7 +6,6 @@ import {
   LayoutDashboard,
   UsersRound,
   BarChart3,
-  ShoppingBag,
   Users,
   Settings,
   HelpCircle,
@@ -20,8 +19,14 @@ type NavItem = {
   label: string;
   icon: React.ReactNode;
   to?: string;
-  badge?: string;  
-  onClick?: () => void; 
+  badge?: string;
+};
+
+type SidebarProps = {
+  activeKey?: string;
+  onLogout: () => void;
+  variant?: "desktop" | "drawer";
+  onNavigate?: () => void; // برای بستن Drawer بعد از کلیک
 };
 
 function cx(...classes: Array<string | false | undefined | null>) {
@@ -57,7 +62,6 @@ function SidebarItem({
         active ? "bg-yellow-100/70 text-zinc-900" : "text-zinc-600 hover:bg-yellow-50"
       )}
     >
-      {/* left accent */}
       <span
         className={cx(
           "absolute left-0 top-1/2 -translate-y-1/2",
@@ -91,10 +95,9 @@ function SidebarItem({
 export default function Sidebar({
   activeKey = "dashboard",
   onLogout,
-}: {
-  activeKey?: string;
-  onLogout: () => void;
-}) {
+  variant = "desktop",
+  onNavigate,
+}: SidebarProps) {
   const navigate = useNavigate();
 
   const { quick, main, bottom } = useMemo(() => {
@@ -107,12 +110,7 @@ export default function Sidebar({
       { key: "dashboard", label: "Dashboard", icon: <LayoutDashboard className="h-4 w-4" />, to: "/dashboard" },
       { key: "groups", label: "Groups", icon: <UsersRound className="h-4 w-4" />, to: "/groups" },
       { key: "analytics", label: "Subject Analytics", icon: <BarChart3 className="h-4 w-4" />, to: "/analytics", badge: "New" },
-      { 
-        key: "connections",
-        label: "Connections",
-        icon: <Users className="h-4 w-4" />,
-        to: "/connections",
-      }    
+      { key: "connections", label: "Connections", icon: <Users className="h-4 w-4" />, to: "/connections" },
     ];
 
     const bottom: NavItem[] = [
@@ -120,31 +118,42 @@ export default function Sidebar({
       { key: "help", label: "Help", icon: <HelpCircle className="h-4 w-4" />, to: "/help" },
       { key: "logout", label: "Logout", icon: <LogOut className="h-4 w-4" /> },
     ];
-    
 
     return { quick, main, bottom };
-  }, [onLogout]);
+  }, []);
 
   const onSelect = (it: NavItem) => {
     if (it.key === "logout") {
       onLogout();
       return;
     }
-    if (it.to) navigate(it.to);
+    if (it.to) {
+      navigate(it.to);
+      onNavigate?.();
+    }
   };
-  
+
+  const asideClass =
+    variant === "desktop"
+      ? cx(
+          "hidden md:flex md:flex-col",
+          "fixed left-0 top-0",
+          "h-screen w-64",
+          "border-r border-zinc-200",
+          "bg-gradient-to-b from-yellow-50/60 to-white",
+          "z-40"
+        )
+      : cx(
+          // drawer/mobile
+          "flex flex-col",
+          "relative",
+          "h-full w-full",
+          "bg-white",
+          "border-r border-zinc-200"
+        );
 
   return (
-    <aside
-      className={cx(
-        "hidden md:flex md:flex-col",
-        "fixed left-0 top-0",
-        "h-screen w-64",
-        "border-r border-zinc-200",
-        "bg-gradient-to-b from-yellow-50/60 to-white",
-        "z-40"
-      )}
-    >
+    <aside className={asideClass}>
       {/* Brand */}
       <div className="px-5 py-6 border-b border-yellow-100 overflow-hidden">
         <motion.div
@@ -153,7 +162,6 @@ export default function Sidebar({
           transition={{ duration: 0.6, ease: "easeOut" }}
           className="relative"
         >
-          {/* Glow */}
           <motion.div
             aria-hidden
             initial={{ opacity: 0 }}
@@ -168,9 +176,7 @@ export default function Sidebar({
             transition={{ delay: 0.12, duration: 0.6, ease: "easeOut" }}
             className="relative"
           >
-            <div className="text-[20px] font-semibold tracking-[0.12em] text-zinc-900">
-              REVE
-            </div>
+            <div className="text-[20px] font-semibold tracking-[0.12em] text-zinc-900">REVE</div>
 
             <motion.div
               initial={{ width: 0 }}
