@@ -1,12 +1,24 @@
 class ChatMessageRepository {
-    create(message) { throw new Error('Not implemented'); }
-    findById(messageId) { throw new Error('Not implemented'); }
+    async create({ groupId, senderUid, text, clientMessageId = null }) {
+        throw new Error("Not implemented");
+    }
 
-    // newest-first pagination
-    listByGroup({ groupId, limit, before }) { throw new Error('Not implemented'); }
+    async findById(messageId) {
+        throw new Error("Not implemented");
+    }
 
-    // to support dedupe when unique constraint triggers
-    findByClientMessageId({ groupId, senderUid, clientMessageId }) { throw new Error('Not implemented'); }
+    async listByGroup({ groupId, limit = 50, before = null }) {
+        throw new Error("Not implemented");
+    }
+
+    async findByClientMessageId({ groupId, senderUid, clientMessageId }) {
+        throw new Error("Not implemented");
+    }
+
+    // ✅ NEW
+    async listLatestByGroupIds(groupIds) {
+        throw new Error("Not implemented");
+    }
 }
 
 module.exports = ChatMessageRepository;

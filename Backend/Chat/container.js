@@ -13,6 +13,7 @@ const PgChatMessageRepo = require("./infrastructure/repositories/PgChatMessageRe
 /* USE CASES */
 const SendGroupMessage = require("./application/useCases/SendGroupMessage");
 const ListGroupMessages = require("./application/useCases/ListGroupMessages");
+const ListChatInbox = require("./application/useCases/ListChatInbox");
 
 /* GROUP HTTP CLIENT */
 const GroupClient = require("./infrastructure/group/GroupClient");
@@ -51,14 +52,16 @@ async function createContainer() {
     /* REPOS */
     const messageRepo = new PgChatMessageRepo(db);
 
-    /* USE CASES (no membershipRepo anymore) */
-    const sendGroupMessage = new SendGroupMessage({ messageRepo });
-    const listGroupMessages = new ListGroupMessages({ messageRepo });
-
     /* Group client (membership check once for REST + sockets) */
     const groupClient = new GroupClient({
         baseUrl: process.env.GROUP_SERVICE_URL
     });
+    
+    /* USE CASES (no membershipRepo anymore) */
+    const sendGroupMessage = new SendGroupMessage({ messageRepo });
+    const listGroupMessages = new ListGroupMessages({ messageRepo });
+    const listChatInbox = new ListChatInbox({ messageRepo, groupClient });
+
 
     /* Socket registry */
     const socketRegistry = new SocketRegistry();
@@ -77,7 +80,8 @@ async function createContainer() {
     const controller = createChatController({
         listGroupMessages,
         sendGroupMessage,
-        groupClient
+        groupClient,
+        listChatInbox
     });
 
     const chatRouter = createChatRoutes({
@@ -91,7 +95,7 @@ async function createContainer() {
         useCases: { sendGroupMessage, listGroupMessages },
         clients: { groupClient },
         socketRegistry,
-        presenceStore, 
+        presenceStore,
         consumers: { groupEventsConsumer },
         routers: { chatRouter }
     };

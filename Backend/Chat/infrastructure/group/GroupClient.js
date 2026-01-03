@@ -33,6 +33,20 @@ class GroupClient {
 
         return res.json();
     }
+
+    async listMyGroups({ cookieHeader }) {
+        const res = await fetch(`${this.baseUrl}/api/groups/me`, {
+            headers: {
+                cookie: cookieHeader
+            }
+        });
+
+        if (!res.ok) {
+            throw new Error(`Group service error: ${res.status}`);
+        }
+
+        return res.json();
+    }
 }
 
 module.exports = GroupClient;

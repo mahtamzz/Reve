@@ -11,6 +11,7 @@ const PgUserProfileRepo = require("./infrastructure/repositories/PgUserProfileRe
 const PgPreferencesRepo = require("./infrastructure/repositories/PgPreferencesRepo");
 const PgUserDSTRepo = require("./infrastructure/repositories/PgUserDSTRepo");
 const PgAuditRepo = require("./infrastructure/repositories/PgAuditRepo");
+const PgFollowRepo = require("./infrastructure/repositories/PgFollowRepo");
 
 /* USE CASES */
 const CreateUserProfile = require("./application/useCases/CreateUserProfile");
@@ -19,6 +20,13 @@ const UpdateUserProfile = require("./application/useCases/UpdateUserProfile");
 const UpdateUserPreferences = require("./application/useCases/UpdateUserPreferences");
 const GetDashboard = require("./application/useCases/GetDashboard");
 const GetPublicProfilesBatch = require("./application/useCases/GetPublicProfilesBatch");
+
+const FollowUser = require("./application/useCases/FollowUser");
+const UnfollowUser = require("./application/useCases/UnfollowUser");
+const ListFollowers = require("./application/useCases/ListFollowers");
+const ListFollowing = require("./application/useCases/ListFollowing");
+const GetFollowStatus = require("./application/useCases/GetFollowStatus");
+const GetFollowCounts = require("./application/useCases/GetFollowCounts");
 
 /* CONTROLLERS */
 const UserProfileController = require("./interfaces/http/controllers/UserProfileController");
@@ -47,6 +55,7 @@ async function createContainer() {
     const prefsRepo = new PgPreferencesRepo({ pool: db });
     const dailyRepo = new PgUserDSTRepo({ pool: db });
     const auditRepo = new PgAuditRepo({ pool: db });
+    const followRepo = new PgFollowRepo({ pool: db });
 
     /* JWT */
     const jwtVerifier = new JwtVerifier({ secret: process.env.JWT_SECRET });
@@ -65,6 +74,15 @@ async function createContainer() {
     const getDashboardUC = new GetDashboard(profileRepo, dailyRepo);
     const getPublicProfilesBatch = new GetPublicProfilesBatch(profileRepo);
 
+    const followUserUC = new FollowUser(followRepo, profileRepo, auditRepo, eventBus);
+    const unfollowUserUC = new UnfollowUser(followRepo, auditRepo, eventBus);
+
+    const listFollowersUC = new ListFollowers(followRepo, profileRepo);
+    const listFollowingUC = new ListFollowing(followRepo, profileRepo);
+
+    const getFollowStatusUC = new GetFollowStatus(followRepo);
+    const getFollowCountsUC = new GetFollowCounts(followRepo);
+
     /* EVENT CONSUMER (subscriber) */
     const userEventsConsumer = new UserEventsConsumer(
         process.env.RABBITMQ_URL,
@@ -82,7 +100,13 @@ async function createContainer() {
         updatePreferences: updateUserPreferencesUC,
         getDashboard: getDashboardUC,
         iamClient,
-        getPublicProfilesBatch
+        getPublicProfilesBatch,
+        followUser: followUserUC,
+        unfollowUser: unfollowUserUC,
+        listFollowers: listFollowersUC,
+        listFollowing: listFollowingUC,
+        getFollowStatus: getFollowStatusUC,
+        getFollowCounts: getFollowCountsUC
     });
 
     /* ROUTER */

@@ -5,7 +5,13 @@ class UserProfileController {
         updatePreferences,
         getDashboard,
         iamClient,
-        getPublicProfilesBatch
+        getPublicProfilesBatch,
+        followUser,
+        unfollowUser,
+        listFollowers,
+        listFollowing,
+        getFollowStatus,
+        getFollowCounts
     }) {
         this.getProfile = getProfile;
         this.updateProfile = updateProfile;
@@ -13,6 +19,12 @@ class UserProfileController {
         this.getDashboard = getDashboard;
         this.iamClient = iamClient;
         this.getPublicProfilesBatch = getPublicProfilesBatch;
+        this.followUser = followUser;
+        this.unfollowUser = unfollowUser;
+        this.listFollowers = listFollowers;
+        this.listFollowing = listFollowing;
+        this.getFollowStatus = getFollowStatus;
+        this.getFollowCounts = getFollowCounts;
     }
 
     getMe = async (req, res) => {
@@ -59,6 +71,80 @@ class UserProfileController {
         const items = await this.getPublicProfilesBatch.execute({ uids: cleaned });
 
         res.json({ items });
+    };
+
+    follow = async (req, res) => {
+        const followerUid = req.user.uid;
+        const followeeUid = parseInt(req.params.uid, 10);
+
+        if (!Number.isFinite(followeeUid)) {
+            return res.status(400).json({ error: "invalid uid" });
+        }
+
+        const result = await this.followUser.execute({ followerUid, followeeUid }, { source: "http" });
+        res.json(result);
+    };
+
+    unfollow = async (req, res) => {
+        const followerUid = req.user.uid;
+        const followeeUid = parseInt(req.params.uid, 10);
+
+        if (!Number.isFinite(followeeUid)) {
+            return res.status(400).json({ error: "invalid uid" });
+        }
+
+        const result = await this.unfollowUser.execute({ followerUid, followeeUid }, { source: "http" });
+        res.json(result);
+    };
+
+    followers = async (req, res) => {
+        const uid = parseInt(req.params.uid, 10);
+        if (!Number.isFinite(uid)) {
+            return res.status(400).json({ error: "invalid uid" });
+        }
+
+        const limit = Math.min(parseInt(req.query.limit, 10) || 50, 100);
+        const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+        const includeProfiles = String(req.query.includeProfiles ?? "true") !== "false";
+
+        const data = await this.listFollowers.execute({ uid, limit, offset, includeProfiles });
+        res.json(data);
+    };
+
+    following = async (req, res) => {
+        const uid = parseInt(req.params.uid, 10);
+        if (!Number.isFinite(uid)) {
+            return res.status(400).json({ error: "invalid uid" });
+        }
+
+        const limit = Math.min(parseInt(req.query.limit, 10) || 50, 100);
+        const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+        const includeProfiles = String(req.query.includeProfiles ?? "true") !== "false";
+
+        const data = await this.listFollowing.execute({ uid, limit, offset, includeProfiles });
+        res.json(data);
+    };
+
+    followStatus = async (req, res) => {
+        const followerUid = req.user.uid;
+        const followeeUid = parseInt(req.params.uid, 10);
+
+        if (!Number.isFinite(followeeUid)) {
+            return res.status(400).json({ error: "invalid uid" });
+        }
+
+        const data = await this.getFollowStatus.execute({ followerUid, followeeUid });
+        res.json(data);
+    };
+
+    followCounts = async (req, res) => {
+        const uid = parseInt(req.params.uid, 10);
+        if (!Number.isFinite(uid)) {
+            return res.status(400).json({ error: "invalid uid" });
+        }
+
+        const data = await this.getFollowCounts.execute({ uid });
+        res.json(data);
     };
 }
 

@@ -53,6 +53,24 @@ class PgChatMessageRepo extends ChatMessageRepository {
         );
         return result.rows[0];
     }
+
+    async listLatestByGroupIds(groupIds) {
+        if (!Array.isArray(groupIds) || groupIds.length === 0) return [];
+
+        const result = await this.db.query(
+            `
+            SELECT DISTINCT ON (group_id)
+                *
+            FROM chat_messages
+            WHERE group_id = ANY($1::uuid[])
+            ORDER BY group_id, created_at DESC, id DESC
+            `,
+            [groupIds]
+        );
+
+        return result.rows;
+    }
+
 }
 
 module.exports = PgChatMessageRepo;

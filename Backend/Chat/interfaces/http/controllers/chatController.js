@@ -1,11 +1,22 @@
-function createChatController({ listGroupMessages, sendGroupMessage, groupClient }) {
+function createChatController({ listGroupMessages, sendGroupMessage, groupClient, listChatInbox }) {
     return {
+        async listInbox(req, res, next) {
+            try {
+                const uid = req.user.uid;
+                const cookieHeader = req.headers.cookie || "";
+
+                const inbox = await listChatInbox.execute({ uid, cookieHeader });
+                res.json(inbox);
+            } catch (err) {
+                next(err);
+            }
+        },
+
         async listMessages(req, res, next) {
             try {
                 const groupId = req.params.groupId;
                 const uid = req.user.uid;
 
-                // verify membership once for REST call
                 const cookieHeader = req.headers.cookie || "";
                 const membership = await groupClient.getMyMembership({ groupId, cookieHeader });
                 if (!membership.isMember) {
@@ -27,7 +38,6 @@ function createChatController({ listGroupMessages, sendGroupMessage, groupClient
                 const groupId = req.params.groupId;
                 const uid = req.user.uid;
 
-                // verify membership once for REST call
                 const cookieHeader = req.headers.cookie || "";
                 const membership = await groupClient.getMyMembership({ groupId, cookieHeader });
                 if (!membership.isMember) {

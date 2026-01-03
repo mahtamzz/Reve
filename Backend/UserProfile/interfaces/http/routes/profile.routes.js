@@ -20,6 +20,17 @@ module.exports = function createProfileRouter({
 
     router.post("/public/batch", auth, controller.getPublicProfilesBatchHandler);
 
+    // FOLLOW GRAPH
+    router.post("/:uid/follow", auth, controller.follow);
+    router.delete("/:uid/follow", auth, controller.unfollow);
+
+    router.get("/:uid/followers", auth, controller.followers);
+    router.get("/:uid/following", auth, controller.following);
+
+    // OPTIONAL helpers
+    router.get("/:uid/follow-status", auth, controller.followStatus);
+    router.get("/:uid/follow-counts", auth, controller.followCounts);
+
 
     return router;
 };
@@ -153,4 +164,281 @@ module.exports = function createProfileRouter({
  *       204: { description: Password updated }
  *       403: { description: Current password incorrect }
  *       401: { description: Unauthorized }
+ */
+/**
+ * @swagger
+ * /api/profile/{uid}/follow:
+ *   post:
+ *     summary: Follow a user
+ *     description: Create a follow relationship from the current user to the target user.
+ *     tags: [Profile]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: uid
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: UID of the user to follow
+ *     responses:
+ *       200:
+ *         description: Followed successfully or already following
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   enum: [followed, skipped]
+ *                 reason:
+ *                   type: string
+ *                   nullable: true
+ *                   example: already_following
+ *       400:
+ *         description: Invalid UID or self-follow attempt
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Target user not found
+ */
+/**
+ * @swagger
+ * /api/profile/{uid}/follow:
+ *   delete:
+ *     summary: Unfollow a user
+ *     description: Remove a follow relationship from the current user to the target user.
+ *     tags: [Profile]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: uid
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: UID of the user to unfollow
+ *     responses:
+ *       200:
+ *         description: Unfollowed successfully or not following
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   enum: [unfollowed, skipped]
+ *                 reason:
+ *                   type: string
+ *                   nullable: true
+ *                   example: not_following
+ *       400:
+ *         description: Invalid UID or self-unfollow attempt
+ *       401:
+ *         description: Unauthorized
+ */
+/**
+ * @swagger
+ * /api/profile/{uid}/followers:
+ *   get:
+ *     summary: List followers of a user
+ *     description: |
+ *       Returns users who follow the given user.
+ *       By default, returns public profile data.
+ *     tags: [Profile]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: uid
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: UID of the user
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 50
+ *           maximum: 100
+ *       - in: query
+ *         name: offset
+ *         schema:
+ *           type: integer
+ *           default: 0
+ *       - in: query
+ *         name: includeProfiles
+ *         schema:
+ *           type: boolean
+ *           default: true
+ *         description: Whether to return public profile data or only UIDs
+ *     responses:
+ *       200:
+ *         description: List of followers
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 items:
+ *                   type: array
+ *                   items:
+ *                     oneOf:
+ *                       - type: integer
+ *                       - type: object
+ *                         properties:
+ *                           uid:
+ *                             type: integer
+ *                           display_name:
+ *                             type: string
+ *                             nullable: true
+ *                           avatar_media_id:
+ *                             type: string
+ *                             nullable: true
+ *                 paging:
+ *                   type: object
+ *                   properties:
+ *                     limit:
+ *                       type: integer
+ *                     offset:
+ *                       type: integer
+ *       400:
+ *         description: Invalid UID
+ *       401:
+ *         description: Unauthorized
+ */
+/**
+ * @swagger
+ * /api/profile/{uid}/following:
+ *   get:
+ *     summary: List users followed by a user
+ *     description: |
+ *       Returns users that the given user is following.
+ *       By default, returns public profile data.
+ *     tags: [Profile]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: uid
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: UID of the user
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 50
+ *           maximum: 100
+ *       - in: query
+ *         name: offset
+ *         schema:
+ *           type: integer
+ *           default: 0
+ *       - in: query
+ *         name: includeProfiles
+ *         schema:
+ *           type: boolean
+ *           default: true
+ *     responses:
+ *       200:
+ *         description: List of followed users
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 items:
+ *                   type: array
+ *                   items:
+ *                     oneOf:
+ *                       - type: integer
+ *                       - type: object
+ *                         properties:
+ *                           uid:
+ *                             type: integer
+ *                           display_name:
+ *                             type: string
+ *                             nullable: true
+ *                           avatar_media_id:
+ *                             type: string
+ *                             nullable: true
+ *                 paging:
+ *                   type: object
+ *                   properties:
+ *                     limit:
+ *                       type: integer
+ *                     offset:
+ *                       type: integer
+ *       400:
+ *         description: Invalid UID
+ *       401:
+ *         description: Unauthorized
+ */
+/**
+ * @swagger
+ * /api/profile/{uid}/follow-status:
+ *   get:
+ *     summary: Check follow status
+ *     description: Determine whether the current user follows the given user.
+ *     tags: [Profile]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: uid
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: UID of the target user
+ *     responses:
+ *       200:
+ *         description: Follow status
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 isFollowing:
+ *                   type: boolean
+ *       400:
+ *         description: Invalid UID
+ *       401:
+ *         description: Unauthorized
+ */
+/**
+ * @swagger
+ * /api/profile/{uid}/follow-counts:
+ *   get:
+ *     summary: Get follower and following counts
+ *     tags: [Profile]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: uid
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Follow counts
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 uid:
+ *                   type: integer
+ *                 followers:
+ *                   type: integer
+ *                 following:
+ *                   type: integer
+ *       400:
+ *         description: Invalid UID
+ *       401:
+ *         description: Unauthorized
  */
