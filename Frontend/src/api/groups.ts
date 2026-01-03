@@ -1,5 +1,11 @@
+// src/api/groups.ts
 import { groupsClient as apiClient } from "@/api/client";
-import type { ApiGroup, ApiGroupDetailsResponse, GroupVisibility, ApiJoinRequest } from "@/api/types";
+import type {
+  ApiGroup,
+  ApiGroupDetailsResponse,
+  GroupVisibility,
+  ApiJoinRequest,
+} from "@/api/types";
 
 const GROUPS_PREFIX = "/groups";
 
@@ -18,6 +24,12 @@ export type ApiMyMembership = {
   role: "owner" | "admin" | "member" | null;
 };
 
+type JoinRequestsResponse = {
+  groupId: string;
+  total: number;
+  items: ApiJoinRequest[];
+};
+
 async function tryGet<T>(paths: string[]): Promise<T> {
   let lastErr: any = null;
   for (const p of paths) {
@@ -33,7 +45,7 @@ async function tryGet<T>(paths: string[]): Promise<T> {
 export const groupsApi = {
   getDetails: (id: string) =>
     tryGet<ApiGroupDetailsResponse>([
-      `${GROUPS_PREFIX}/${id}`, 
+      `${GROUPS_PREFIX}/${id}`,
       `${GROUPS_PREFIX}/${id}/details`,
     ]),
 
@@ -57,8 +69,11 @@ export const groupsApi = {
     );
   },
 
-  listJoinRequests: (groupId: string) =>
-    apiClient.get<ApiJoinRequest[]>(`${GROUPS_PREFIX}/${groupId}/requests`),
+  // ✅ FIX: این endpoint آبجکت میده، ما فقط items رو برمی‌گردونیم (آرایه)
+  listJoinRequests: async (groupId: string): Promise<ApiJoinRequest[]> => {
+    const res = await apiClient.get<JoinRequestsResponse>(`${GROUPS_PREFIX}/${groupId}/requests`);
+    return Array.isArray(res?.items) ? res.items : [];
+  },
 
   approveJoinRequest: (groupId: string, userId: string | number) =>
     apiClient.post<void>(`${GROUPS_PREFIX}/${groupId}/requests/${userId}/approve`),
@@ -71,9 +86,9 @@ export const groupsApi = {
     const limit = params.limit ?? 20;
     const offset = params.offset ?? 0;
     return apiClient.get<ApiGroup[]>(
-      `${GROUPS_PREFIX}/search?q=${encodeURIComponent(q)}&limit=${encodeURIComponent(limit)}&offset=${encodeURIComponent(
-        offset
-      )}`
+      `${GROUPS_PREFIX}/search?q=${encodeURIComponent(q)}&limit=${encodeURIComponent(
+        limit
+      )}&offset=${encodeURIComponent(offset)}`
     );
   },
 

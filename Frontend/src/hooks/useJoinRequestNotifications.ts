@@ -3,26 +3,24 @@ import { useMemo } from "react";
 import { useQueries, useQuery } from "@tanstack/react-query";
 
 import { groupsApi } from "@/api/groups";
-import type { ApiGroup } from "@/api/types";
-
-type JoinReq = { group_id: string; uid: string | number; created_at: string };
+import type { ApiGroup, ApiJoinRequest } from "@/api/types";
 
 export function useJoinRequestNotifications() {
-  // 1) my groups
+  // 1) گروه‌های من
   const myGroupsQ = useQuery({
     queryKey: ["groups", "me"],
     queryFn: () => groupsApi.listMine(),
     retry: false,
   });
 
-  const groups: ApiGroup[] = (myGroupsQ.data ?? []) as ApiGroup[];
+  const groups: ApiGroup[] = myGroupsQ.data ?? [];
 
-  // 2) membership for each group (to detect admin/owner)
+  // 2) عضویت/نقش من در هر گروه
   const membershipQueries = useQueries({
     queries: groups.map((g) => ({
       queryKey: ["groups", "membership", g.id],
       queryFn: () => groupsApi.getMyMembership(g.id),
-      enabled: Boolean(g.id),
+      enabled: !!g?.id,
       retry: false,
     })),
   });
@@ -38,14 +36,14 @@ export function useJoinRequestNotifications() {
     return out;
   }, [groups, membershipQueries]);
 
-  // 3) poll join requests for admin groups
+  // 3) پول join request ها (اینجا rq.data خودش آرایه است)
   const requestsQueries = useQueries({
     queries: adminGroups.map((g) => ({
       queryKey: ["groups", "join-requests", g.id],
-      queryFn: () => groupsApi.listJoinRequests(g.id),
-      enabled: Boolean(g.id),
+      queryFn: () => groupsApi.listJoinRequests(g.id), // ✅ returns ApiJoinRequest[]
+      enabled: !!g?.id,
       retry: false,
-      refetchInterval: 15000, // ✅ هر 15 ثانیه (ملایم)
+      refetchInterval: 15000,
       refetchIntervalInBackground: true,
     })),
   });
@@ -61,7 +59,8 @@ export function useJoinRequestNotifications() {
     for (let i = 0; i < adminGroups.length; i++) {
       const g = adminGroups[i];
       const rq = requestsQueries[i];
-      const rows = (rq.data ?? []) as JoinReq[];
+
+      const rows: ApiJoinRequest[] = rq.data ?? []; // ✅ همیشه آرایه
 
       for (const r of rows) {
         items.push({
@@ -73,7 +72,6 @@ export function useJoinRequestNotifications() {
       }
     }
 
-    // newest first
     items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
     return items;
   }, [adminGroups, requestsQueries]);
