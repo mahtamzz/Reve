@@ -6,7 +6,6 @@ import { groupsApi } from "@/api/groups";
 import type { ApiGroup, ApiJoinRequest } from "@/api/types";
 
 export function useJoinRequestNotifications() {
-  // 1) گروه‌های من
   const myGroupsQ = useQuery({
     queryKey: ["groups", "me"],
     queryFn: () => groupsApi.listMine(),
@@ -15,7 +14,6 @@ export function useJoinRequestNotifications() {
 
   const groups: ApiGroup[] = myGroupsQ.data ?? [];
 
-  // 2) عضویت/نقش من در هر گروه
   const membershipQueries = useQueries({
     queries: groups.map((g) => ({
       queryKey: ["groups", "membership", g.id],
@@ -36,11 +34,10 @@ export function useJoinRequestNotifications() {
     return out;
   }, [groups, membershipQueries]);
 
-  // 3) پول join request ها (اینجا rq.data خودش آرایه است)
   const requestsQueries = useQueries({
     queries: adminGroups.map((g) => ({
       queryKey: ["groups", "join-requests", g.id],
-      queryFn: () => groupsApi.listJoinRequests(g.id), // ✅ returns ApiJoinRequest[]
+      queryFn: () => groupsApi.listJoinRequests(g.id),
       enabled: !!g?.id,
       retry: false,
       refetchInterval: 15000,
@@ -60,7 +57,7 @@ export function useJoinRequestNotifications() {
       const g = adminGroups[i];
       const rq = requestsQueries[i];
 
-      const rows: ApiJoinRequest[] = rq.data ?? []; // ✅ همیشه آرایه
+      const rows: ApiJoinRequest[] = rq.data ?? [];
 
       for (const r of rows) {
         items.push({
