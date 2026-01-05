@@ -1,48 +1,77 @@
 // src/hooks/useGroups.ts
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { groupsApi, type CreateGroupBody } from "@/api/groups";
-import type {
-  ApiGroup,
-  ApiGroupDetailsResponse,
-  ApiListGroupMembersResponse,
-} from "@/api/types";
-import type { JoinRequestsResponse } from "@/api/groups";
+import { useMemo } from "react";
+import { useMutation, useQuery, useQueryClient, useQueries } from "@tanstack/react-query";
+import { groupsApi, type CreateGroupBody, type UpdateGroupBody } from "@/api/groups";
+import { profileClient } from "@/api/client";
 
-// --------------------
-// Query Keys
-// --------------------
-export const groupDetailsKey = (groupId: string) => ["groups", "details", groupId] as const;
-export const myGroupsKey = () => ["groups", "me"] as const;
-export const myMembershipKey = (groupId: string) => ["groups", "membership", "me", groupId] as const;
-
-export const groupMembersKey = (groupId: string) =>
-  ["groups", "members", groupId] as const;
-
-export function useGroupMembers(groupId: string, enabled = true) {
-  return useQuery<ApiListGroupMembersResponse>({
-    queryKey: groupMembersKey(groupId),
-    queryFn: () => groupsApi.listMembers(groupId),
-    enabled: Boolean(groupId) && enabled,
-    retry: false,
-    staleTime: 15_000,
-  });
+// ---------- helpers ----------
+export function isUuid(v: string) {
+  // UUID v4-ish (accepts v1..v5 formats)
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
 }
 
+function pickUid(m: any): string | null {
+  const uid = m?.uid ?? m?.user_id ?? m?.userId ?? m?.id ?? m?.profile?.uid ?? null;
+  if (uid == null) return null;
+  const s = String(uid);
+  return s.trim() ? s : null;
+}
+
+function pickProfileFromMember(m: any) {
+  // tolerate many shapes
+  const displayName =
+    m?.profile?.display_name ??
+    m?.profile?.displayName ??
+    m?.profile?.name ??
+    m?.user?.display_name ??
+    m?.user?.displayName ??
+    m?.display_name ??
+    m?.displayName ??
+    m?.name ??
+    null;
+
+  const username =
+    m?.profile?.username ??
+    m?.user?.username ??
+    m?.username ??
+    m?.handle ??
+    null;
+
+  const avatarUrl =
+    m?.profile?.avatar_url ??
+    m?.profile?.avatarUrl ??
+    m?.user?.avatar_url ??
+    m?.user?.avatarUrl ??
+    m?.avatar_url ??
+    m?.avatarUrl ??
+    null;
+
+  return {
+    displayName: typeof displayName === "string" && displayName.trim() ? displayName.trim() : null,
+    username: typeof username === "string" && username.trim() ? username.trim() : null,
+    avatarUrl: typeof avatarUrl === "string" && avatarUrl.trim() ? avatarUrl.trim() : null,
+  };
+}
+
+async function fetchUserByUid(uid: string) {
+  // ✅ profile-service endpoint (اگر فرق داشت همینو عوض کن)
+  return profileClient.get<any>(`/users/${uid}`);
+}
+
+// ---------- query keys ----------
+export const groupKey = (groupId: string) => ["groups", "group", groupId] as const;
+export const groupMembersKey = (groupId: string) => ["groups", "members", groupId] as const;
+export const myMembershipKey = (groupId: string) => ["groups", "membership", "me", groupId] as const;
+export const myGroupsKey = () => ["groups", "me"] as const;
+export const joinRequestsKey = (groupId: string) => ["groups", "join-requests", groupId] as const;
 export const groupsDiscoverKey = (limit: number, offset: number) =>
   ["groups", "discover", { limit, offset }] as const;
 
-export const groupsSearchKey = (q: string, limit: number, offset: number) =>
-  ["groups", "search", { q, limit, offset }] as const;
-
-export const joinRequestsKey = (groupId: string) => ["groups", "join-requests", groupId] as const;
-
-// --------------------
-// Queries
-// --------------------
-export function useGroupDetails(groupId: string, enabled = true) {
-  return useQuery<ApiGroupDetailsResponse>({
-    queryKey: groupDetailsKey(groupId),
-    queryFn: () => groupsApi.getDetails(groupId),
+// ---------- queries ----------
+export function useGroupDetails(groupId?: string, enabled = true) {
+  return useQuery({
+    queryKey: groupKey(groupId || ""),
+    queryFn: () => groupsApi.getGroup(groupId as string),
     enabled: Boolean(groupId) && enabled,
     retry: false,
     staleTime: 30_000,
@@ -50,7 +79,7 @@ export function useGroupDetails(groupId: string, enabled = true) {
 }
 
 export function useMyGroups() {
-  return useQuery<ApiGroup[]>({
+  return useQuery({
     queryKey: myGroupsKey(),
     queryFn: () => groupsApi.listMine(),
     retry: false,
@@ -58,18 +87,8 @@ export function useMyGroups() {
   });
 }
 
-export function useMyMembership(groupId: string, enabled = true) {
-  return useQuery({
-    queryKey: myMembershipKey(groupId),
-    queryFn: () => groupsApi.getMyMembership(groupId),
-    enabled: Boolean(groupId) && enabled,
-    retry: false,
-    staleTime: 30_000,
-  });
-}
-
 export function useDiscoverGroups(limit: number, offset: number) {
-  return useQuery<ApiGroup[]>({
+  return useQuery({
     queryKey: groupsDiscoverKey(limit, offset),
     queryFn: () => groupsApi.list({ limit, offset }),
     retry: false,
@@ -77,34 +96,137 @@ export function useDiscoverGroups(limit: number, offset: number) {
   });
 }
 
-export function useSearchGroups(params: { q: string; limit?: number; offset?: number }, enabled = true) {
-  const q = params.q ?? "";
-  const limit = params.limit ?? 20;
-  const offset = params.offset ?? 0;
+/**
+ * ✅ Membership:
+ * - فقط وقتی gid واقعاً UUID هست می‌زنیم، چون بک‌اند group_id رو UUID می‌خواهد وگرنه 500 می‌خوری.
+ */
+export function useMyMembership(groupId?: string, enabled = true) {
+  const gid = groupId || "";
+  const canCall = Boolean(gid) && isUuid(gid) && enabled;
 
-  return useQuery<ApiGroup[]>({
-    queryKey: groupsSearchKey(q, limit, offset),
-    queryFn: () => groupsApi.search({ q, limit, offset }),
-    enabled: enabled && Boolean(q.trim()),
+  return useQuery({
+    queryKey: myMembershipKey(gid),
+    queryFn: () => groupsApi.getMyMembership(gid),
+    enabled: canCall,
     retry: false,
     staleTime: 15_000,
   });
 }
 
+/**
+ * ✅ Members with FULL meta:
+ * - اول از groups-service: /groups/:id/members (online/role/uid)
+ * - اگر profile داخل پاسخ نبود => از profile-service /users/:uid می‌گیریم و merge می‌کنیم
+ */
+export function useGroupMembers(groupId?: string, enabled = true) {
+  const gid = groupId || "";
 
-export function useJoinRequests(groupId: string, enabled = true) {
-  return useQuery<JoinRequestsResponse>({
-    queryKey: joinRequestsKey(groupId),
-    queryFn: () => groupsApi.listJoinRequests(groupId),
-    enabled: Boolean(groupId) && enabled,
+  const membersQ = useQuery({
+    queryKey: groupMembersKey(gid),
+    queryFn: () => groupsApi.listMembers(gid),
+    enabled: Boolean(gid) && enabled,
     retry: false,
     staleTime: 10_000,
   });
+
+  const rawItems = (membersQ.data as any)?.items ?? [];
+  const uids = useMemo(() => {
+    const set = new Set<string>();
+    for (const m of rawItems) {
+      const uid = pickUid(m);
+      if (uid) set.add(uid);
+    }
+    return Array.from(set);
+  }, [rawItems]);
+
+  // fetch profiles only for users that don't have enough profile info
+  const needProfileUids = useMemo(() => {
+    const need: string[] = [];
+    for (const m of rawItems) {
+      const uid = pickUid(m);
+      if (!uid) continue;
+      const p = pickProfileFromMember(m);
+      // اگر displayName/username/avatar هیچکدوم نبود، برو پروفایل بگیر
+      if (!p.displayName && !p.username && !p.avatarUrl) need.push(uid);
+    }
+    return Array.from(new Set(need));
+  }, [rawItems]);
+
+  const profileQueries = useQueries({
+    queries: needProfileUids.map((uid) => ({
+      queryKey: ["profile", "user", uid] as const,
+      queryFn: () => fetchUserByUid(uid),
+      enabled: Boolean(uid),
+      retry: false,
+      staleTime: 60_000,
+    })),
+  });
+
+  const profileMap = useMemo(() => {
+    const map = new Map<string, { displayName: string | null; username: string | null; avatarUrl: string | null }>();
+    for (let i = 0; i < needProfileUids.length; i++) {
+      const uid = needProfileUids[i];
+      const data = profileQueries[i]?.data;
+      if (!data) continue;
+
+      const displayName =
+        data?.display_name ??
+        data?.displayName ??
+        data?.name ??
+        data?.username ??
+        data?.email ??
+        null;
+
+      const username = data?.username ?? data?.handle ?? null;
+      const avatarUrl = data?.avatar_url ?? data?.avatarUrl ?? null;
+
+      map.set(uid, {
+        displayName: typeof displayName === "string" && displayName.trim() ? displayName.trim() : null,
+        username: typeof username === "string" && username.trim() ? username.trim() : null,
+        avatarUrl: typeof avatarUrl === "string" && avatarUrl.trim() ? avatarUrl.trim() : null,
+      });
+    }
+    return map;
+  }, [needProfileUids, profileQueries]);
+
+  const merged = useMemo(() => {
+    const items = rawItems.map((m: any, idx: number) => {
+      const uid = pickUid(m) ?? String(idx);
+      const base = pickProfileFromMember(m);
+      const fallback = profileMap.get(uid);
+
+      const displayName = base.displayName ?? fallback?.displayName ?? null;
+      const username = base.username ?? fallback?.username ?? null;
+      const avatarUrl = base.avatarUrl ?? fallback?.avatarUrl ?? null;
+
+      return {
+        ...m,
+        uid,
+        profile: {
+          display_name: displayName,
+          username,
+          avatar_url: avatarUrl,
+        },
+      };
+    });
+
+    const total = (membersQ.data as any)?.total ?? items.length;
+
+    return { items, total };
+  }, [rawItems, profileMap, membersQ.data]);
+
+  const isLoading = membersQ.isLoading || profileQueries.some((q) => q.isLoading);
+  const isError = membersQ.isError;
+
+  return {
+    ...membersQ,
+    data: merged,
+    isLoading,
+    isError,
+  };
 }
 
-// --------------------
-// Mutations
-// --------------------
+// ---------- mutations ----------
 export function useCreateGroup() {
   const qc = useQueryClient();
   return useMutation({
@@ -119,12 +241,11 @@ export function useCreateGroup() {
 export function useUpdateGroup() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ groupId, fields }: { groupId: string; fields: Partial<CreateGroupBody> }) =>
-      groupsApi.update(groupId, fields),
-    onSuccess: async (_updated, vars) => {
-      await qc.invalidateQueries({ queryKey: groupDetailsKey(vars.groupId) });
+    mutationFn: ({ groupId, body }: { groupId: string; body: UpdateGroupBody }) =>
+      groupsApi.update(groupId, body),
+    onSuccess: async (_data, vars) => {
+      await qc.invalidateQueries({ queryKey: groupKey(vars.groupId) });
       await qc.invalidateQueries({ queryKey: ["groups"] });
-      await qc.invalidateQueries({ queryKey: myGroupsKey() });
     },
   });
 }
@@ -134,9 +255,8 @@ export function useDeleteGroup() {
   return useMutation({
     mutationFn: (groupId: string) => groupsApi.remove(groupId),
     onSuccess: async (_void, groupId) => {
-      await qc.removeQueries({ queryKey: groupDetailsKey(groupId) });
+      await qc.removeQueries({ queryKey: groupKey(groupId) });
       await qc.removeQueries({ queryKey: groupMembersKey(groupId) });
-      await qc.removeQueries({ queryKey: joinRequestsKey(groupId) });
       await qc.invalidateQueries({ queryKey: ["groups"] });
       await qc.invalidateQueries({ queryKey: myGroupsKey() });
     },
@@ -150,7 +270,7 @@ export function useJoinGroup() {
     onSuccess: async (_data, groupId) => {
       await qc.invalidateQueries({ queryKey: myMembershipKey(groupId) });
       await qc.invalidateQueries({ queryKey: myGroupsKey() });
-      await qc.invalidateQueries({ queryKey: groupDetailsKey(groupId) });
+      await qc.invalidateQueries({ queryKey: groupKey(groupId) });
       await qc.invalidateQueries({ queryKey: groupMembersKey(groupId) });
       await qc.invalidateQueries({ queryKey: ["groups"] });
     },
@@ -161,13 +281,24 @@ export function useLeaveGroup() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (groupId: string) => groupsApi.leave(groupId),
-    onSuccess: async (_void, groupId) => {
+    onSuccess: async (_v, groupId) => {
       await qc.invalidateQueries({ queryKey: myMembershipKey(groupId) });
       await qc.invalidateQueries({ queryKey: myGroupsKey() });
-      await qc.removeQueries({ queryKey: groupDetailsKey(groupId) });
-      await qc.removeQueries({ queryKey: groupMembersKey(groupId) });
+      await qc.invalidateQueries({ queryKey: groupMembersKey(groupId) });
       await qc.invalidateQueries({ queryKey: ["groups"] });
     },
+  });
+}
+
+// ---- join requests ----
+export function useJoinRequests(groupId?: string, enabled = true) {
+  const gid = groupId || "";
+  return useQuery({
+    queryKey: joinRequestsKey(gid),
+    queryFn: () => groupsApi.listJoinRequests(gid),
+    enabled: Boolean(gid) && enabled,
+    retry: false,
+    staleTime: 10_000,
   });
 }
 
@@ -178,9 +309,9 @@ export function useApproveJoinRequest() {
       groupsApi.approveJoinRequest(groupId, userId),
     onSuccess: async (_v, vars) => {
       await qc.invalidateQueries({ queryKey: joinRequestsKey(vars.groupId) });
-      await qc.invalidateQueries({ queryKey: groupDetailsKey(vars.groupId) });
       await qc.invalidateQueries({ queryKey: groupMembersKey(vars.groupId) });
-      await qc.invalidateQueries({ queryKey: myGroupsKey() });
+      await qc.invalidateQueries({ queryKey: myMembershipKey(vars.groupId) });
+      await qc.invalidateQueries({ queryKey: groupKey(vars.groupId) });
     },
   });
 }
@@ -196,26 +327,26 @@ export function useRejectJoinRequest() {
   });
 }
 
-export function useChangeMemberRole() {
+// ---- member management ----
+export function useKickMember() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (vars: { groupId: string; userId: string | number; role: "admin" | "member" }) =>
-      groupsApi.changeMemberRole(vars.groupId, vars.userId, vars.role),
+    mutationFn: ({ groupId, userId }: { groupId: string; userId: string | number }) =>
+      groupsApi.kickMember(groupId, userId),
     onSuccess: async (_v, vars) => {
       await qc.invalidateQueries({ queryKey: groupMembersKey(vars.groupId) });
-      await qc.invalidateQueries({ queryKey: groupDetailsKey(vars.groupId) });
+      await qc.invalidateQueries({ queryKey: groupKey(vars.groupId) });
     },
   });
 }
 
-export function useKickMember() {
+export function useChangeMemberRole() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (vars: { groupId: string; userId: string | number }) =>
-      groupsApi.kickMember(vars.groupId, vars.userId),
+    mutationFn: ({ groupId, userId, role }: { groupId: string; userId: string | number; role: "admin" | "member" }) =>
+      groupsApi.changeMemberRole(groupId, userId, role),
     onSuccess: async (_v, vars) => {
       await qc.invalidateQueries({ queryKey: groupMembersKey(vars.groupId) });
-      await qc.invalidateQueries({ queryKey: groupDetailsKey(vars.groupId) });
     },
   });
 }

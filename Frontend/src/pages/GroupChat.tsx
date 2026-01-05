@@ -21,12 +21,7 @@ import Topbar from "@/components/Dashboard/DashboardHeader";
 import { logout } from "@/utils/authToken";
 
 import { useGroupChatSocket, type ChatMessage } from "@/hooks/useGroupChatSocket";
-import {
-  useGroupDetails,
-  useGroupMembers,
-  useJoinGroup,
-  useMyMembership,
-} from "@/hooks/useGroups";
+import { isUuid, useGroupDetails, useGroupMembers, useJoinGroup, useMyMembership } from "@/hooks/useGroups";
 
 const EASE_OUT: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
@@ -57,43 +52,8 @@ function isMineMessage(senderUid: any, myUid: any): boolean {
   return a != null && b != null && a === b;
 }
 
-function pickMemberUid(m: any): string | number | null {
-  return (m?.uid ?? m?.userId ?? m?.user_id ?? m?.id ?? null) as any;
-}
-
-function pickMemberName(m: any): string | null {
-  const v =
-    m?.profile?.display_name ||
-    m?.display_name ||
-    m?.displayName ||
-    m?.name ||
-    m?.username ||
-    null;
-  return typeof v === "string" && v.trim() ? v.trim() : null;
-}
-
-function pickMemberUsername(m: any): string | null {
-  const u =
-    m?.profile?.username ||
-    m?.username ||
-    m?.handle ||
-    m?.user_name ||
-    null;
-  return typeof u === "string" && u.trim() ? u.trim() : null;
-}
-
-function pickMemberAvatar(m: any): string | null {
-  return (
-    m?.profile?.avatar_url ||
-    m?.profile?.avatarUrl ||
-    m?.avatarUrl ||
-    m?.avatar_url ||
-    null
-  );
-}
-
 function initialsFromName(name: string) {
-  const cleaned = name.trim().replace(/\s+/g, " ");
+  const cleaned = (name || "").trim().replace(/\s+/g, " ");
   if (!cleaned) return "?";
   const parts = cleaned.split(" ");
   const a = parts[0]?.[0] || "";
@@ -101,62 +61,61 @@ function initialsFromName(name: string) {
   return (a + b).toUpperCase() || "?";
 }
 
-function fallbackAvatar(seed: string) {
-  return `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(seed || "u")}`;
-}
-
 export default function GroupChat() {
   const { groupId } = useParams<{ groupId: string }>();
   const gid = groupId || "";
+
   const location = useLocation();
   const navigate = useNavigate();
 
   const groupNameFromState =
     (location.state as { groupName?: string } | null)?.groupName ?? "Group Chat";
 
-  // ✅ membership (برای myUid و isMember)
-  const membershipQ = useMyMembership(gid, Boolean(gid));
-  const myUid = membershipQ.data?.uid ?? null;
-  const isMember = Boolean(membershipQ.data?.isMember);
-
-  // ✅ group (فقط اطلاعات گروه، نه members)
-  const detailsQ = useGroupDetails(gid, Boolean(gid));
-  const group = detailsQ.data?.group;
+  // group info
+  const groupQ = useGroupDetails(gid, Boolean(gid));
+  const group = groupQ.data;
 
   const visibility = String(group?.visibility ?? "private");
   const isPrivate = visibility === "private" || visibility === "invite_only";
 
-  // ✅ members واقعی از /groups/:id/members
-  // - public: همه می‌تونن ببینن
-  // - private/invite_only: فقط member ها
-  const canSeeMembers = Boolean(gid) && (!isPrivate || isMember);
-  const membersQ = useGroupMembers(gid, canSeeMembers);
+  // membership (uuid-guarded in hook)
+  const membershipQ = useMyMembership(gid, Boolean(gid));
+  const myUid = membershipQ.data?.uid ?? null;
+  const isMember = Boolean(membershipQ.data?.isMember);
 
-  const rawMembers = membersQ.data?.items ?? [];
-  const memberCount = membersQ.data?.total ?? rawMembers.length;
+  // members with profile merge
+  const canSeeMembers = !isPrivate || isMember;
+  const membersQ = useGroupMembers(gid, Boolean(gid) && canSeeMembers);
+  const members = membersQ.data?.items ?? [];
+  const memberCount = membersQ.data?.total ?? members.length;
 
   const joinMut = useJoinGroup();
 
-  // ✅ map uid -> avatar/name (از members endpoint)
+  // uid -> meta map
   const memberMetaMap = useMemo(() => {
     const map = new Map<string, { avatar: string | null; label: string | null; online: boolean }>();
-    for (const m of rawMembers) {
-      const uid = pickMemberUid(m);
-      if (uid == null) continue;
+    for (const m of members as any[]) {
+      const uid = String(m?.uid ?? m?.user_id ?? m?.userId ?? m?.id ?? "");
+      if (!uid) continue;
 
-      const name = pickMemberName(m);
-      const username = pickMemberUsername(m);
-      const label = name || (username ? `@${username.replace(/^@/, "")}` : null);
+      const dn = m?.profile?.display_name;
+      const un = m?.profile?.username;
+      const av = m?.profile?.avatar_url;
 
-      const avatar = pickMemberAvatar(m) || fallbackAvatar(String(uid));
+      const label =
+        (typeof dn === "string" && dn.trim() ? dn.trim() : null) ||
+        (typeof un === "string" && un.trim() ? `@${un.replace(/^@/, "")}` : null) ||
+        `User #${uid}`;
+
+      const avatar = (typeof av === "string" && av.trim() ? av.trim() : null);
       const online = Boolean(m?.online);
 
       map.set(String(uid), { avatar, label, online });
     }
     return map;
-  }, [rawMembers]);
+  }, [members]);
 
-  // ✅ socket chat
+  // socket chat
   const { messages: serverMessages, connected, joined, lastError, send } =
     useGroupChatSocket({
       groupId: gid,
@@ -191,18 +150,15 @@ export default function GroupChat() {
     return (serverMessages || []).map((m: ChatMessage) => {
       const senderUid = m.sender_uid;
       const mine = isMineMessage(senderUid, myUid);
-
       const meta = memberMetaMap.get(String(senderUid));
-      const avatar = meta?.avatar ?? fallbackAvatar(String(senderUid));
-      const label = meta?.label ?? (senderUid != null ? `User #${String(senderUid)}` : null);
 
       return {
         id: String(m.id),
         text: m.text,
         time: formatTime(m.created_at),
         mine,
-        senderAvatar: avatar,
-        senderLabel: label,
+        senderAvatar: meta?.avatar ?? null,
+        senderLabel: meta?.label ?? (mine ? "You" : null),
       };
     });
   }, [serverMessages, myUid, memberMetaMap]);
@@ -217,35 +173,33 @@ export default function GroupChat() {
     setInput("");
   };
 
-  const memberCards = useMemo(() => {
-    return rawMembers.map((m: any, idx: number) => {
-      const uid = pickMemberUid(m);
-
-      const name = pickMemberName(m);
-      const username = pickMemberUsername(m);
-      const avatar = pickMemberAvatar(m) || (uid != null ? fallbackAvatar(String(uid)) : null);
-
-      const online = Boolean(m?.online);
-
-      const display =
-        name ||
-        (username ? `@${username.replace(/^@/, "")}` : null) ||
-        (uid != null ? `User #${String(uid)}` : `Member ${idx + 1}`);
-
-      const subtitle =
-        username && name
-          ? `@${username.replace(/^@/, "")}`
-          : uid != null
-          ? `ID: ${String(uid)}`
-          : "";
-
-      const isMe = uid != null && myUid != null && isMineMessage(uid, myUid);
-
-      return { uid, display, subtitle, avatar, online, isMe };
-    });
-  }, [rawMembers, myUid]);
-
   const canType = Boolean(isMember && joined);
+
+  const memberCards = useMemo(() => {
+    return (members as any[]).map((m, idx) => {
+      const uid = String(m?.uid ?? m?.user_id ?? m?.userId ?? m?.id ?? idx);
+
+      const label =
+        (m?.profile?.display_name && String(m.profile.display_name).trim()) ||
+        (m?.profile?.username && `@${String(m.profile.username).replace(/^@/, "")}`) ||
+        `User #${uid}`;
+
+      const avatar = m?.profile?.avatar_url || null;
+      const online = Boolean(m?.online);
+      const isMe = myUid != null && String(uid) === String(myUid);
+
+      return {
+        uid,
+        display: String(label),
+        subtitle: isMe ? "You" : `ID: ${uid}`,
+        avatar,
+        online,
+        isMe,
+      };
+    });
+  }, [members, myUid]);
+
+  const invalidId = Boolean(gid) && !isUuid(gid);
 
   return (
     <div className="h-screen overflow-hidden bg-creamtext text-zinc-900">
@@ -258,7 +212,6 @@ export default function GroupChat() {
           <div className="flex-1 min-h-0 w-full px-4 py-4">
             <div className="max-w-7xl mx-auto h-full min-h-0">
               <div className="grid h-full min-h-0 grid-cols-1 lg:grid-cols-[1fr_340px] gap-4">
-                {/* Center panel (chat) */}
                 <motion.section
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -269,7 +222,6 @@ export default function GroupChat() {
                     bg-white/80 backdrop-blur shadow-sm
                   "
                 >
-                  {/* Header */}
                   <div className="shrink-0 px-4 py-3 border-b border-zinc-200 bg-white/70">
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex items-center gap-3 min-w-0">
@@ -295,12 +247,17 @@ export default function GroupChat() {
                             <span>
                               {membersQ.isLoading ? "Loading members..." : `${memberCount} members`}
                             </span>
-
                             <span className="text-zinc-300">•</span>
                             <span className="font-medium">
                               {connected ? (joined ? "Joined" : "Connecting...") : "Offline"}
                             </span>
                           </div>
+
+                          {invalidId ? (
+                            <p className="text-xs text-rose-700 mt-1">
+                              groupId باید UUID باشه: <span className="font-mono">{gid}</span>
+                            </p>
+                          ) : null}
 
                           {lastError ? (
                             <p className="text-xs text-red-600 mt-1">
@@ -314,7 +271,7 @@ export default function GroupChat() {
                         {!isMember ? (
                           <button
                             onClick={() => joinMut.mutate(gid)}
-                            disabled={joinMut.isPending || membershipQ.isLoading || !gid}
+                            disabled={joinMut.isPending}
                             className="
                               inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-white
                               px-3 py-2 text-xs font-semibold
@@ -340,7 +297,6 @@ export default function GroupChat() {
                     </div>
                   </div>
 
-                  {/* Messages scroller */}
                   <div
                     className="
                       flex-1 min-h-0 overflow-y-auto
@@ -384,11 +340,7 @@ export default function GroupChat() {
                               {!m.mine && (
                                 <div className="mr-2 mt-1 h-8 w-8 overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-100 flex items-center justify-center text-xs font-bold text-zinc-600">
                                   {m.senderAvatar ? (
-                                    <img
-                                      src={m.senderAvatar}
-                                      alt="user"
-                                      className="h-full w-full object-cover"
-                                    />
+                                    <img src={m.senderAvatar} alt="user" className="h-full w-full object-cover" />
                                   ) : (
                                     "?"
                                   )}
@@ -410,19 +362,13 @@ export default function GroupChat() {
                                   </p>
                                 ) : null}
                                 <p>{m.text}</p>
-                                <p className="mt-1 text-[10px] opacity-70 text-right">
-                                  {m.time}
-                                </p>
+                                <p className="mt-1 text-[10px] opacity-70 text-right">{m.time}</p>
                               </div>
 
                               {m.mine && (
                                 <div className="ml-2 mt-1 h-8 w-8 overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-100 flex items-center justify-center text-xs font-bold text-zinc-600">
                                   {m.senderAvatar ? (
-                                    <img
-                                      src={m.senderAvatar}
-                                      alt="me"
-                                      className="h-full w-full object-cover"
-                                    />
+                                    <img src={m.senderAvatar} alt="me" className="h-full w-full object-cover" />
                                   ) : (
                                     "ME"
                                   )}
@@ -431,13 +377,11 @@ export default function GroupChat() {
                             </motion.div>
                           ))}
                         </AnimatePresence>
-
                         <div ref={bottomRef} />
                       </div>
                     )}
                   </div>
 
-                  {/* Input */}
                   <div className="shrink-0 border-t border-zinc-200 bg-white px-4 py-3">
                     <div className="flex items-center gap-3">
                       <div className="relative" ref={emojiRef}>
@@ -512,7 +456,7 @@ export default function GroupChat() {
                   </div>
                 </motion.section>
 
-                {/* Right panel (info) */}
+                {/* Right panel */}
                 <motion.aside
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -524,9 +468,7 @@ export default function GroupChat() {
                   "
                 >
                   <div className="p-4 border-b border-zinc-200">
-                    <p className="text-sm font-semibold text-zinc-900">
-                      {group?.name ?? groupNameFromState}
-                    </p>
+                    <p className="text-sm font-semibold text-zinc-900">{group?.name ?? groupNameFromState}</p>
                     <p className="mt-1 text-xs text-zinc-500">
                       Members · {membersQ.isLoading ? "..." : memberCount}
                     </p>
@@ -550,15 +492,13 @@ export default function GroupChat() {
                     <div className="rounded-2xl border border-zinc-200 bg-white p-3">
                       <div className="flex items-center justify-between">
                         <p className="text-xs font-semibold text-zinc-700">Members</p>
-                        {membersQ.isLoading ? (
-                          <span className="text-[11px] text-zinc-400">Loading…</span>
-                        ) : null}
+                        {membersQ.isLoading ? <span className="text-[11px] text-zinc-400">Loading…</span> : null}
                       </div>
 
                       <div className="mt-3 space-y-2">
                         {memberCards.map((m) => (
                           <div
-                            key={m.uid != null ? String(m.uid) : m.display}
+                            key={m.uid}
                             className={`
                               flex items-center gap-3 rounded-2xl
                               border border-zinc-200 bg-zinc-50 px-3 py-2
@@ -567,15 +507,9 @@ export default function GroupChat() {
                           >
                             <div className="relative h-10 w-10 rounded-2xl overflow-hidden border border-zinc-200 bg-white grid place-items-center">
                               {m.avatar ? (
-                                <img
-                                  src={m.avatar}
-                                  alt={m.display}
-                                  className="h-full w-full object-cover"
-                                />
+                                <img src={m.avatar} alt={m.display} className="h-full w-full object-cover" />
                               ) : (
-                                <span className="text-xs font-bold text-zinc-600">
-                                  {initialsFromName(m.display)}
-                                </span>
+                                <span className="text-xs font-bold text-zinc-600">{initialsFromName(m.display)}</span>
                               )}
 
                               <span
@@ -589,30 +523,15 @@ export default function GroupChat() {
                             <div className="min-w-0 flex-1">
                               <p className="truncate text-sm font-semibold text-zinc-900">
                                 {m.display}
-                                {m.isMe ? (
-                                  <span className="ml-2 text-[11px] font-semibold text-yellow-700">
-                                    (You)
-                                  </span>
-                                ) : null}
+                                {m.isMe ? <span className="ml-2 text-[11px] font-semibold text-yellow-700">(You)</span> : null}
                               </p>
-
-                              {m.subtitle ? (
-                                <p className="truncate text-[11px] text-zinc-500 mt-0.5">
-                                  {m.subtitle}
-                                </p>
-                              ) : (
-                                <p className="truncate text-[11px] text-zinc-400 mt-0.5">
-                                  Member
-                                </p>
-                              )}
+                              <p className="truncate text-[11px] text-zinc-500 mt-0.5">{m.subtitle}</p>
                             </div>
                           </div>
                         ))}
 
                         {!memberCards.length && !membersQ.isLoading ? (
-                          <p className="text-xs text-zinc-500">
-                            {canSeeMembers ? "No members found." : "Members are hidden until you join."}
-                          </p>
+                          <p className="text-xs text-zinc-500">No members found.</p>
                         ) : null}
                       </div>
                     </div>
