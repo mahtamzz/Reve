@@ -1,12 +1,13 @@
 // src/pages/Groups.tsx
-
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { Plus, Search, Hash } from "lucide-react";
 
 import { groupsClient } from "@/api/client";
-import type { ApiGroup } from "@/api/types";
+import type { ApiGroup, GroupVisibility } from "@/api/types";
+import type { CreateGroupPayload } from "@/components/Groups/CreateGroupModal";
+
 
 import Sidebar from "@/components/Dashboard/SidebarIcon";
 import CreateGroupModal from "@/components/Groups/CreateGroupModal";
@@ -15,27 +16,14 @@ import { GroupCard } from "@/components/Groups/GroupCard";
 
 import { useCreateGroup, useDeleteGroup, useDiscoverGroups, useMyGroups } from "@/hooks/useGroups";
 
-type CreateGroupPayload = {
-  name: string;
-  description: string;
-  privacy: "public" | "private";
-  goalXp: number;
-  minDailyMinutes: number;
-  invites: string[];
-};
 
-function getWeeklyXp(g: ApiGroup): number {
-  const anyG = g as any;
-  return (anyG.weeklyXp ?? anyG.weekly_xp ?? 0) as number;
-}
 
 function mapApiGroupToCard(g: ApiGroup) {
-  const goal = getWeeklyXp(g);
   return {
     id: g.id,
     name: g.name,
+    // backend does not provide score yet => keep 0
     score: 0,
-    goal,
   };
 }
 
@@ -132,29 +120,27 @@ export default function Groups() {
     const created = await createMutation.mutateAsync({
       name: payload.name,
       description: payload.description || null,
-      visibility: payload.privacy,
-      weeklyXp: payload.goalXp ?? null,
-      minimumDstMins: payload.minDailyMinutes ?? null,
+      visibility: payload.visibility,
+      minimumDstMins: payload.minimumDstMins ?? null,
     });
-
+  
     newCardIdRef.current = created.id;
     setQuery("");
-
+  
     window.setTimeout(() => {
       const el = document.getElementById(`group-card-${created.id}`);
       el?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 120);
   };
+  
 
   const handleDelete = (id: string) => {
     deleteMutation.mutate(id);
   };
 
-  // UI lists
   const myCards = useMemo(() => myGroups.map(mapApiGroupToCard), [myGroups]);
   const allCards = useMemo(() => allGroups.map(mapApiGroupToCard), [allGroups]);
 
-  // close suggest on outside click
   useEffect(() => {
     if (!openSuggest) return;
     const onDown = (e: MouseEvent) => {
@@ -397,9 +383,7 @@ export default function Groups() {
             <div className="mt-10">
               <div className="flex items-end justify-between gap-4">
                 <div>
-                  <p className="mt-0.5 text-xs text-zinc-500">
-                    Groups you belong to.
-                  </p>
+                  <p className="mt-0.5 text-xs text-zinc-500">Groups you belong to.</p>
                 </div>
               </div>
 

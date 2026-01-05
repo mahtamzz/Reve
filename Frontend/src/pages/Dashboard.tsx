@@ -4,13 +4,14 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { Bell, ChevronRight, Menu, X } from "lucide-react";
-import { useJoinRequestNotifications } from "@/hooks/useJoinRequestNotifications";
 
 import { ApiError } from "@/api/client";
 
 import { useProfileMe, profileMeKey } from "@/hooks/useProfileMe";
 import { useUpdateProfileMe } from "@/hooks/useUpdateProfileMe";
 import { useSubjects, useStudyDashboard, useSessions, studyKeys } from "@/hooks/useStudy";
+import { useJoinRequestNotifications } from "@/hooks/useJoinRequestNotifications";
+
 
 import Sidebar from "@/components/Dashboard/SidebarIcon";
 import Topbar from "@/components/Dashboard/DashboardHeader";

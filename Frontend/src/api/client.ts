@@ -113,12 +113,18 @@ export function createApiClient(rawBase: string) {
       : await res.text().catch(() => null);
 
     if (!res.ok) {
-      const msg =
-        data?.message ||
-        data?.error ||
-        (typeof data === "string" && data.trim() ? data : "Request failed");
-
-      throw new ApiError(msg, res.status, data);
+      const msgRaw =
+      data?.message ||
+      data?.error ||
+      (typeof data === "string" && data.trim() ? data : "Request failed");
+    
+    const msg =
+      typeof msgRaw === "string" && msgRaw.includes("<!DOCTYPE html")
+        ? "SERVER_ERROR_HTML_RESPONSE"
+        : msgRaw;
+    
+    throw new ApiError(msg, res.status, data);
+    
     }
 
     return data as T;

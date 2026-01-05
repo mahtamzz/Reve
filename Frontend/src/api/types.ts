@@ -1,6 +1,6 @@
 // src/api/types.ts
 
-export type GroupVisibility = "public" | "private";
+export type GroupVisibility = "public" | "private" | "invite_only";
 
 export type ApiOk = { ok: boolean };
 
@@ -19,29 +19,42 @@ export type User = {
 export type ApiGroup = {
   id: string;
   name: string;
-  description: string | null;
+  description?: string | null;
   visibility: GroupVisibility;
-  weekly_xp: number | null;
-  minimum_dst_mins: number | null;
-  owner_uid: string | number;
-  created_at: string;
-  updated_at: string;
+  weekly_xp?: number | null;
+  minimum_dst_mins?: number | null;
+  owner_uid?: number | string | null;
+  created_at?: string;
+  updated_at?: string;
+
+  // sometimes backend returns camelCase
+  weeklyXp?: number | null;
+  minimumDstMins?: number | null;
+};
+export type ApiGroupMemberProfile = {
+  display_name?: string | null;
+  timezone?: string | null;
+  username?: string | null;
+  avatar_url?: string | null;
+  avatarUrl?: string | null;
 };
 
-export type ApiGroupMember = Record<string, any> & {
-  id?: string;
-  uid?: string;
-  userId?: string;
 
-  name?: string;
+export type ApiGroupMember = {
+  uid: number | string;
+  role: "owner" | "admin" | "member";
+  joined_at?: string;
+  profile?: ApiGroupMemberProfile | null;
+
+  // tolerant fields:
+  userId?: number | string;
+  id?: number | string;
   username?: string;
   displayName?: string;
-
-  avatarUrl?: string;
-  avatar_url?: string;
-
+  name?: string;
+  avatarUrl?: string | null;
+  avatar_url?: string | null;
   online?: boolean;
-
   time?: string;
   studyTime?: string;
   study_time?: string;
@@ -51,7 +64,11 @@ export type ApiGroupDetailsResponse = {
   group: ApiGroup;
   members: ApiGroupMember[];
 };
-
+export type ApiListGroupMembersResponse = {
+  groupId: string;
+  total: number;
+  items: ApiGroupMember[];
+};
 
 // ---------- Study Types ----------
 

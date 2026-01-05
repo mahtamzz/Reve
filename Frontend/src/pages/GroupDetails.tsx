@@ -1,19 +1,42 @@
 // src/pages/GroupDetails.tsx
-
 import React, { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, MessageCircle, Lock, Globe } from "lucide-react";
+import {
+  ArrowLeft,
+  MessageCircle,
+  Lock,
+  Globe,
+  Users,
+  Shield,
+  Crown,
+  UserMinus,
+  UserCog,
+  Trash2,
+  LogOut,
+  Check,
+  X,
+} from "lucide-react";
 
 import Sidebar from "@/components/Dashboard/SidebarIcon";
+import Topbar from "@/components/Dashboard/DashboardHeader";
 import { logout } from "@/utils/authToken";
 
 import LookAtBuddy from "@/components/LookAtBuddy";
-import { MemberCard, type Member } from "@/components/Groups/MemberCard";
 
-import { useGroupDetails, useJoinGroup, useMyMembership } from "@/hooks/useGroups";
-import type { ApiGroupMember } from "@/api/types";
-import { ApiError } from "@/api/client";
+import {
+  useApproveJoinRequest,
+  useChangeMemberRole,
+  useDeleteGroup,
+  useGroupDetails,
+  useGroupMembers,
+  useJoinGroup,
+  useJoinRequests,
+  useKickMember,
+  useLeaveGroup,
+  useMyMembership,
+  useRejectJoinRequest,
+} from "@/hooks/useGroups";
 
 const EASE_OUT: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
@@ -68,41 +91,161 @@ function placeholderAvatar(seed: string) {
   return `https://api.dicebear.com/7.x/identicon/svg?seed=${s}`;
 }
 
-function mapMember(m: ApiGroupMember, idx: number): Member {
-  const id = String(m.id ?? m.uid ?? m.userId ?? idx);
-  const name = String(m.username ?? m.displayName ?? m.name ?? `Member ${idx + 1}`);
-  const avatarUrl = String(m.avatarUrl ?? m.avatar_url ?? placeholderAvatar(id));
-  const time = String(m.time ?? m.studyTime ?? m.study_time ?? "--:--:--");
-  const online = Boolean(m.online);
-
-  return { id, name, avatarUrl, time, online };
+function initialsFromName(name: string) {
+  const cleaned = (name || "").trim().replace(/\s+/g, " ");
+  if (!cleaned) return "?";
+  const parts = cleaned.split(" ");
+  const a = parts[0]?.[0] || "";
+  const b = parts.length > 1 ? parts[parts.length - 1]?.[0] || "" : "";
+  return (a + b).toUpperCase() || "?";
 }
 
-function getHttpStatus(err: unknown): number | undefined {
-  return err instanceof ApiError ? err.status : (err as any)?.status;
+function roleBadge(role: string | null | undefined) {
+  const r = String(role || "");
+  if (r === "owner") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full border border-yellow-200 bg-yellow-50 px-2 py-1 text-[11px] font-semibold text-yellow-800">
+        <Crown className="h-3 w-3" /> owner
+      </span>
+    );
+  }
+  if (r === "admin") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2 py-1 text-[11px] font-semibold text-sky-700">
+        <Shield className="h-3 w-3" /> admin
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full border border-zinc-200 bg-zinc-50 px-2 py-1 text-[11px] font-semibold text-zinc-600">
+      member
+    </span>
+  );
+}
+
+function visibilityBadge(visibility: string) {
+  const v = visibility || "private";
+  const isPrivate = v === "private" || v === "invite_only";
+  return (
+    <span className="text-[11px] font-semibold rounded-full border border-zinc-200 bg-white px-2 py-1 text-zinc-600 inline-flex items-center gap-1">
+      {isPrivate ? <Lock className="h-3 w-3" /> : <Globe className="h-3 w-3" />}
+      {v}
+    </span>
+  );
+}
+
+function pickDisplayName(m: any, fallbackId: string) {
+  const dn =
+    m?.profile?.display_name ||
+    m?.display_name ||
+    m?.displayName ||
+    m?.username ||
+    m?.name ||
+    null;
+  const s = typeof dn === "string" ? dn.trim() : "";
+  return s ? s : `User #${fallbackId}`;
+}
+
+function pickAvatar(m: any, seed: string) {
+  return (
+    m?.profile?.avatar_url ||
+    m?.avatar_url ||
+    m?.avatarUrl ||
+    placeholderAvatar(seed)
+  );
 }
 
 export default function GroupDetails() {
   const { groupId } = useParams<{ groupId: string }>();
+  const gid = groupId || "";
+
   const navigate = useNavigate();
   const location = useLocation();
-
   const groupNameFromState = (location.state as { groupName?: string } | null)?.groupName;
 
   const [membersOpen, setMembersOpen] = useState(false);
   const [joinNotice, setJoinNotice] = useState<string | null>(null);
 
-  const gid = groupId || "";
-
-  // ✅ 1) membership check (always)
-  const membershipQ = useMyMembership(gid);
+  // 1) membership (always)
+  const membershipQ = useMyMembership(gid, Boolean(gid));
   const isMember = Boolean(membershipQ.data?.isMember);
+  const myRole = (membershipQ.data?.role ?? null) as "owner" | "admin" | "member" | null;
+  const canAdmin = myRole === "owner" || myRole === "admin";
 
-  // ✅ 2) fetch group details:
-  // - if member => definitely fetch
-  // - if not member => try fetch anyway (public ok, private may 403)
+  // 2) group details (try always)
   const detailsQ = useGroupDetails(gid, Boolean(gid));
-  const { data, isLoading, isError, error } = detailsQ;
+  const group = detailsQ.data?.group;
+
+  const title = group?.name ?? groupNameFromState ?? "Group";
+  const visibility = String(group?.visibility ?? "private");
+  const isPrivate = visibility === "private" || visibility === "invite_only";
+
+  const description =
+    (group?.description || "").trim() ||
+    (isPrivate
+      ? "This is a private group. Join to see full details."
+      : "A focused space to study together, keep streaks, and stay accountable.");
+
+  const minimumDailyMinutes = (group as any)?.minimum_dst_mins ?? null;
+  const weeklyXp = (group as any)?.weekly_xp ?? null;
+
+  // 3) members list (REAL endpoint) only if member OR public group
+  // بک‌اند گفته public => anyone, else => only members
+  const canSeeMembers = !isPrivate || isMember;
+  const membersQ = useGroupMembers(gid, canSeeMembers);
+
+  const membersRaw = membersQ.data?.items ?? [];
+  const membersCount = membersQ.data?.total ?? membersRaw.length ?? 0;
+
+  // join requests (admin panel)
+  const joinReqQ = useJoinRequests(gid, Boolean(gid) && canAdmin && isPrivate);
+  const joinReqItems = joinReqQ.data?.items ?? [];
+  const joinReqCount = joinReqQ.data?.total ?? joinReqItems.length ?? 0;
+
+  // mutations
+  const joinMut = useJoinGroup();
+  const leaveMut = useLeaveGroup();
+  const deleteMut = useDeleteGroup();
+  const approveMut = useApproveJoinRequest();
+  const rejectMut = useRejectJoinRequest();
+  const kickMut = useKickMember();
+  const roleMut = useChangeMemberRole();
+
+  const joining = joinMut.isPending;
+
+  const handleJoin = async () => {
+    setJoinNotice(null);
+    try {
+      const res = await joinMut.mutateAsync(gid);
+      setJoinNotice(res.status === "requested" ? "Join request sent. Wait for approval." : "Joined successfully!");
+    } catch (e: any) {
+      setJoinNotice(e?.message || "Failed to join this group.");
+    }
+  };
+
+  const handleLeave = async () => {
+    setJoinNotice(null);
+    try {
+      await leaveMut.mutateAsync(gid);
+      navigate("/groups");
+    } catch (e: any) {
+      setJoinNotice(e?.message || "Failed to leave group.");
+    }
+  };
+
+  const handleDelete = async () => {
+    setJoinNotice(null);
+    try {
+      await deleteMut.mutateAsync(gid);
+      navigate("/groups");
+    } catch (e: any) {
+      setJoinNotice(e?.message || "Failed to delete group.");
+    }
+  };
+
+  const goToChat = () => {
+    navigate(`/groups/${gid}/chat`, { state: { groupName: title } });
+  };
 
   useEffect(() => {
     if (!membersOpen) return;
@@ -113,55 +256,24 @@ export default function GroupDetails() {
     return () => window.removeEventListener("keydown", onKey);
   }, [membersOpen]);
 
-  const group = data?.group;
+  const members = useMemo(() => {
+    return membersRaw.map((m: any) => {
+      const uid = String(m?.uid ?? m?.userId ?? m?.id ?? "");
+      const display = pickDisplayName(m, uid || "0");
+      const avatar = pickAvatar(m, uid || display);
+      const role = String(m?.role ?? "member");
+      const joinedAt = String(m?.joined_at ?? m?.joinedAt ?? "");
+      const online = Boolean(m?.online);
 
-  const title = group?.name ?? groupNameFromState ?? "Group";
+      return { uid, display, avatar, role, joinedAt, online };
+    });
+  }, [membersRaw]);
 
-  const visibility = group?.visibility ?? "private";
-  const isPrivate = visibility === "private";
-
-  const description =
-    group?.description ??
-    (isPrivate
-      ? "This is a private group. Join to see full details."
-      : "A focused space to study together, keep streaks, and stay accountable.");
-
-  // member-only computed
-  const members = useMemo(() => (data?.members ?? []).map(mapMember), [data?.members]);
   const previewMembers = useMemo(() => members.slice(0, 4), [members]);
 
-  const minimumDailyMinutes = group?.minimum_dst_mins ?? null;
-  const weeklyXp = group?.weekly_xp ?? null;
-
-  const joinMutation = useJoinGroup();
-  const joining = joinMutation.isPending;
-
-  const handleJoin = async () => {
-    setJoinNotice(null);
-    try {
-      const res = await joinMutation.mutateAsync(gid);
-      if (res.status === "requested") {
-        setJoinNotice("Join request sent. Wait for approval.");
-      } else {
-        setJoinNotice("Joined successfully!");
-      }
-    } catch (e) {
-      const st = getHttpStatus(e);
-      if (st === 401) setJoinNotice("Please login again.");
-      else setJoinNotice("Failed to join this group.");
-    }
-  };
-
-  const goToChat = () => {
-    const name = group?.name ?? groupNameFromState ?? "Group";
-    navigate(`/groups/${gid}/chat`, { state: { groupName: name } });
-  };
+  const loadingTop = membershipQ.isLoading || detailsQ.isLoading;
 
   const showMemberUi = isMember;
-
-  // If details failed with 403/404 for non-members, preview still works
-  const detailsStatus = isError ? getHttpStatus(error) : undefined;
-  const detailsBlocked = !showMemberUi && (detailsStatus === 403 || detailsStatus === 404);
 
   return (
     <div className="min-h-screen bg-creamtext text-zinc-900">
@@ -169,7 +281,10 @@ export default function GroupDetails() {
         <Sidebar activeKey="groups" onLogout={logout} />
 
         <div className="flex-1 min-w-0 md:ml-64">
+          <Topbar username="User" />
+
           <div className="mx-auto max-w-6xl px-4 py-6">
+            {/* Header */}
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -195,42 +310,82 @@ export default function GroupDetails() {
                   <span className="relative">Back</span>
                 </button>
 
-                {showMemberUi ? (
-                  <button
-                    type="button"
-                    onClick={goToChat}
-                    className="
-                      group relative overflow-hidden
-                      rounded-xl border border-zinc-200 bg-white
-                      px-3 py-2 text-xs font-semibold text-zinc-700
-                      shadow-sm transition-all duration-300
-                      hover:-translate-y-0.5 hover:shadow-md
-                      hover:border-yellow-300 hover:text-zinc-900
-                      flex items-center gap-2 w-fit
-                    "
-                  >
-                    <span className="pointer-events-none absolute inset-0 translate-x-[-120%] group-hover:translate-x-[120%] transition-transform duration-700 ease-in-out bg-[linear-gradient(90deg,transparent,rgba(250,204,21,0.18),transparent)]" />
-                    <MessageCircle className="h-4 w-4 relative" />
-                    <span className="relative">Open Group Chat</span>
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handleJoin}
-                    disabled={joining || membershipQ.isLoading}
-                    className="
-                      rounded-xl border border-zinc-200 bg-white
-                      px-4 py-2 text-xs font-semibold text-zinc-800
-                      shadow-sm transition
-                      hover:-translate-y-0.5 hover:shadow-md hover:border-yellow-300
-                      disabled:opacity-60 disabled:cursor-not-allowed
-                      inline-flex items-center gap-2
-                    "
-                  >
-                    {isPrivate ? <Lock className="h-4 w-4" /> : <Globe className="h-4 w-4" />}
-                    {joining ? "Joining..." : isPrivate ? "Request to Join" : "Join Group"}
-                  </button>
-                )}
+                <div className="flex items-center gap-2">
+                  {showMemberUi ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={goToChat}
+                        className="
+                          group relative overflow-hidden
+                          rounded-xl border border-zinc-200 bg-white
+                          px-3 py-2 text-xs font-semibold text-zinc-700
+                          shadow-sm transition-all duration-300
+                          hover:-translate-y-0.5 hover:shadow-md
+                          hover:border-yellow-300 hover:text-zinc-900
+                          flex items-center gap-2 w-fit
+                        "
+                      >
+                        <span className="pointer-events-none absolute inset-0 translate-x-[-120%] group-hover:translate-x-[120%] transition-transform duration-700 ease-in-out bg-[linear-gradient(90deg,transparent,rgba(250,204,21,0.18),transparent)]" />
+                        <MessageCircle className="h-4 w-4 relative" />
+                        <span className="relative">Open Group Chat</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleLeave}
+                        disabled={leaveMut.isPending}
+                        className="
+                          rounded-xl border border-zinc-200 bg-white
+                          px-3 py-2 text-xs font-semibold text-zinc-700
+                          shadow-sm transition
+                          hover:-translate-y-0.5 hover:shadow-md hover:border-yellow-300
+                          disabled:opacity-60 disabled:cursor-not-allowed
+                          inline-flex items-center gap-2
+                        "
+                      >
+                        <LogOut className="h-4 w-4" />
+                        {leaveMut.isPending ? "Leaving..." : "Leave"}
+                      </button>
+
+                      {myRole === "owner" ? (
+                        <button
+                          type="button"
+                          onClick={handleDelete}
+                          disabled={deleteMut.isPending}
+                          className="
+                            rounded-xl border border-rose-200 bg-rose-50
+                            px-3 py-2 text-xs font-semibold text-rose-700
+                            shadow-sm transition
+                            hover:-translate-y-0.5 hover:shadow-md hover:border-rose-300
+                            disabled:opacity-60 disabled:cursor-not-allowed
+                            inline-flex items-center gap-2
+                          "
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          {deleteMut.isPending ? "Deleting..." : "Delete"}
+                        </button>
+                      ) : null}
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleJoin}
+                      disabled={joining || membershipQ.isLoading}
+                      className="
+                        rounded-xl border border-zinc-200 bg-white
+                        px-4 py-2 text-xs font-semibold text-zinc-800
+                        shadow-sm transition
+                        hover:-translate-y-0.5 hover:shadow-md hover:border-yellow-300
+                        disabled:opacity-60 disabled:cursor-not-allowed
+                        inline-flex items-center gap-2
+                      "
+                    >
+                      {isPrivate ? <Lock className="h-4 w-4" /> : <Globe className="h-4 w-4" />}
+                      {joining ? "Joining..." : isPrivate ? "Request to Join" : "Join Group"}
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div className="mt-4">
@@ -242,22 +397,13 @@ export default function GroupDetails() {
                   <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-zinc-900">
                     {title}
                   </h1>
-                  <span className="text-[11px] font-semibold rounded-full border border-zinc-200 bg-white px-2 py-1 text-zinc-600">
-                    {visibility}
-                  </span>
+                  {visibilityBadge(visibility)}
+                  {showMemberUi ? roleBadge(myRole) : null}
                 </div>
 
                 <p className="mt-1 text-sm text-zinc-600 max-w-2xl">{description}</p>
 
-                {(isLoading || membershipQ.isLoading) && (
-                  <p className="mt-3 text-sm text-zinc-500">Loading…</p>
-                )}
-
-                {!showMemberUi && detailsBlocked && (
-                  <p className="mt-3 text-sm text-zinc-500">
-                    Private group preview. Join to see members and full details.
-                  </p>
-                )}
+                {loadingTop && <p className="mt-3 text-sm text-zinc-500">Loading…</p>}
 
                 {joinNotice && (
                   <div className="mt-4 rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700">
@@ -267,7 +413,7 @@ export default function GroupDetails() {
               </div>
             </motion.div>
 
-            {/* --------- Preview UI (non-member) --------- */}
+            {/* Preview (non-member) */}
             {!showMemberUi ? (
               <motion.div
                 initial={{ opacity: 0, y: 10, scale: 0.99 }}
@@ -284,9 +430,9 @@ export default function GroupDetails() {
                       <MiniSectionTitle
                         title="Group preview"
                         subtitle={
-                          isPrivate
-                            ? "Private groups hide member list until you join."
-                            : "Public group — you can join instantly."
+                          discriminant(visibility) === "private"
+                          ? "Private groups hide member list until you join."
+                          : "Public group — you can join instantly."
                         }
                         right="Preview"
                       />
@@ -309,7 +455,7 @@ export default function GroupDetails() {
                       <div className="mt-5 rounded-2xl border border-zinc-200 bg-gradient-to-br from-yellow-50/70 to-white p-4">
                         <p className="text-xs font-semibold text-zinc-900">Join to access</p>
                         <p className="mt-1 text-[11px] text-zinc-500">
-                          Members list, chat, and group progress.
+                          Members list, chat, admin actions (if applicable), and group progress.
                         </p>
 
                         <button
@@ -343,11 +489,15 @@ export default function GroupDetails() {
                     </div>
 
                     <div className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
-                      <MiniSectionTitle title="Members" subtitle="Hidden until you join" right="Locked" />
+                      <MiniSectionTitle title="Members" subtitle={isPrivate ? "Hidden until you join" : "Visible"} right={isPrivate ? "Locked" : "Public"} />
                       <div className="mt-4 rounded-3xl border border-zinc-200 bg-[#FFFBF2] p-5">
-                        <p className="text-sm text-zinc-600">
-                          Join the group to view members.
-                        </p>
+                        {isPrivate ? (
+                          <p className="text-sm text-zinc-600">Join the group to view members.</p>
+                        ) : (
+                          <p className="text-sm text-zinc-600">
+                            {membersQ.isLoading ? "Loading…" : `${membersCount} members available.`}
+                          </p>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -355,7 +505,7 @@ export default function GroupDetails() {
               </motion.div>
             ) : (
               <>
-                {/* --------- Member UI (existing details) --------- */}
+                {/* Member UI */}
                 <div className="mt-5 max-w-md">
                   <div className="rounded-3xl border border-zinc-200 bg-white/60 backdrop-blur p-1 shadow-sm">
                     <LookAtBuddy label="Your study buddy" />
@@ -372,13 +522,14 @@ export default function GroupDetails() {
                   <div className="pointer-events-none absolute -bottom-24 -left-20 h-64 w-64 rounded-full bg-yellow-100/50 blur-3xl" />
 
                   <div className="relative grid grid-cols-12 gap-6">
+                    {/* Overview */}
                     <div className="col-span-12 lg:col-span-7">
                       <div className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
                         <MiniSectionTitle title="Overview" subtitle="Quick snapshot of your group." right="Live" />
 
                         <div className="mt-4 grid grid-cols-2 gap-4">
                           <StatCard label="Weekly XP goal" value={weeklyXp ?? 0} suffix="xp" valueClassName="text-sky-600" />
-                          <StatCard label="Members" value={members.length} suffix="people" valueClassName="text-amber-600" />
+                          <StatCard label="Members" value={membersCount} suffix="people" valueClassName="text-amber-600" />
                         </div>
 
                         <div className="mt-5 rounded-2xl border border-zinc-200 bg-gradient-to-br from-yellow-50/70 to-white p-4">
@@ -401,16 +552,122 @@ export default function GroupDetails() {
                           </div>
                         </div>
                       </div>
+
+                      {/* Admin Panel */}
+                      {canAdmin ? (
+                        <div className="mt-6 rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
+                          <MiniSectionTitle
+                            title="Admin panel"
+                            subtitle="Manage requests and members."
+                            right={
+                              <span className="inline-flex items-center gap-2">
+                                <Shield className="h-4 w-4" />
+                                Admin
+                              </span>
+                            }
+                          />
+
+                          {/* Join Requests */}
+                          <div className="mt-4 rounded-3xl border border-zinc-200 bg-[#FFFBF2] p-5">
+                            <div className="flex items-center justify-between">
+                              <p className="text-sm font-semibold text-zinc-900">
+                                Join requests
+                              </p>
+                              <span className="text-xs text-zinc-500">
+                                {joinReqQ.isLoading ? "Loading…" : `${joinReqCount}`}
+                              </span>
+                            </div>
+
+                            {isPrivate ? (
+                              <div className="mt-4 space-y-2">
+                                {joinReqItems.length ? (
+                                  joinReqItems.map((r: any) => {
+                                    const uid = String(r?.uid ?? "");
+                                    const createdAt = String(r?.created_at ?? "");
+                                    return (
+                                      <div
+                                        key={`${uid}-${createdAt}`}
+                                        className="flex items-center justify-between gap-3 rounded-2xl border border-zinc-200 bg-white px-3 py-2"
+                                      >
+                                        <div className="min-w-0">
+                                          <p className="text-sm font-semibold text-zinc-900">
+                                            User #{uid}
+                                          </p>
+                                          <p className="text-[11px] text-zinc-500 truncate">
+                                            {createdAt ? `requested at: ${createdAt}` : "pending"}
+                                          </p>
+                                        </div>
+
+                                        <div className="flex items-center gap-2">
+                                          <button
+                                            onClick={() => approveMut.mutate({ groupId: gid, userId: uid })}
+                                            disabled={approveMut.isPending}
+                                            className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold hover:border-yellow-300 transition inline-flex items-center gap-2"
+                                          >
+                                            <Check className="h-4 w-4" />
+                                            Approve
+                                          </button>
+                                          <button
+                                            onClick={() => rejectMut.mutate({ groupId: gid, userId: uid })}
+                                            disabled={rejectMut.isPending}
+                                            className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 hover:border-rose-300 transition inline-flex items-center gap-2"
+                                          >
+                                            <X className="h-4 w-4" />
+                                            Reject
+                                          </button>
+                                        </div>
+                                      </div>
+                                    );
+                                  })
+                                ) : (
+                                  <p className="text-sm text-zinc-600">No pending requests.</p>
+                                )}
+                              </div>
+                            ) : (
+                              <p className="mt-3 text-sm text-zinc-600">
+                                This group is public. No join requests.
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
 
+                    {/* Right column: members + chat */}
                     <div className="col-span-12 lg:col-span-5 space-y-6">
+                      {/* Members */}
                       <div className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
-                        <MiniSectionTitle title="Members" subtitle={`${members.length} members`} right="Online" />
+                        <MiniSectionTitle
+                          title="Members"
+                          subtitle={`${membersCount} members`}
+                          right={
+                            <span className="inline-flex items-center gap-2">
+                              <Users className="h-4 w-4" />
+                              List
+                            </span>
+                          }
+                        />
 
                         <div className="mt-4 rounded-3xl border border-zinc-200 bg-[#FFFBF2] p-5">
                           <div className="grid grid-cols-2 gap-x-4 gap-y-8">
                             {previewMembers.map((m) => (
-                              <MemberCard key={m.id} m={m} />
+                              <div key={m.uid} className="flex items-center gap-3">
+                                <div className="h-10 w-10 rounded-2xl overflow-hidden border border-zinc-200 bg-white grid place-items-center">
+                                  {m.avatar ? (
+                                    <img src={m.avatar} alt={m.display} className="h-full w-full object-cover" />
+                                  ) : (
+                                    <span className="text-xs font-bold text-zinc-600">
+                                      {initialsFromName(m.display)}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="truncate text-sm font-semibold text-zinc-900">
+                                    {m.display}
+                                  </p>
+                                  <div className="mt-1">{roleBadge(m.role)}</div>
+                                </div>
+                              </div>
                             ))}
                           </div>
 
@@ -428,8 +685,13 @@ export default function GroupDetails() {
                         </div>
                       </div>
 
+                      {/* Chat */}
                       <div className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
-                        <MiniSectionTitle title="Group Chat" subtitle="Discuss goals, share progress, stay accountable." right="Chat" />
+                        <MiniSectionTitle
+                          title="Group Chat"
+                          subtitle="Discuss goals, share progress, stay accountable."
+                          right="Chat"
+                        />
 
                         <button
                           type="button"
@@ -452,6 +714,7 @@ export default function GroupDetails() {
                   </div>
                 </motion.div>
 
+                {/* Members Modal */}
                 <AnimatePresence>
                   {membersOpen && (
                     <motion.div
@@ -475,8 +738,8 @@ export default function GroupDetails() {
                         transition={{ duration: 0.25, ease: EASE_OUT }}
                         className="
                           absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2
-                          w-[min(920px,calc(100vw-24px))]
-                          max-h-[min(80vh,720px)]
+                          w-[min(980px,calc(100vw-24px))]
+                          max-h-[min(80vh,740px)]
                           overflow-hidden
                           rounded-3xl border border-zinc-200 bg-white
                           shadow-2xl
@@ -491,7 +754,7 @@ export default function GroupDetails() {
                             <div>
                               <p className="text-sm text-zinc-500">Members</p>
                               <p className="mt-1 text-xl font-semibold text-zinc-900">
-                                {title} — {members.length} members
+                                {title} — {membersCount} members
                               </p>
                               <p className="mt-1 text-xs text-zinc-500">
                                 Press <span className="font-semibold">Esc</span> to close
@@ -514,10 +777,97 @@ export default function GroupDetails() {
 
                         <div className="p-6 overflow-auto">
                           <div className="rounded-3xl border border-zinc-200 bg-[#FFFBF2] p-6">
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-y-10 gap-x-6">
-                              {members.map((m) => (
-                                <MemberCard key={m.id} m={m} />
-                              ))}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                              {members.map((m) => {
+                                const isMe = membershipQ.data?.uid != null && String(m.uid) === String(membershipQ.data.uid);
+                                const canKick =
+                                  canAdmin &&
+                                  m.role !== "owner" &&
+                                  !(myRole === "admin" && m.role === "admin") &&
+                                  !isMe;
+
+                                const canChangeRole =
+                                  myRole === "owner" && m.role !== "owner" && !isMe;
+
+                                return (
+                                  <div
+                                    key={m.uid}
+                                    className="rounded-3xl border border-zinc-200 bg-white p-4"
+                                  >
+                                    <div className="flex items-center gap-3">
+                                      <div className="h-12 w-12 rounded-2xl overflow-hidden border border-zinc-200 bg-white grid place-items-center">
+                                        {m.avatar ? (
+                                          <img src={m.avatar} alt={m.display} className="h-full w-full object-cover" />
+                                        ) : (
+                                          <span className="text-xs font-bold text-zinc-600">
+                                            {initialsFromName(m.display)}
+                                          </span>
+                                        )}
+                                      </div>
+
+                                      <div className="min-w-0 flex-1">
+                                        <p className="truncate text-sm font-semibold text-zinc-900">
+                                          {m.display}{" "}
+                                          {isMe ? (
+                                            <span className="text-[11px] font-semibold text-yellow-700">(You)</span>
+                                          ) : null}
+                                        </p>
+                                        <div className="mt-1 flex items-center gap-2">
+                                          {roleBadge(m.role)}
+                                          <span
+                                            className={`text-[11px] font-semibold ${
+                                              m.online ? "text-emerald-600" : "text-zinc-400"
+                                            }`}
+                                          >
+                                            {m.online ? "online" : "offline"}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    {(canKick || canChangeRole) ? (
+                                      <div className="mt-4 flex flex-wrap gap-2">
+                                        {canChangeRole ? (
+                                          <>
+                                            <button
+                                              onClick={() =>
+                                                roleMut.mutate({ groupId: gid, userId: m.uid, role: "admin" })
+                                              }
+                                              disabled={roleMut.isPending}
+                                              className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold hover:border-yellow-300 transition inline-flex items-center gap-2"
+                                            >
+                                              <UserCog className="h-4 w-4" />
+                                              Make admin
+                                            </button>
+
+                                            <button
+                                              onClick={() =>
+                                                roleMut.mutate({ groupId: gid, userId: m.uid, role: "member" })
+                                              }
+                                              disabled={roleMut.isPending}
+                                              className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold hover:border-yellow-300 transition inline-flex items-center gap-2"
+                                            >
+                                              <UserCog className="h-4 w-4" />
+                                              Make member
+                                            </button>
+                                          </>
+                                        ) : null}
+
+                                        {canKick ? (
+                                          <button
+                                            onClick={() => kickMut.mutate({ groupId: gid, userId: m.uid })}
+                                            disabled={kickMut.isPending}
+                                            className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 hover:border-rose-300 transition inline-flex items-center gap-2"
+                                          >
+                                            <UserMinus className="h-4 w-4" />
+                                            Kick
+                                          </button>
+                                        ) : null}
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                );
+                              })}
                             </div>
                           </div>
                         </div>
@@ -534,4 +884,9 @@ export default function GroupDetails() {
       </div>
     </div>
   );
+}
+
+// helper: keeps TS happy, but also keeps logic readable
+function discriminant(v: string) {
+  return v || "private";
 }

@@ -1,90 +1,129 @@
 // src/hooks/useJoinRequestNotifications.ts
-import { useMemo } from "react";
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useMyGroups } from "@/hooks/useGroups";
+import { groupsApi, type JoinRequestsResponse } from "@/api/groups";
 
-import { groupsApi } from "@/api/groups";
-import type { ApiGroup, ApiJoinRequest } from "@/api/types";
+type LatestJoinRequest = {
+  groupId: string;
+  groupName: string;
+  uid: number;
+  createdAt: string;
+};
 
-export function useJoinRequestNotifications() {
-  const myGroupsQ = useQuery({
-    queryKey: ["groups", "me"],
-    queryFn: () => groupsApi.listMine(),
-    retry: false,
-  });
+function safeArray<T>(x: any): T[] {
+  return Array.isArray(x) ? (x as T[]) : [];
+}
 
-  const groups: ApiGroup[] = myGroupsQ.data ?? [];
+export function useJoinRequestNotifications(pollMs = 15_000) {
+  const myGroupsQ = useMyGroups();
 
-  const membershipQueries = useQueries({
-    queries: groups.map((g) => ({
-      queryKey: ["groups", "membership", g.id],
-      queryFn: () => groupsApi.getMyMembership(g.id),
-      enabled: !!g?.id,
-      retry: false,
-    })),
-  });
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const adminGroups = useMemo(() => {
-    const out: Array<{ id: string; name: string; role: string }> = [];
-    for (let i = 0; i < groups.length; i++) {
-      const g = groups[i];
-      const mq = membershipQueries[i];
-      const role = (mq.data as any)?.role as string | undefined;
-      if (role === "owner" || role === "admin") out.push({ id: g.id, name: g.name, role });
-    }
-    return out;
-  }, [groups, membershipQueries]);
+  const [count, setCount] = useState<number>(0);
+  const [latest, setLatest] = useState<LatestJoinRequest | null>(null);
 
-  const requestsQueries = useQueries({
-    queries: adminGroups.map((g) => ({
-      queryKey: ["groups", "join-requests", g.id],
-      queryFn: () => groupsApi.listJoinRequests(g.id),
-      enabled: !!g?.id,
-      retry: false,
-      refetchInterval: 15000,
-      refetchIntervalInBackground: true,
-    })),
-  });
+  const timerRef = useRef<number | null>(null);
+  const stoppedRef = useRef<boolean>(false);
 
-  const pending = useMemo(() => {
-    const items: Array<{
-      groupId: string;
-      groupName: string;
-      uid: string | number;
-      created_at: string;
-    }> = [];
+  const adminGroupIds = useMemo(() => {
+    const groups = safeArray<any>(myGroupsQ.data);
+    // We don't know exact shape; tolerate common ones:
+    // - group.role / membershipRole
+    // - group.my_role
+    // - group.is_admin
+    return groups
+      .filter((g) => {
+        const role = g?.role ?? g?.my_role ?? g?.membershipRole ?? null;
+        const isAdminish =
+          role === "owner" || role === "admin" || g?.is_admin === true || g?.is_owner === true;
+        const visibility = g?.visibility ?? "public";
+        return isAdminish && (visibility === "private" || visibility === "invite_only");
+      })
+      .map((g) => ({
+        id: String(g.id ?? g.groupId ?? ""),
+        name: String(g.name ?? g.title ?? "Group"),
+      }))
+      .filter((g) => Boolean(g.id));
+  }, [myGroupsQ.data]);
 
-    for (let i = 0; i < adminGroups.length; i++) {
-      const g = adminGroups[i];
-      const rq = requestsQueries[i];
+  useEffect(() => {
+    stoppedRef.current = false;
 
-      const rows: ApiJoinRequest[] = rq.data ?? [];
+    async function tick() {
+      if (stoppedRef.current) return;
 
-      for (const r of rows) {
-        items.push({
-          groupId: g.id,
-          groupName: g.name,
-          uid: r.uid,
-          created_at: r.created_at,
-        });
+      if (myGroupsQ.isLoading) {
+        setLoading(true);
+        return;
+      }
+      if (myGroupsQ.isError) {
+        setLoading(false);
+        setError("Failed to load groups");
+        return;
+      }
+
+      try {
+        setLoading(true);
+        setError(null);
+
+        let total = 0;
+        let best: LatestJoinRequest | null = null;
+
+        // Fetch requests for each admin private group
+        for (const g of adminGroupIds) {
+          let res: JoinRequestsResponse | null = null;
+          try {
+            res = await groupsApi.listJoinRequests(g.id);
+          } catch {
+            // Not admin/owner or endpoint fails -> ignore this group for notifications
+            continue;
+          }
+
+          const items = safeArray<any>(res?.items);
+          total += items.length;
+
+          // pick latest by created_at
+          for (const it of items) {
+            const createdAt = String(it?.created_at ?? it?.createdAt ?? "");
+            const uid = Number(it?.uid);
+            if (!createdAt || !Number.isFinite(uid)) continue;
+
+            if (!best) {
+              best = { groupId: g.id, groupName: g.name, uid, createdAt };
+              continue;
+            }
+
+            const a = new Date(best.createdAt).getTime();
+            const b = new Date(createdAt).getTime();
+            if (Number.isFinite(b) && (Number.isNaN(a) || b > a)) {
+              best = { groupId: g.id, groupName: g.name, uid, createdAt };
+            }
+          }
+        }
+
+        setCount(total);
+        setLatest(best);
+      } catch (e: any) {
+        setError(e?.message || "Failed to fetch join requests");
+      } finally {
+        setLoading(false);
       }
     }
 
-    items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-    return items;
-  }, [adminGroups, requestsQueries]);
+    // immediate tick
+    tick();
 
-  const count = pending.length;
-  const latest = pending[0] ?? null;
+    // poll
+    if (timerRef.current) window.clearInterval(timerRef.current);
+    timerRef.current = window.setInterval(tick, pollMs);
 
-  const loading =
-    myGroupsQ.isLoading ||
-    membershipQueries.some((q) => q.isLoading) ||
-    requestsQueries.some((q) => q.isLoading);
+    return () => {
+      stoppedRef.current = true;
+      if (timerRef.current) window.clearInterval(timerRef.current);
+      timerRef.current = null;
+    };
+  }, [pollMs, myGroupsQ.isLoading, myGroupsQ.isError, adminGroupIds.map((x) => x.id).join("|")]);
 
-  const error =
-    myGroupsQ.isError ||
-    membershipQueries.some((q) => q.isError) ||
-    requestsQueries.some((q) => q.isError);
-
-  return { count, latest, pending, loading, error };
+  return { loading, error, count, latest, adminGroupIds };
 }

@@ -1,8 +1,7 @@
+// src/pages/GroupChat.tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-
 import EmojiPicker, { EmojiClickData, Theme } from "emoji-picker-react";
-
 import {
   ArrowLeft,
   Send,
@@ -12,16 +11,22 @@ import {
   Video,
   MoreVertical,
   Paperclip,
+  Lock,
+  Globe,
 } from "lucide-react";
-import { useNavigate, useParams, useLocation } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 
 import Sidebar from "@/components/Dashboard/SidebarIcon";
 import Topbar from "@/components/Dashboard/DashboardHeader";
 import { logout } from "@/utils/authToken";
 
 import { useGroupChatSocket, type ChatMessage } from "@/hooks/useGroupChatSocket";
-import { useGroupDetails } from "@/hooks/useGroupDetails";
-import { useMyMembership } from "@/hooks/useMyMembership";
+import {
+  useGroupDetails,
+  useGroupMembers,
+  useJoinGroup,
+  useMyMembership,
+} from "@/hooks/useGroups";
 
 const EASE_OUT: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
@@ -31,39 +36,12 @@ type UiMessage = {
   time: string;
   mine: boolean;
   senderAvatar?: string | null;
+  senderLabel?: string | null;
 };
 
 function formatTime(iso: string) {
   const d = new Date(iso);
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
-
-function pickMemberUid(m: any): string | number | null {
-  return (m?.uid ?? m?.userId ?? m?.user_id ?? m?.id ?? null) as any;
-}
-
-function pickMemberName(m: any): string | null {
-  const v = (m?.displayName || m?.name || m?.username || null) as any;
-  return typeof v === "string" && v.trim() ? v.trim() : null;
-}
-
-function pickMemberUsername(m: any): string | null {
-  const u = (m?.username || m?.handle || m?.user_name || null) as any;
-  return typeof u === "string" && u.trim() ? u.trim() : null;
-}
-
-function pickMemberAvatar(m: any): string | null {
-  return (m?.avatarUrl || m?.avatar_url || null) as any;
-}
-
-function initialsFromName(name: string) {
-  const cleaned = name.trim().replace(/\s+/g, " ");
-  if (!cleaned) return "?";
-  const parts = cleaned.split(" ");
-  const a = parts[0]?.[0] || "";
-  const b = parts.length > 1 ? parts[parts.length - 1]?.[0] || "" : "";
-  const ini = (a + b).toUpperCase();
-  return ini || "?";
 }
 
 function toNum(x: any): number | null {
@@ -74,47 +52,114 @@ function toNum(x: any): number | null {
 function isMineMessage(senderUid: any, myUid: any): boolean {
   if (senderUid == null || myUid == null) return false;
   if (String(senderUid) === String(myUid)) return true;
-
   const a = toNum(senderUid);
   const b = toNum(myUid);
-  if (a != null && b != null && a === b) return true;
+  return a != null && b != null && a === b;
+}
 
-  return false;
+function pickMemberUid(m: any): string | number | null {
+  return (m?.uid ?? m?.userId ?? m?.user_id ?? m?.id ?? null) as any;
+}
+
+function pickMemberName(m: any): string | null {
+  const v =
+    m?.profile?.display_name ||
+    m?.display_name ||
+    m?.displayName ||
+    m?.name ||
+    m?.username ||
+    null;
+  return typeof v === "string" && v.trim() ? v.trim() : null;
+}
+
+function pickMemberUsername(m: any): string | null {
+  const u =
+    m?.profile?.username ||
+    m?.username ||
+    m?.handle ||
+    m?.user_name ||
+    null;
+  return typeof u === "string" && u.trim() ? u.trim() : null;
+}
+
+function pickMemberAvatar(m: any): string | null {
+  return (
+    m?.profile?.avatar_url ||
+    m?.profile?.avatarUrl ||
+    m?.avatarUrl ||
+    m?.avatar_url ||
+    null
+  );
+}
+
+function initialsFromName(name: string) {
+  const cleaned = name.trim().replace(/\s+/g, " ");
+  if (!cleaned) return "?";
+  const parts = cleaned.split(" ");
+  const a = parts[0]?.[0] || "";
+  const b = parts.length > 1 ? parts[parts.length - 1]?.[0] || "" : "";
+  return (a + b).toUpperCase() || "?";
+}
+
+function fallbackAvatar(seed: string) {
+  return `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(seed || "u")}`;
 }
 
 export default function GroupChat() {
   const { groupId } = useParams<{ groupId: string }>();
+  const gid = groupId || "";
   const location = useLocation();
   const navigate = useNavigate();
 
-  const groupName =
+  const groupNameFromState =
     (location.state as { groupName?: string } | null)?.groupName ?? "Group Chat";
 
-  // ✅ uid خودم از group-service
-  const membershipQ = useMyMembership(groupId);
+  // ✅ membership (برای myUid و isMember)
+  const membershipQ = useMyMembership(gid, Boolean(gid));
   const myUid = membershipQ.data?.uid ?? null;
+  const isMember = Boolean(membershipQ.data?.isMember);
 
-  // group details (members)
-  const detailsQ = useGroupDetails(groupId);
+  // ✅ group (فقط اطلاعات گروه، نه members)
+  const detailsQ = useGroupDetails(gid, Boolean(gid));
   const group = detailsQ.data?.group;
-  const members = detailsQ.data?.members || [];
-  const memberCount = members.length;
 
-  // map uid -> avatar
-  const memberAvatarMap = useMemo(() => {
-    const map = new Map<string, string | null>();
-    for (const m of members) {
+  const visibility = String(group?.visibility ?? "private");
+  const isPrivate = visibility === "private" || visibility === "invite_only";
+
+  // ✅ members واقعی از /groups/:id/members
+  // - public: همه می‌تونن ببینن
+  // - private/invite_only: فقط member ها
+  const canSeeMembers = Boolean(gid) && (!isPrivate || isMember);
+  const membersQ = useGroupMembers(gid, canSeeMembers);
+
+  const rawMembers = membersQ.data?.items ?? [];
+  const memberCount = membersQ.data?.total ?? rawMembers.length;
+
+  const joinMut = useJoinGroup();
+
+  // ✅ map uid -> avatar/name (از members endpoint)
+  const memberMetaMap = useMemo(() => {
+    const map = new Map<string, { avatar: string | null; label: string | null; online: boolean }>();
+    for (const m of rawMembers) {
       const uid = pickMemberUid(m);
       if (uid == null) continue;
-      map.set(String(uid), pickMemberAvatar(m));
+
+      const name = pickMemberName(m);
+      const username = pickMemberUsername(m);
+      const label = name || (username ? `@${username.replace(/^@/, "")}` : null);
+
+      const avatar = pickMemberAvatar(m) || fallbackAvatar(String(uid));
+      const online = Boolean(m?.online);
+
+      map.set(String(uid), { avatar, label, online });
     }
     return map;
-  }, [members]);
+  }, [rawMembers]);
 
-  // socket chat
+  // ✅ socket chat
   const { messages: serverMessages, connected, joined, lastError, send } =
     useGroupChatSocket({
-      groupId,
+      groupId: gid,
       limit: 50,
     });
 
@@ -146,52 +191,61 @@ export default function GroupChat() {
     return (serverMessages || []).map((m: ChatMessage) => {
       const senderUid = m.sender_uid;
       const mine = isMineMessage(senderUid, myUid);
-      const senderAvatar = memberAvatarMap.get(String(senderUid)) ?? null;
+
+      const meta = memberMetaMap.get(String(senderUid));
+      const avatar = meta?.avatar ?? fallbackAvatar(String(senderUid));
+      const label = meta?.label ?? (senderUid != null ? `User #${String(senderUid)}` : null);
 
       return {
         id: String(m.id),
         text: m.text,
         time: formatTime(m.created_at),
         mine,
-        senderAvatar,
+        senderAvatar: avatar,
+        senderLabel: label,
       };
     });
-  }, [serverMessages, myUid, memberAvatarMap]);
+  }, [serverMessages, myUid, memberMetaMap]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [uiMessages.length]);
 
   const sendMessage = () => {
-    if (!input.trim() || !groupId) return;
+    if (!input.trim() || !gid) return;
     send(input.trim());
     setInput("");
   };
 
-  // ✅ Members UI data (professional)
   const memberCards = useMemo(() => {
-    return members.map((m, idx) => {
+    return rawMembers.map((m: any, idx: number) => {
       const uid = pickMemberUid(m);
+
       const name = pickMemberName(m);
       const username = pickMemberUsername(m);
-      const avatar = pickMemberAvatar(m);
+      const avatar = pickMemberAvatar(m) || (uid != null ? fallbackAvatar(String(uid)) : null);
+
       const online = Boolean(m?.online);
 
       const display =
-        name || username || (uid != null ? `User #${String(uid)}` : `Member ${idx + 1}`);
+        name ||
+        (username ? `@${username.replace(/^@/, "")}` : null) ||
+        (uid != null ? `User #${String(uid)}` : `Member ${idx + 1}`);
 
       const subtitle =
         username && name
           ? `@${username.replace(/^@/, "")}`
           : uid != null
-            ? `ID: ${String(uid)}`
-            : "";
+          ? `ID: ${String(uid)}`
+          : "";
 
       const isMe = uid != null && myUid != null && isMineMessage(uid, myUid);
 
       return { uid, display, subtitle, avatar, online, isMe };
     });
-  }, [members, myUid]);
+  }, [rawMembers, myUid]);
+
+  const canType = Boolean(isMember && joined);
 
   return (
     <div className="h-screen overflow-hidden bg-creamtext text-zinc-900">
@@ -220,7 +274,7 @@ export default function GroupChat() {
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex items-center gap-3 min-w-0">
                         <button
-                          onClick={() => navigate("/notifications")}
+                          onClick={() => navigate(`/groups/${gid}`, { state: { groupName: group?.name ?? groupNameFromState } })}
                           className="
                             rounded-xl border border-zinc-200 bg-white
                             p-2 text-zinc-600
@@ -233,14 +287,13 @@ export default function GroupChat() {
 
                         <div className="min-w-0">
                           <p className="truncate text-sm font-semibold text-zinc-900">
-                            {groupName}
+                            {group?.name ?? groupNameFromState}
                           </p>
 
-                          {/* فقط تعداد اعضا */}
                           <div className="flex items-center gap-2 text-xs text-zinc-500">
                             <Users className="h-4 w-4" />
                             <span>
-                              {detailsQ.isLoading ? "Loading members..." : `${memberCount} members`}
+                              {membersQ.isLoading ? "Loading members..." : `${memberCount} members`}
                             </span>
 
                             <span className="text-zinc-300">•</span>
@@ -258,6 +311,22 @@ export default function GroupChat() {
                       </div>
 
                       <div className="flex items-center gap-2 text-zinc-500">
+                        {!isMember ? (
+                          <button
+                            onClick={() => joinMut.mutate(gid)}
+                            disabled={joinMut.isPending || membershipQ.isLoading || !gid}
+                            className="
+                              inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-white
+                              px-3 py-2 text-xs font-semibold
+                              hover:border-yellow-300 transition
+                              disabled:opacity-60
+                            "
+                          >
+                            {isPrivate ? <Lock className="h-4 w-4" /> : <Globe className="h-4 w-4" />}
+                            {joinMut.isPending ? "Joining..." : isPrivate ? "Request to join" : "Join"}
+                          </button>
+                        ) : null}
+
                         <button className="rounded-xl p-2 hover:bg-zinc-50 transition">
                           <Phone className="h-4 w-4" />
                         </button>
@@ -279,67 +348,93 @@ export default function GroupChat() {
                       px-4 py-4
                     "
                   >
-                    <div className="min-h-full flex flex-col justify-end">
-                      <AnimatePresence initial={false}>
-                        {uiMessages.map((m) => (
-                          <motion.div
-                            key={m.id}
-                            initial={{ opacity: 0, y: 10, scale: 0.98 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            exit={{ opacity: 0 }}
-                            transition={{ duration: 0.2, ease: "easeOut" }}
-                            className={`mb-3 flex ${m.mine ? "justify-end" : "justify-start"}`}
+                    {!isMember ? (
+                      <div className="h-full grid place-items-center">
+                        <div className="max-w-md rounded-3xl border border-zinc-200 bg-white p-6 text-center shadow-sm">
+                          <p className="text-base font-semibold">You’re not a member</p>
+                          <p className="mt-2 text-sm text-zinc-500">
+                            Join the group to read and send messages.
+                          </p>
+                          <button
+                            onClick={() => joinMut.mutate(gid)}
+                            disabled={joinMut.isPending}
+                            className="
+                              mt-4 inline-flex items-center gap-2 rounded-2xl
+                              border border-zinc-200 bg-[#FFFBF2] px-4 py-2 text-sm font-semibold
+                              hover:border-yellow-300 transition disabled:opacity-60
+                            "
                           >
-                            {/* Avatar (others) */}
-                            {!m.mine && (
-                              <div className="mr-2 mt-1 h-8 w-8 overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-100 flex items-center justify-center text-xs font-bold text-zinc-600">
-                                {m.senderAvatar ? (
-                                  <img
-                                    src={m.senderAvatar}
-                                    alt="user"
-                                    className="h-full w-full object-cover"
-                                  />
-                                ) : (
-                                  "?"
-                                )}
-                              </div>
-                            )}
-
-                            <div
-                              className={`
-                                max-w-[78%] rounded-3xl px-4 py-2
-                                text-sm shadow-sm break-words
-                                ${m.mine
-                                  ? "bg-gradient-to-br from-yellow-400 to-amber-500 text-white"
-                                  : "bg-zinc-100 text-zinc-900"}
-                              `}
+                            {isPrivate ? <Lock className="h-4 w-4" /> : <Globe className="h-4 w-4" />}
+                            {joinMut.isPending ? "Joining..." : isPrivate ? "Request to join" : "Join"}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="min-h-full flex flex-col justify-end">
+                        <AnimatePresence initial={false}>
+                          {uiMessages.map((m) => (
+                            <motion.div
+                              key={m.id}
+                              initial={{ opacity: 0, y: 10, scale: 0.98 }}
+                              animate={{ opacity: 1, y: 0, scale: 1 }}
+                              exit={{ opacity: 0 }}
+                              transition={{ duration: 0.2, ease: "easeOut" }}
+                              className={`mb-3 flex ${m.mine ? "justify-end" : "justify-start"}`}
                             >
-                              <p>{m.text}</p>
-                              <p className="mt-1 text-[10px] opacity-70 text-right">
-                                {m.time}
-                              </p>
-                            </div>
+                              {!m.mine && (
+                                <div className="mr-2 mt-1 h-8 w-8 overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-100 flex items-center justify-center text-xs font-bold text-zinc-600">
+                                  {m.senderAvatar ? (
+                                    <img
+                                      src={m.senderAvatar}
+                                      alt="user"
+                                      className="h-full w-full object-cover"
+                                    />
+                                  ) : (
+                                    "?"
+                                  )}
+                                </div>
+                              )}
 
-                            {/* Avatar (mine) */}
-                            {m.mine && (
-                              <div className="ml-2 mt-1 h-8 w-8 overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-100 flex items-center justify-center text-xs font-bold text-zinc-600">
-                                {m.senderAvatar ? (
-                                  <img
-                                    src={m.senderAvatar}
-                                    alt="me"
-                                    className="h-full w-full object-cover"
-                                  />
-                                ) : (
-                                  "ME"
-                                )}
+                              <div
+                                className={`
+                                  max-w-[78%] rounded-3xl px-4 py-2
+                                  text-sm shadow-sm break-words
+                                  ${m.mine
+                                    ? "bg-gradient-to-br from-yellow-400 to-amber-500 text-white"
+                                    : "bg-zinc-100 text-zinc-900"}
+                                `}
+                              >
+                                {!m.mine && m.senderLabel ? (
+                                  <p className="text-[11px] font-semibold opacity-80 mb-1">
+                                    {m.senderLabel}
+                                  </p>
+                                ) : null}
+                                <p>{m.text}</p>
+                                <p className="mt-1 text-[10px] opacity-70 text-right">
+                                  {m.time}
+                                </p>
                               </div>
-                            )}
-                          </motion.div>
-                        ))}
-                      </AnimatePresence>
 
-                      <div ref={bottomRef} />
-                    </div>
+                              {m.mine && (
+                                <div className="ml-2 mt-1 h-8 w-8 overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-100 flex items-center justify-center text-xs font-bold text-zinc-600">
+                                  {m.senderAvatar ? (
+                                    <img
+                                      src={m.senderAvatar}
+                                      alt="me"
+                                      className="h-full w-full object-cover"
+                                    />
+                                  ) : (
+                                    "ME"
+                                  )}
+                                </div>
+                              )}
+                            </motion.div>
+                          ))}
+                        </AnimatePresence>
+
+                        <div ref={bottomRef} />
+                      </div>
+                    )}
                   </div>
 
                   {/* Input */}
@@ -350,11 +445,12 @@ export default function GroupChat() {
                           type="button"
                           onClick={() => setEmojiOpen((v) => !v)}
                           className="text-zinc-400 hover:text-zinc-600 transition"
+                          disabled={!canType}
                         >
                           <Smile className="h-5 w-5" />
                         </button>
 
-                        {emojiOpen && (
+                        {emojiOpen && canType && (
                           <div className="absolute bottom-12 left-0 z-50">
                             <EmojiPicker
                               theme={Theme.LIGHT}
@@ -373,6 +469,7 @@ export default function GroupChat() {
                         type="button"
                         onClick={handleButtonClick}
                         className="text-zinc-400 hover:text-zinc-600 transition"
+                        disabled={!canType}
                       >
                         <Paperclip className="h-5 w-5" />
                       </button>
@@ -390,8 +487,8 @@ export default function GroupChat() {
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
                         onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-                        placeholder={joined ? "Type a message…" : "Join the group to chat…"}
-                        disabled={!joined}
+                        placeholder={canType ? "Type a message…" : "Join the group to chat…"}
+                        disabled={!canType}
                         className="
                           flex-1 bg-transparent outline-none
                           text-sm placeholder:text-zinc-400
@@ -401,7 +498,7 @@ export default function GroupChat() {
 
                       <button
                         onClick={sendMessage}
-                        disabled={!joined}
+                        disabled={!canType}
                         className="
                           rounded-xl bg-yellow-400 p-2
                           text-white hover:bg-yellow-500
@@ -427,9 +524,11 @@ export default function GroupChat() {
                   "
                 >
                   <div className="p-4 border-b border-zinc-200">
-                    <p className="text-sm font-semibold text-zinc-900">{groupName}</p>
+                    <p className="text-sm font-semibold text-zinc-900">
+                      {group?.name ?? groupNameFromState}
+                    </p>
                     <p className="mt-1 text-xs text-zinc-500">
-                      Members · {detailsQ.isLoading ? "..." : memberCount}
+                      Members · {membersQ.isLoading ? "..." : memberCount}
                     </p>
 
                     <div className="mt-3 flex items-center gap-2 text-zinc-600">
@@ -442,17 +541,16 @@ export default function GroupChat() {
                     <div className="rounded-2xl border border-zinc-200 bg-white p-3">
                       <p className="text-xs font-semibold text-zinc-700">About</p>
                       <p className="mt-1 text-xs text-zinc-500 leading-relaxed">
-                        {group?.description?.trim()
-                          ? group.description
+                        {String(group?.description ?? "").trim()
+                          ? group?.description
                           : "Working together, sharing ideas and communicating effectively."}
                       </p>
                     </div>
 
-                    {/* ✅ Professional members list */}
                     <div className="rounded-2xl border border-zinc-200 bg-white p-3">
                       <div className="flex items-center justify-between">
                         <p className="text-xs font-semibold text-zinc-700">Members</p>
-                        {membershipQ.isLoading ? (
+                        {membersQ.isLoading ? (
                           <span className="text-[11px] text-zinc-400">Loading…</span>
                         ) : null}
                       </div>
@@ -480,7 +578,6 @@ export default function GroupChat() {
                                 </span>
                               )}
 
-                              {/* online dot (if provided) */}
                               <span
                                 className={`
                                   absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white
@@ -490,16 +587,14 @@ export default function GroupChat() {
                             </div>
 
                             <div className="min-w-0 flex-1">
-                              <div className="flex items-center justify-between gap-2">
-                                <p className="truncate text-sm font-semibold text-zinc-900">
-                                  {m.display}
-                                  {m.isMe ? (
-                                    <span className="ml-2 text-[11px] font-semibold text-yellow-700">
-                                      (You)
-                                    </span>
-                                  ) : null}
-                                </p>
-                              </div>
+                              <p className="truncate text-sm font-semibold text-zinc-900">
+                                {m.display}
+                                {m.isMe ? (
+                                  <span className="ml-2 text-[11px] font-semibold text-yellow-700">
+                                    (You)
+                                  </span>
+                                ) : null}
+                              </p>
 
                               {m.subtitle ? (
                                 <p className="truncate text-[11px] text-zinc-500 mt-0.5">
@@ -514,8 +609,10 @@ export default function GroupChat() {
                           </div>
                         ))}
 
-                        {!memberCards.length && !detailsQ.isLoading ? (
-                          <p className="text-xs text-zinc-500">No members found.</p>
+                        {!memberCards.length && !membersQ.isLoading ? (
+                          <p className="text-xs text-zinc-500">
+                            {canSeeMembers ? "No members found." : "Members are hidden until you join."}
+                          </p>
                         ) : null}
                       </div>
                     </div>
