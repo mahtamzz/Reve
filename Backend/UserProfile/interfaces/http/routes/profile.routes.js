@@ -1,39 +1,32 @@
 const express = require("express");
 
-module.exports = function createProfileRouter({
-    auth, audit, controller }) {
+module.exports = function createProfileRouter({ auth, requireUser, requireAdmin, audit, controller }) {
     const router = express.Router();
 
-    router.get("/me", auth, controller.getMe);
+    router.get("/me", auth, requireUser, controller.getMe);
+    router.get("/dashboard", auth, requireUser, controller.dashboard);
 
-    router.get("/dashboard", auth, controller.dashboard);
+    router.patch("/me", auth, requireUser, audit("profile.updated"), controller.updateProfileInfo);
+    router.patch("/preferences", auth, requireUser, audit("preferences.updated"), controller.updatePreferencesInfo);
 
-    router.patch("/me", auth, audit('profile.updated'), controller.updateProfileInfo);
+    router.patch("/me/password", auth, requireUser, audit("password.changed"), controller.changePassword);
 
-    router.patch("/preferences", auth, audit('preferences.updated'), controller.updatePreferencesInfo);
-
-    router.patch(
-        "/me/password",
-        auth, audit("password.changed"),
-        controller.changePassword
-    );
-
-    router.post("/public/batch", auth, controller.getPublicProfilesBatchHandler);
+    router.post("/public/batch", auth, requireUser, controller.getPublicProfilesBatchHandler);
 
     // FOLLOW GRAPH
-    router.post("/:uid/follow", auth, controller.follow);
-    router.delete("/:uid/follow", auth, controller.unfollow);
+    router.post("/:uid/follow", auth, requireUser, controller.follow);
+    router.delete("/:uid/follow", auth, requireUser, controller.unfollow);
 
-    router.get("/:uid/followers", auth, controller.followers);
-    router.get("/:uid/following", auth, controller.following);
+    router.get("/:uid/followers", auth, requireUser, controller.followers);
+    router.get("/:uid/following", auth, requireUser, controller.following);
 
     // OPTIONAL helpers
-    router.get("/:uid/follow-status", auth, controller.followStatus);
-    router.get("/:uid/follow-counts", auth, controller.followCounts);
-
+    router.get("/:uid/follow-status", auth, requireUser, controller.followStatus);
+    router.get("/:uid/follow-counts", auth, requireUser, controller.followCounts);
 
     return router;
 };
+
 
 
 

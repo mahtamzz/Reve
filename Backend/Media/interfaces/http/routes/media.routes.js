@@ -6,16 +6,17 @@ const upload = multer({
     limits: { fileSize: 5 * 1024 * 1024 } // 2MB
 });
 
-module.exports = function createMediaRoutes({ controller, auth }) {
+module.exports = function createMediaRoutes({ controller, auth, requireUser, requireAdmin }) {
     const router = express.Router();
 
     router.post(
-        '/avatar',
+        "/avatar",
         auth,
+        requireUser,
         (req, res, next) => {
-            upload.single('file')(req, res, (err) => {
-                if (err?.code === 'LIMIT_FILE_SIZE') {
-                    return res.status(413).json({ error: 'File too large' });
+            upload.single("file")(req, res, (err) => {
+                if (err?.code === "LIMIT_FILE_SIZE") {
+                    return res.status(413).json({ error: "File too large" });
                 }
                 if (err) return next(err);
                 next();
@@ -24,9 +25,9 @@ module.exports = function createMediaRoutes({ controller, auth }) {
         controller.uploadAvatarHandler
     );
 
-    router.get('/avatar', auth, controller.getMyAvatarHandler);
-    router.get('/users/:uid/avatar', controller.getUserAvatarHandler);
-    router.delete('/avatar', auth, controller.deleteAvatarHandler);
+    router.get("/avatar", auth, requireUser, controller.getMyAvatarHandler);
+    router.get("/users/:uid/avatar", controller.getUserAvatarHandler);
+    router.delete("/avatar", auth, requireUser, controller.deleteAvatarHandler);
 
     /**
  * @swagger

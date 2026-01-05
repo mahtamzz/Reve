@@ -1,21 +1,21 @@
 const express = require('express');
 
-module.exports = function createStudyRoutes({ controller, auth }) {
+module.exports = function createStudyRoutes({ controller, auth, requireUser, requireAdmin }) {
     const router = express.Router();
 
     // Subjects
-    router.post('/subjects', auth, controller.createSubjectHandler);
-    router.get('/subjects', auth, controller.listSubjectsHandler);
-    router.patch('/subjects/:subjectId', auth, controller.updateSubjectHandler);
-    router.delete('/subjects/:subjectId', auth, controller.deleteSubjectHandler);
+    router.post("/subjects", auth, requireUser, controller.createSubjectHandler);
+    router.get("/subjects", auth, requireUser, controller.listSubjectsHandler);
+    router.patch("/subjects/:subjectId", auth, requireUser, controller.updateSubjectHandler);
+    router.delete("/subjects/:subjectId", auth, requireUser, controller.deleteSubjectHandler);
 
     // Sessions
-    router.post('/sessions', auth, controller.logSessionHandler);
-    router.get('/sessions', auth, controller.listSessionsHandler);
+    router.post("/sessions", auth, requireUser, controller.logSessionHandler);
+    router.get("/sessions", auth, requireUser, controller.listSessionsHandler);
 
     // Stats
-    router.get('/dashboard', auth, controller.getDashboardHandler);
-    router.patch('/stats/weekly-goal', auth, controller.updateWeeklyGoalHandler);
+    router.get("/dashboard", auth, requireUser, controller.getDashboardHandler);
+    router.patch("/stats/weekly-goal", auth, requireUser, controller.updateWeeklyGoalHandler);
 
     /**
      * @swagger

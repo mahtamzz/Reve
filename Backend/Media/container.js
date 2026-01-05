@@ -6,6 +6,8 @@ const PgClient = require("./infrastructure/db/postgres");
 /* SHARED */
 const JwtVerifier = require("../shared/auth/JwtVerifier");
 const authMiddleware = require("../shared/auth/authMiddleware");
+const requireUser = require("../shared/auth/requireUser");
+const requireAdmin = require("../shared/auth/requireAdmin");
 
 /* REPOS */
 const PgAvatarRepo = require("./infrastructure/repositories/PgAvatarRepo");
@@ -76,7 +78,9 @@ async function createContainer() {
     /* ROUTER */
     const mediaRouter = createMediaRoutes({
         controller,
-        auth
+        auth,
+        requireUser, 
+        requireAdmin
     });
 
     return {

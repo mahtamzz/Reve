@@ -6,6 +6,8 @@ const PgClient = require("./infrastructure/db/postgres");
 const JwtVerifier = require("../shared/auth/JwtVerifier");
 const authMiddleware = require("../shared/auth/authMiddleware");
 const auditMiddleware = require("../shared/audit/auditMiddleware"); // optional if you want audit route middleware
+const requireUser = require("../shared/auth/requireUser");
+const requireAdmin = require("../shared/auth/requireAdmin");
 
 /* REPOS */
 const PgSubjectRepo = require("./infrastructure/repositories/PgSubjectRepo");
@@ -94,7 +96,7 @@ async function createContainer() {
     });
 
     /* ROUTER */
-    const studyRouter = createStudyRoutes({auth, controller});
+    const studyRouter = createStudyRoutes({auth, controller, requireUser, requireAdmin});
 
     return {
         routers: {

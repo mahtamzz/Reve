@@ -1,37 +1,83 @@
 const express = require("express");
 
-module.exports = function createGroupRoutes({ controller, auth }) {
+module.exports = function createGroupRoutes({ controller, auth, requireUser, requireAdmin }) {
    const router = express.Router();
 
-   router.post("/", auth, controller.create);
+   /* ADMIN */
+   router.get("/admin/groups", auth, requireAdmin, controller.adminList);
 
-   router.get("/", auth, controller.list);
-   router.get("/me", auth, controller.listMyGroups);
-   router.get("/search", auth, controller.search);
+   /* USER */
+   router.post("/", auth, requireUser, controller.create);
+
+   router.get("/", auth, requireUser, controller.list);
+   router.get("/me", auth, requireUser, controller.listMyGroups);
+   router.get("/search", auth, requireUser, controller.search);
 
    router.get("/:groupId", auth, controller.getDetails);
    router.delete("/:groupId", auth, controller.remove);
-   router.patch("/:groupId", auth, controller.update);
 
-   router.post("/:groupId/join", auth, controller.join);
-   router.post("/:groupId/leave", auth, controller.leave);
+   router.patch("/:groupId", auth, requireUser, controller.update);
+
+   router.post("/:groupId/join", auth, requireUser, controller.join);
+   router.post("/:groupId/leave", auth, requireUser, controller.leave);
 
    router.get("/:groupId/requests", auth, controller.listJoinRequests);
+   router.post("/:groupId/requests/:userId/approve", auth, requireUser, controller.approveJoin);
+   router.post("/:groupId/requests/:userId/reject", auth, requireUser, controller.rejectJoin);
 
-   router.post("/:groupId/requests/:userId/approve", auth, controller.approveJoin);
-   router.post("/:groupId/requests/:userId/reject", auth, controller.rejectJoin);
-
-   router.patch("/:groupId/members/:userId/role", auth, controller.changeRole);
+   router.patch("/:groupId/members/:userId/role", auth, requireUser, controller.changeRole);
    router.delete("/:groupId/members/:userId", auth, controller.kick);
 
    router.get("/:groupId/members", auth, controller.listMembers);
-   router.get("/:groupId/members/me", auth, controller.getMyMembership);
+   router.get("/:groupId/members/me", auth, requireUser, controller.getMyMembership);
 
    /**
     * @swagger
     * tags:
     *   name: Groups
     *   description: Group management and membership
+    */
+
+   /**
+    * @swagger
+    * /api/groups/admin/groups:
+    *   get:
+    *     summary: Admin - List all groups
+    *     description: >
+    *       Platform admin endpoint. Returns a paginated list of ALL groups (not just discoverable/public).
+    *       Requires an admin JWT (role=admin).
+    *     tags: [Groups]
+    *     security:
+    *       - bearerAuth: []
+    *     parameters:
+    *       - in: query
+    *         name: limit
+    *         required: false
+    *         schema:
+    *           type: integer
+    *           minimum: 1
+    *           maximum: 200
+    *           default: 20
+    *       - in: query
+    *         name: offset
+    *         required: false
+    *         schema:
+    *           type: integer
+    *           minimum: 0
+    *           default: 0
+    *     responses:
+    *       200:
+    *         description: List of groups
+    *         content:
+    *           application/json:
+    *             schema:
+    *               type: array
+    *               items:
+    *                 type: object
+    *       401:
+    *         description: Unauthorized (missing/invalid token)
+    *       403:
+    *         description: Forbidden (admin token required)
     */
 
    /**
@@ -69,6 +115,11 @@ module.exports = function createGroupRoutes({ controller, auth }) {
     * /api/groups/{groupId}:
     *   get:
     *     summary: Get group details
+    *     description: >
+    *       Returns group details.
+    *       - Public groups: any authenticated user can view.
+    *       - Private/invite-only groups: members can view.
+    *       - Platform admins (role=admin) can view any group regardless of visibility.
     *     tags: [Groups]
     *     security:
     *       - bearerAuth: []
@@ -78,16 +129,29 @@ module.exports = function createGroupRoutes({ controller, auth }) {
     *         required: true
     *         schema:
     *           type: string
+    *           format: uuid
     *     responses:
     *       200:
     *         description: Group details
+    *       401:
+    *         description: Unauthorized
+    *       403:
+    *         description: Forbidden (not a member of a non-public group)
+    *       404:
+    *         description: Group not found
     */
+
 
    /**
     * @swagger
     * /api/groups/{groupId}:
     *   delete:
     *     summary: Delete a group
+    *     description: >
+    *       Deletes a group.
+    *       Allowed for:
+    *       - The group owner (user token), OR
+    *       - Platform admin (role=admin).
     *     tags: [Groups]
     *     security:
     *       - bearerAuth: []
@@ -97,10 +161,18 @@ module.exports = function createGroupRoutes({ controller, auth }) {
     *         required: true
     *         schema:
     *           type: string
+    *           format: uuid
     *     responses:
     *       204:
     *         description: Group deleted
+    *       401:
+    *         description: Unauthorized
+    *       403:
+    *         description: Forbidden (not owner/admin)
+    *       404:
+    *         description: Group not found
     */
+
 
    /**
     * @swagger
@@ -253,7 +325,12 @@ module.exports = function createGroupRoutes({ controller, auth }) {
     * @swagger
     * /api/groups/{groupId}/members/{userId}:
     *   delete:
-    *     summary: Kick a member from the group
+    *     summary: Remove a member from the group (kick)
+    *     description: >
+    *       Removes a member from the group.
+    *       Allowed for:
+    *       - Group owner/admin (based on group_members.role), OR
+    *       - Platform admin (role=admin).
     *     tags: [Groups]
     *     security:
     *       - bearerAuth: []
@@ -263,15 +340,23 @@ module.exports = function createGroupRoutes({ controller, auth }) {
     *         required: true
     *         schema:
     *           type: string
+    *           format: uuid
     *       - in: path
     *         name: userId
     *         required: true
     *         schema:
-    *           type: string
+    *           type: integer
     *     responses:
     *       204:
     *         description: Member removed
+    *       401:
+    *         description: Unauthorized
+    *       403:
+    *         description: Forbidden (not allowed)
+    *       404:
+    *         description: Group not found / Target not a member
     */
+
    /**
 * @swagger
 * /api/groups:
@@ -472,59 +557,36 @@ module.exports = function createGroupRoutes({ controller, auth }) {
     */
 
    /**
-   * @swagger
-   * /api/groups/{groupId}/requests:
-   *   get:
-   *     summary: List pending join requests for a group
-   *     description: >
-   *       Returns pending join requests for the given group.
-   *       Only users with role owner/admin can access this endpoint.
-   *     tags: [Groups]
-   *     security:
-   *       - bearerAuth: []
-   *     parameters:
-   *       - in: path
-   *         name: groupId
-   *         required: true
-   *         schema:
-   *           type: string
-   *           format: uuid
-   *     responses:
-   *       200:
-   *         description: Pending join requests
-   *         content:
-   *           application/json:
-   *             schema:
-   *               type: object
-   *               properties:
-   *                 groupId:
-   *                   type: string
-   *                   format: uuid
-   *                 total:
-   *                   type: integer
-   *                 items:
-   *                   type: array
-   *                   items:
-   *                     type: object
-   *                     properties:
-   *                       id:
-   *                         type: string
-   *                         format: uuid
-   *                       group_id:
-   *                         type: string
-   *                         format: uuid
-   *                       uid:
-   *                         type: integer
-   *                       created_at:
-   *                         type: string
-   *                         format: date-time
-   *       401:
-   *         description: Unauthorized
-   *       403:
-   *         description: Forbidden (not owner/admin)
-   *       404:
-   *         description: Group not found
-   */
+    * @swagger
+    * /api/groups/{groupId}/requests:
+    *   get:
+    *     summary: List pending join requests for a group
+    *     description: >
+    *       Returns pending join requests for the given group.
+    *       Allowed for:
+    *       - Group owner/admin (based on group_members.role), OR
+    *       - Platform admin (role=admin).
+    *     tags: [Groups]
+    *     security:
+    *       - bearerAuth: []
+    *     parameters:
+    *       - in: path
+    *         name: groupId
+    *         required: true
+    *         schema:
+    *           type: string
+    *           format: uuid
+    *     responses:
+    *       200:
+    *         description: Pending join requests
+    *       401:
+    *         description: Unauthorized
+    *       403:
+    *         description: Forbidden (not allowed)
+    *       404:
+    *         description: Group not found
+    */
+
    /**
     * @swagger
     * /api/groups/{groupId}/members:
@@ -532,7 +594,10 @@ module.exports = function createGroupRoutes({ controller, auth }) {
     *     summary: List group members (with profile info)
     *     description: >
     *       Returns group members along with basic public profile fields from the UserProfile service.
-    *       If profile enrichment fails, members are still returned but profile may be null.
+    *       Access rules:
+    *       - Public group: any authenticated user can view.
+    *       - Private/invite-only: only members can view.
+    *       - Platform admin (role=admin) can view any group regardless of visibility.
     *     tags: [Groups]
     *     security:
     *       - bearerAuth: []
@@ -546,39 +611,6 @@ module.exports = function createGroupRoutes({ controller, auth }) {
     *     responses:
     *       200:
     *         description: Group members
-    *         content:
-    *           application/json:
-    *             schema:
-    *               type: object
-    *               properties:
-    *                 groupId:
-    *                   type: string
-    *                   format: uuid
-    *                 total:
-    *                   type: integer
-    *                 items:
-    *                   type: array
-    *                   items:
-    *                     type: object
-    *                     properties:
-    *                       uid:
-    *                         type: integer
-    *                       role:
-    *                         type: string
-    *                         enum: [owner, admin, member]
-    *                       joined_at:
-    *                         type: string
-    *                         format: date-time
-    *                       profile:
-    *                         type: object
-    *                         nullable: true
-    *                         properties:
-    *                           display_name:
-    *                             type: string
-    *                             nullable: true
-    *                           timezone:
-    *                             type: string
-    *                             nullable: true
     *       401:
     *         description: Unauthorized
     *       403:

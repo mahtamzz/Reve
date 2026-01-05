@@ -2,10 +2,11 @@ require("dotenv").config();
 
 const PgClient = require("./infrastructure/db/postgres");
 
-/* SHARED */
+/* SHARED AUTH */
 const JwtVerifier = require("../shared/auth/JwtVerifier");
 const authMiddleware = require("../shared/auth/authMiddleware");
-const auditMiddleware = require("../shared/audit/auditMiddleware");
+const requireUser = require("../shared/auth/requireUser");
+const requireAdmin = require("../shared/auth/requireAdmin");
 
 /* REPOSITORIES */
 const PgGroupRepo = require("./infrastructure/repositories/PgGroupRepo");
@@ -17,10 +18,10 @@ const PgAuditRepo = require("./infrastructure/repositories/PgGroupAuditRepo");
 /* EVENTS */
 const EventBus = require("./infrastructure/messaging/EventBus");
 
-
+/* CLIENTS */
 const UserProfileClient = require("./infrastructure/UserProfileClient");
 
-/* USE CASES – Details */
+/* USE CASES */
 const CreateGroup = require("./application/useCases/DetailsRelated/CreateGroup");
 const DeleteGroup = require("./application/useCases/DetailsRelated/DeleteGroup");
 const GetGroupDetails = require("./application/useCases/DetailsRelated/GetGroupDetails");
@@ -30,7 +31,6 @@ const UpdateGroup = require("./application/useCases/DetailsRelated/UpdateGroup")
 const ListGroups = require("./application/useCases/DetailsRelated/ListGroups");
 const SearchGroups = require("./application/useCases/DetailsRelated/SearchGroups");
 
-/* USE CASES – Members */
 const ApproveJoinRequest = require("./application/useCases/MemberRelated/ApproveJoinRequest");
 const RejectJoinRequest = require("./application/useCases/MemberRelated/RejectJoinRequest");
 const ChangeMemberRole = require("./application/useCases/MemberRelated/ChangeMemberRole");
@@ -40,12 +40,14 @@ const ListMyGroups = require("./application/useCases/MemberRelated/ListMyGroups"
 const ListJoinRequests = require("./application/useCases/MemberRelated/ListJoinRequests");
 const ListGroupMembers = require("./application/useCases/MemberRelated/ListGroupMembers");
 
+/* ADMIN */
+const AdminListGroups = require("./application/useCases/Admin/AdminListGroups");
+
 /* CONTROLLER + ROUTES */
 const createGroupController = require("./interfaces/http/controllers/groupController");
 const createGroupRoutes = require("./interfaces/http/routes/groupRoutes");
 
 async function createContainer() {
-    /* DB */
     const db = new PgClient({
         host: process.env.PGHOST,
         user: process.env.PGUSER,
@@ -54,112 +56,43 @@ async function createContainer() {
         port: process.env.PGPORT || 5432
     });
 
-    /* REPOSITORIES */
     const groupRepo = new PgGroupRepo(db);
     const groupMemberRepo = new PgGroupMemberRepo(db);
     const joinRequestRepo = new PgJoinRequestRepo(db);
     const banRepo = new PgBanRepo(db);
     const auditRepo = new PgAuditRepo(db);
 
-    /* JWT */
-    const jwtVerifier = new JwtVerifier({
-        secret: process.env.JWT_SECRET
-    });
+    const jwtVerifier = new JwtVerifier({ secret: process.env.JWT_SECRET });
+    const auth = authMiddleware(jwtVerifier); // ✅ correct name
 
-    const auth = authMiddleware(jwtVerifier);
-
-    /* EVENTS */
     const eventBus = new EventBus(process.env.RABBITMQ_URL, { exchange: "group.events" });
     await eventBus.connect();
-
 
     const userProfileClient = new UserProfileClient({
         baseUrl: process.env.USER_PROFILE_BASE_URL
     });
 
     /* USE CASES */
-    const createGroup = new CreateGroup({
-        groupRepo,
-        membershipRepo: groupMemberRepo,
-        auditRepo,
-        eventBus
-    });
-
-    const deleteGroup = new DeleteGroup(
-        groupRepo,
-        groupMemberRepo,
-        auditRepo,
-        eventBus
-    );
-
-    const getGroupDetails = new GetGroupDetails(
-        groupRepo,
-        groupMemberRepo
-    );
-
-    const joinGroup = new JoinGroup(
-        groupRepo,
-        groupMemberRepo,
-        joinRequestRepo,
-        banRepo
-    );
-
-    const leaveGroup = new LeaveGroup(
-        groupMemberRepo,
-        groupRepo,
-        eventBus
-    );
-
-    const updateGroup = new UpdateGroup(
-        groupRepo,
-        groupMemberRepo,
-        auditRepo
-    );
-
+    const createGroup = new CreateGroup({ groupRepo, membershipRepo: groupMemberRepo, auditRepo, eventBus });
+    const deleteGroup = new DeleteGroup(groupRepo, groupMemberRepo, auditRepo, eventBus);
+    const getGroupDetails = new GetGroupDetails(groupRepo, groupMemberRepo);
+    const joinGroup = new JoinGroup(groupRepo, groupMemberRepo, joinRequestRepo, banRepo);
+    const leaveGroup = new LeaveGroup(groupMemberRepo, groupRepo, eventBus);
+    const updateGroup = new UpdateGroup(groupRepo, groupMemberRepo, auditRepo);
     const listGroups = new ListGroups(groupRepo);
     const searchGroups = new SearchGroups(groupRepo);
 
-
-    const approveJoinRequest = new ApproveJoinRequest(
-        groupMemberRepo,
-        joinRequestRepo,
-        auditRepo,
-        eventBus
-    );
-
-    const rejectJoinRequest = new RejectJoinRequest(
-        joinRequestRepo,
-        groupMemberRepo,
-        auditRepo
-    );
-
-    const changeMemberRole = new ChangeMemberRole(
-        groupMemberRepo,
-        auditRepo
-    );
-
-    const kickMember = new KickMember(
-        groupMemberRepo,
-        auditRepo,
-        eventBus
-    );
-
+    const approveJoinRequest = new ApproveJoinRequest(groupMemberRepo, joinRequestRepo, auditRepo, eventBus);
+    const rejectJoinRequest = new RejectJoinRequest(joinRequestRepo, groupMemberRepo, auditRepo);
+    const changeMemberRole = new ChangeMemberRole(groupMemberRepo, auditRepo);
+    const kickMember = new KickMember(groupMemberRepo, auditRepo, eventBus);
     const getMyMembership = new GetMyMembership(groupMemberRepo);
-
     const listMyGroups = new ListMyGroups(groupMemberRepo);
+    const listJoinRequests = new ListJoinRequests(groupMemberRepo, joinRequestRepo);
+    const listGroupMembers = new ListGroupMembers(groupRepo, groupMemberRepo, userProfileClient);
 
-    const listJoinRequests = new ListJoinRequests(
-        groupMemberRepo,
-        joinRequestRepo
-    );
+    const adminListGroups = new AdminListGroups(groupRepo);
 
-    const listGroupMembers = new ListGroupMembers(
-        groupRepo,
-        groupMemberRepo,
-        userProfileClient
-    );
-
-    /* CONTROLLER */
     const controller = createGroupController({
         createGroup,
         deleteGroup,
@@ -176,20 +109,18 @@ async function createContainer() {
         kickMember,
         getMyMembership,
         listJoinRequests,
-        listGroupMembers
+        listGroupMembers,
+        adminListGroups
     });
 
-    /* ROUTER */
     const groupRouter = createGroupRoutes({
         controller,
-        auth
+        auth,
+        requireUser,
+        requireAdmin
     });
 
-    return {
-        routers: {
-            groupRouter
-        }
-    };
+    return { routers: { groupRouter } };
 }
 
 module.exports = createContainer;

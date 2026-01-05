@@ -2,7 +2,7 @@ function createChatController({ listGroupMessages, sendGroupMessage, groupClient
     return {
         async listInbox(req, res, next) {
             try {
-                const uid = req.user.uid;
+                const uid = req.actor.uid;
                 const cookieHeader = req.headers.cookie || "";
 
                 const inbox = await listChatInbox.execute({ uid, cookieHeader });
@@ -15,7 +15,7 @@ function createChatController({ listGroupMessages, sendGroupMessage, groupClient
         async listMessages(req, res, next) {
             try {
                 const groupId = req.params.groupId;
-                const uid = req.user.uid;
+                const uid = req.actor.uid;
 
                 const cookieHeader = req.headers.cookie || "";
                 const membership = await groupClient.getMyMembership({ groupId, cookieHeader });
@@ -36,7 +36,7 @@ function createChatController({ listGroupMessages, sendGroupMessage, groupClient
         async sendMessageHttp(req, res, next) {
             try {
                 const groupId = req.params.groupId;
-                const uid = req.user.uid;
+                const uid = req.actor.uid;
 
                 const cookieHeader = req.headers.cookie || "";
                 const membership = await groupClient.getMyMembership({ groupId, cookieHeader });

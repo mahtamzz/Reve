@@ -140,6 +140,18 @@ class PgGroupRepository extends GroupRepository {
         return result.rows;
     }
 
+    async listAll({ limit = 20, offset = 0 }) {
+        const result = await this.db.query(
+            `
+            SELECT ${DISCOVERABLE_FIELDS}
+            FROM groups g
+            ORDER BY g.created_at DESC
+            LIMIT $1 OFFSET $2
+            `,
+            [limit, offset]
+        );
+        return result.rows;
+    }
 
 }
 

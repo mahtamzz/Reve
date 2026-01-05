@@ -5,6 +5,8 @@ const PgClient = require("./infrastructure/db/postgres");
 const JwtVerifier = require("../shared/auth/JwtVerifier");
 const authMiddleware = require("../shared/auth/authMiddleware");
 const auditMiddleware = require("../shared/audit/auditMiddleware");
+const requireUser = require("../shared/auth/requireUser");
+const requireAdmin = require("../shared/auth/requireAdmin");
 
 /* REPOS */
 const PgUserProfileRepo = require("./infrastructure/repositories/PgUserProfileRepo");
@@ -113,7 +115,9 @@ async function createContainer() {
     const profileRouter = createProfileRouter({
         auth,
         audit: (action) => auditMiddleware(auditRepo, action),
-        controller: userProfileController
+        controller: userProfileController,
+        requireUser,
+        requireAdmin
     });
 
     return {

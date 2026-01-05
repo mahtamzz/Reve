@@ -1,4 +1,4 @@
-const path = require('path');
+const path = require("path");
 
 class MediaController {
     constructor({ uploadAvatar, getAvatarMeta, deleteAvatar, storage }) {
@@ -14,8 +14,8 @@ class MediaController {
     }
 
     async uploadAvatarHandler(req, res) {
-        const uid = req.user.uid;
-        if (!req.file) return res.status(400).json({ error: 'File required' });
+        const uid = req.actor.uid;
+        if (!req.file) return res.status(400).json({ error: "File required" });
 
         const avatar = await this.uploadAvatar.execute(uid, {
             buffer: req.file.buffer,
@@ -26,7 +26,7 @@ class MediaController {
     }
 
     async getMyAvatarHandler(req, res) {
-        const uid = req.user.uid;
+        const uid = req.actor.uid;
         const meta = await this.getAvatarMeta.execute(uid);
         if (!meta) return res.status(404).end();
 
@@ -42,9 +42,10 @@ class MediaController {
     }
 
     async deleteAvatarHandler(req, res) {
-        const uid = req.user.uid;
+        const uid = req.actor.uid;
         const ok = await this.deleteAvatar.execute(uid);
         if (!ok) return res.status(404).end();
+
         res.status(204).end();
     }
 }

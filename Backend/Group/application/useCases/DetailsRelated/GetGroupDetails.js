@@ -4,20 +4,23 @@ class GetGroupDetails {
         this.groupMemberRepo = groupMemberRepo;
     }
 
-    async execute({ uid, groupId }) {
+    async execute({ actor, groupId }) {
         const group = await this.groupRepo.findById(groupId);
-        if (!group) throw new Error('Group not found');
+        if (!group) throw new Error("Group not found");
 
-        if (group.visibility !== 'public') {
-            const membership = await this.groupMemberRepo.getRole(groupId, uid);
-            if (!membership) {
-                throw new Error('Access denied');
-            }
+        if (actor.role === "admin") {
+            return { group, membership: null };
         }
 
-        const members = await this.groupMemberRepo.getMembers(groupId);
+        // user rules
+        if (group.visibility !== "public") {
+            const role = await this.groupMemberRepo.getRole(groupId, actor.uid);
+            if (!role) throw new Error("Not a member");
+            return { group, membership: { role } };
+        }
 
-        return { group, members };
+        const role = await this.groupMemberRepo.getRole(groupId, actor.uid);
+        return { group, membership: role ? { role } : null };
     }
 }
 

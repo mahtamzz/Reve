@@ -1,3 +1,5 @@
+const canGroupAdminister = require("../../policies/canGroupAdminister");
+
 class KickMember {
     constructor(groupMemberRepo, auditRepo, eventBus) {
         this.groupMemberRepo = groupMemberRepo;
@@ -5,32 +7,44 @@ class KickMember {
         this.eventBus = eventBus;
     }
 
-    async execute({ actorUid, targetUid, groupId }) {
-        const actorRole = await this.groupMemberRepo.getRole(groupId, actorUid);
-        if (!actorRole) throw new Error("Not a member");
+    async execute({ actor, targetUid, groupId, reason = null }) {
+        // If actor is a normal user, enforce group membership + role
+        let actorRole = null;
 
-        if (actorRole !== "owner" && actorRole !== "admin") {
+        if (actor.role !== "admin") {
+            actorRole = await this.groupMemberRepo.getRole(groupId, actor.uid);
+            if (!actorRole) throw new Error("Not a member");
+        }
+
+        if (!canGroupAdminister({ actor, actorRole })) {
             throw new Error("Insufficient permissions");
         }
 
         const targetRole = await this.groupMemberRepo.getRole(groupId, targetUid);
         if (!targetRole) throw new Error("Target not a member");
 
-        if (targetRole === "owner") throw new Error("Cannot kick owner");
-        if (actorRole === "admin" && targetRole === "admin") {
-            throw new Error("Admin cannot kick another admin");
+        // Keep stricter rules for group-admins; platform admins bypass
+        if (actor.role !== "admin") {
+            if (targetRole === "owner") throw new Error("Cannot kick owner");
+            if (actorRole === "admin" && targetRole === "admin") {
+                throw new Error("Admin cannot kick another admin");
+            }
         }
 
         await this.groupMemberRepo.removeMember(groupId, targetUid);
 
         await this.auditRepo.log({
             groupId,
-            actorUid,
+            actorUid: actor.uid ?? null, // <-- requires actor_uid nullable for platform admins
             action: "member.kicked",
-            targetUid
+            targetUid,
+            metadata: {
+                platform_admin: actor.role === "admin",
+                admin_id: actor.adminId ?? null,
+                reason
+            }
         });
 
-        // 🔥 publish membership removal
         await this.eventBus.publish("group.member.removed", {
             groupId,
             uid: parseInt(targetUid, 10),

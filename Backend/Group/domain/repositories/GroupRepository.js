@@ -8,5 +8,8 @@ class GroupRepository {
 
     update(groupId, fields) { throw new Error('Not implemented'); }
     delete(groupId) { throw new Error('Not implemented'); }
+
+    listAll({ limit, offset }) { throw new Error("Not implemented"); }
+
 }
 module.exports = GroupRepository;

@@ -1,13 +1,11 @@
 const express = require("express");
 
-module.exports = function createChatRoutes({ controller, auth }) {
+module.exports = function createChatRoutes({ controller, auth, requireUser, requireAdmin, presenceStore }) {
     const router = express.Router();
 
-    router.get("/groups/:groupId/messages", auth, controller.listMessages);
-
-    router.post("/groups/:groupId/messages", auth, controller.sendMessageHttp);
-
-    router.get("/inbox", auth, controller.listInbox);
+    router.get("/groups/:groupId/messages", auth, requireUser, controller.listMessages);
+    router.post("/groups/:groupId/messages", auth, requireUser, controller.sendMessageHttp);
+    router.get("/inbox", auth, requireUser, controller.listInbox);
 
     router.get("/socket", (req, res) => {
         res.json({
@@ -28,7 +26,7 @@ module.exports = function createChatRoutes({ controller, auth }) {
         });
     });
 
-    router.get("/presence", auth, async (req, res, next) => {
+    router.get("/presence", auth, requireUser, async (req, res, next) => {
         try {
             const userIdsParam = String(req.query.userIds || "");
             const uids = userIdsParam

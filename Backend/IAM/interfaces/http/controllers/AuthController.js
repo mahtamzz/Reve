@@ -206,6 +206,10 @@ class AuthController {
                 await this.adminLoginUC.execute(req.body);
 
             setTokenCookie(res, accessToken, refreshToken);
+
+            console.log("🔑 [DEV] Admin access token:");
+            console.log(accessToken);
+            
             res.json({ admin });
         } catch (err) {
             res.status(401).json({ message: err.message });

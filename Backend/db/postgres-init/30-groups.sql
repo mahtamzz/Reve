@@ -73,7 +73,7 @@ CREATE TABLE group_bans (
 CREATE TABLE group_audit_log (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     group_id    UUID NOT NULL,
-    actor_uid   INT NOT NULL,
+    actor_uid   INT,
 
     action      VARCHAR(50) NOT NULL,
     target_uid  INT,

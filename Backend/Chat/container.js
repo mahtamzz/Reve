@@ -3,9 +3,11 @@ require("dotenv").config();
 const PgClient = require("./infrastructure/db/postgres");
 const RedisClient = require("./infrastructure/cache/redis");
 
-/* SHARED AUTH (same pattern as other services) */
+/* SHARED AUTH */
 const JwtVerifier = require("../shared/auth/JwtVerifier");
 const authMiddleware = require("../shared/auth/authMiddleware");
+const requireUser = require("../shared/auth/requireUser");
+const requireAdmin = require("../shared/auth/requireAdmin");
 
 /* REPOS */
 const PgChatMessageRepo = require("./infrastructure/repositories/PgChatMessageRepo");
@@ -87,7 +89,9 @@ async function createContainer() {
     const chatRouter = createChatRoutes({
         controller,
         auth,
-        presenceStore
+        presenceStore,
+        requireUser,
+        requireAdmin
     });
 
     return {
