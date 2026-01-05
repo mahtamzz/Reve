@@ -24,6 +24,8 @@ module.exports = function createProfileRouter({ auth, requireUser, requireAdmin,
     router.get("/:uid/follow-status", auth, requireUser, controller.followStatus);
     router.get("/:uid/follow-counts", auth, requireUser, controller.followCounts);
 
+    router.get("/search", auth, controller.searchUsers);
+
     return router;
 };
 
@@ -432,6 +434,79 @@ module.exports = function createProfileRouter({ auth, requireUser, requireAdmin,
  *                   type: integer
  *       400:
  *         description: Invalid UID
+ *       401:
+ *         description: Unauthorized
+ */
+/**
+ * @swagger
+ * /api/profile/search:
+ *   get:
+ *     summary: Search registered users
+ *     description: >
+ *       Search for registered users by display name (case-insensitive).
+ *       Returns public profile fields only for users who are public according to preferences.
+ *     tags: [Profile]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: q
+ *         required: true
+ *         schema:
+ *           type: string
+ *           minLength: 1
+ *         description: Search query (matches display_name).
+ *         example: "john"
+ *       - in: query
+ *         name: limit
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 50
+ *           default: 20
+ *         description: Max number of users to return.
+ *       - in: query
+ *         name: offset
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 0
+ *           default: 0
+ *         description: Number of users to skip (pagination).
+ *     responses:
+ *       200:
+ *         description: A list of matching users
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 items:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       uid:
+ *                         type: integer
+ *                       display_name:
+ *                         type: string
+ *                         nullable: true
+ *                       avatar_media_id:
+ *                         type: string
+ *                         nullable: true
+ *                       timezone:
+ *                         type: string
+ *                         nullable: true
+ *                 paging:
+ *                   type: object
+ *                   properties:
+ *                     limit:
+ *                       type: integer
+ *                     offset:
+ *                       type: integer
+ *       400:
+ *         description: Bad Request (missing or empty query)
  *       401:
  *         description: Unauthorized
  */

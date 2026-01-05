@@ -22,6 +22,10 @@ class UserProfileRepository {
     getPublicProfilesByUids(uids) {
         throw new Error("Not implemented");
     }
+
+    searchPublicProfiles(query, { limit, offset }) {
+        throw new Error("Not implemented");
+    }
 }
 
 module.exports = UserProfileRepository;

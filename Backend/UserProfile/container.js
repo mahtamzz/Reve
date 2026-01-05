@@ -29,6 +29,7 @@ const ListFollowers = require("./application/useCases/ListFollowers");
 const ListFollowing = require("./application/useCases/ListFollowing");
 const GetFollowStatus = require("./application/useCases/GetFollowStatus");
 const GetFollowCounts = require("./application/useCases/GetFollowCounts");
+const SearchUsers = require("./application/useCases/SearchUsers");
 
 /* CONTROLLERS */
 const UserProfileController = require("./interfaces/http/controllers/UserProfileController");
@@ -85,6 +86,8 @@ async function createContainer() {
     const getFollowStatusUC = new GetFollowStatus(followRepo);
     const getFollowCountsUC = new GetFollowCounts(followRepo);
 
+    const searchUsersUC = new SearchUsers(profileRepo);
+
     /* EVENT CONSUMER (subscriber) */
     const userEventsConsumer = new UserEventsConsumer(
         process.env.RABBITMQ_URL,
@@ -108,7 +111,8 @@ async function createContainer() {
         listFollowers: listFollowersUC,
         listFollowing: listFollowingUC,
         getFollowStatus: getFollowStatusUC,
-        getFollowCounts: getFollowCountsUC
+        getFollowCounts: getFollowCountsUC,
+        searchUsersUC: searchUsersUC
     });
 
     /* ROUTER */

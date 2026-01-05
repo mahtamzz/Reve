@@ -41,8 +41,8 @@ class PgUserProfileRepository extends UserProfileRepository {
 
         await this.pool.query(
             `UPDATE user_profiles
-             SET ${fields.join(', ')}, updated_at = now()
-             WHERE uid = $${i}`,
+            SET ${fields.join(', ')}, updated_at = now()
+            WHERE uid = $${i}`,
             values
         );
     }
@@ -61,6 +61,37 @@ class PgUserProfileRepository extends UserProfileRepository {
 
         return result.rows;
     }
+
+    async searchPublicProfiles(query, { limit = 20, offset = 0 } = {}) {
+        const sql = `
+        SELECT
+        p.uid,
+        p.display_name,
+        p.avatar_media_id,
+        p.timezone
+        FROM user_profiles p
+        JOIN user_preferences pref ON pref.uid = p.uid
+        WHERE (
+        p.display_name ILIKE '%' || $1 || '%'
+        OR p.uid = COALESCE($2::int, -1)
+        )
+        AND (
+            p.display_name ILIKE '%' || $1 || '%'
+            OR p.uid = COALESCE($2::int, -1)
+        )
+        ORDER BY
+        CASE WHEN p.display_name ILIKE $1 || '%' THEN 0 ELSE 1 END,
+        p.created_at DESC
+        LIMIT $3 OFFSET $4
+    `;
+
+        const numeric = /^[0-9]+$/.test(query) ? parseInt(query, 10) : null;
+
+        const res = await this.pool.query(sql, [query, numeric, limit, offset]);
+        return res.rows;
+    }
+
+
 
 
 }

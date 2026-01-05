@@ -11,7 +11,8 @@ class UserProfileController {
         listFollowers,
         listFollowing,
         getFollowStatus,
-        getFollowCounts
+        getFollowCounts,
+        searchUsersUC
     }) {
         this.getProfile = getProfile;
         this.updateProfile = updateProfile;
@@ -25,6 +26,7 @@ class UserProfileController {
         this.listFollowing = listFollowing;
         this.getFollowStatus = getFollowStatus;
         this.getFollowCounts = getFollowCounts;
+        this.searchUsersUC = searchUsersUC;
     }
 
     getMe = async (req, res) => {
@@ -149,6 +151,16 @@ class UserProfileController {
         const data = await this.getFollowCounts.execute({ uid });
         res.json(data);
     };
+
+    searchUsers = async (req, res) => {
+        const q = String(req.query.q ?? "");
+        const limit = req.query.limit;
+        const offset = req.query.offset;
+
+        const data = await this.searchUsersUC.execute({ q, limit, offset });
+        res.json(data);
+    };
+
 }
 
 module.exports = UserProfileController;
