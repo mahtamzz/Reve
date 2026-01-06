@@ -166,6 +166,7 @@ export default function Analytics() {
         <Sidebar activeKey="analytics" onLogout={logout} />
 
         <div className="flex-1 min-w-0 md:ml-64">
+          <Topbar/>
 
           <div className="mx-auto max-w-6xl px-4 py-10">
             <div className="flex items-start justify-between gap-4">

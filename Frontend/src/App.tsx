@@ -53,6 +53,7 @@ function App() {
       <Route path="/notifications" element={<Notifications />} />
       <Route path="/connections" element={<ConnectionsPage />} />
       <Route path="/profile" element={<ProfilePage />} />
+      <Route path="/profile/:uid" element={<ProfilePage />} />
       <Route path="/progress" element={<ProgressPage />} />
       <Route path="/study/subjects" element={<ManageSubjects />} />
       <Route path="/help" element={<Help/>}/>

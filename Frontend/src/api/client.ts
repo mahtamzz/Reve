@@ -19,7 +19,7 @@ function stripTrailingSlashes(url: string) {
 
 /**
  * Auth base (refresh endpoint lives here)
- * IMPORTANT: make sure this points to the service that actually implements /auth/refresh-token
+ * IMPORTANT: this service must implement POST /auth/refresh-token
  */
 const AUTH_BASE = stripTrailingSlashes(
   import.meta.env.VITE_API_AUTH_BASE || "http://localhost:3000/api"
@@ -32,8 +32,6 @@ let refreshPromise: Promise<boolean> | null = null;
 
 function extractToken(data: any): string | null {
   if (!data) return null;
-
-  // common shapes
   return (
     data.token ||
     data.accessToken ||
@@ -47,9 +45,6 @@ function extractToken(data: any): string | null {
 
 async function doRefresh(): Promise<boolean> {
   try {
-    // Helpful debug (remove if you want)
-    // console.log("[auth] refreshing via", REFRESH_URL);
-
     const res = await fetch(REFRESH_URL, {
       method: "POST",
       credentials: "include",
@@ -62,13 +57,9 @@ async function doRefresh(): Promise<boolean> {
     if (!res.ok) return false;
 
     const token = extractToken(data);
-    if (token) {
-      setAccessToken(token);
-    } else {
-      // refresh succeeded but didn't return a token (cookie-based refresh maybe)
-      // we still return true so the original request can retry.
-    }
+    if (token) setAccessToken(token);
 
+    // even if token not returned, cookie-based refresh might still have worked
     return true;
   } catch {
     return false;
@@ -86,7 +77,7 @@ async function refreshOnce(): Promise<boolean> {
 
 type RequestOptions = Omit<RequestInit, "body"> & {
   auth?: boolean; // default true
-  retry?: boolean; // default true
+  retry?: boolean; // default true (retry once after refresh on 401)
   body?: any;
   timeoutMs?: number;
 };
@@ -102,38 +93,47 @@ export function createApiClient(rawBase: string) {
     return path === REFRESH_PATH || path.endsWith(REFRESH_PATH);
   }
 
-  async function parseJsonOrThrow<T>(res: Response): Promise<T> {
-    if (res.status === 204) return null as T;
+  async function parseBody(res: Response) {
+    if (res.status === 204) return null;
 
     const contentType = res.headers.get("content-type") || "";
     const isJson = contentType.includes("application/json");
 
-    const data: any = isJson
-      ? await res.json().catch(() => null)
-      : await res.text().catch(() => null);
+    if (isJson) {
+      return await res.json().catch(() => null);
+    }
+
+    return await res.text().catch(() => null);
+  }
+
+  async function parseOrThrow<T>(res: Response): Promise<T> {
+    const data: any = await parseBody(res);
 
     if (!res.ok) {
       const msgRaw =
-      data?.message ||
-      data?.error ||
-      (typeof data === "string" && data.trim() ? data : "Request failed");
-    
-    const msg =
-      typeof msgRaw === "string" && msgRaw.includes("<!DOCTYPE html")
-        ? "SERVER_ERROR_HTML_RESPONSE"
-        : msgRaw;
-    
-    throw new ApiError(msg, res.status, data);
-    
+        data?.message ||
+        data?.error ||
+        (typeof data === "string" && data.trim() ? data : "Request failed");
+
+      const msg =
+        typeof msgRaw === "string" && msgRaw.includes("<!DOCTYPE html")
+          ? "SERVER_ERROR_HTML_RESPONSE"
+          : msgRaw;
+
+      throw new ApiError(msg, res.status, data);
     }
 
     return data as T;
   }
 
-  async function apiFetch<T = unknown>(path: string, options: RequestOptions = {}): Promise<T> {
+  async function apiFetch<T = unknown>(
+    path: string,
+    options: RequestOptions = {}
+  ): Promise<T> {
     const { auth = true, retry = true, headers, body, timeoutMs, ...rest } = options;
 
     const isFormData = typeof FormData !== "undefined" && body instanceof FormData;
+
     const finalHeaders: HeadersInit = { ...(headers || {}) };
 
     const token = getAccessToken();
@@ -141,6 +141,7 @@ export function createApiClient(rawBase: string) {
       (finalHeaders as any).Authorization = `Bearer ${token}`;
     }
 
+    // Do NOT set Content-Type for FormData; browser sets boundary.
     if (!isFormData && body != null && (finalHeaders as any)["Content-Type"] == null) {
       (finalHeaders as any)["Content-Type"] = "application/json";
     }
@@ -167,31 +168,35 @@ export function createApiClient(rawBase: string) {
       const url = buildUrl(path);
       const res = await fetch(url, finalOptions);
 
+      // auto refresh once
       if (res.status === 401 && auth && retry && !isRefreshRequest(path)) {
         const ok = await refreshOnce();
         if (!ok) throw new ApiError("UNAUTHENTICATED", 401);
 
-        // retry with updated Authorization if we got a token
         const newToken = getAccessToken();
         const retryHeaders: HeadersInit = { ...(finalHeaders as any) };
         if (newToken) (retryHeaders as any).Authorization = `Bearer ${newToken}`;
 
         const retryRes = await fetch(url, { ...finalOptions, headers: retryHeaders });
-        return parseJsonOrThrow<T>(retryRes);
+        return parseOrThrow<T>(retryRes);
       }
 
-      return parseJsonOrThrow<T>(res);
+      return parseOrThrow<T>(res);
     } finally {
       if (timeoutId) window.clearTimeout(timeoutId);
     }
   }
 
   const apiClient = {
-    get: <T>(path: string, opts?: RequestOptions) => apiFetch<T>(path, { ...opts, method: "GET" }),
+    get: <T>(path: string, opts?: RequestOptions) =>
+      apiFetch<T>(path, { ...opts, method: "GET" }),
+
     post: <T>(path: string, body?: any, opts?: RequestOptions) =>
       apiFetch<T>(path, { ...opts, method: "POST", body }),
+
     patch: <T>(path: string, body?: any, opts?: RequestOptions) =>
       apiFetch<T>(path, { ...opts, method: "PATCH", body }),
+
     delete: <T>(path: string, opts?: RequestOptions) =>
       apiFetch<T>(path, { ...opts, method: "DELETE" }),
   };
@@ -199,11 +204,13 @@ export function createApiClient(rawBase: string) {
   return { apiFetch, apiClient };
 }
 
-// bases
+// ---- bases (must match your gateway/services) ----
 const PROFILE_BASE = import.meta.env.VITE_API_PROFILE_BASE || "http://localhost:3001/api";
 const GROUPS_BASE = import.meta.env.VITE_API_GROUPS_BASE || "http://localhost:3002/api";
 const STUDY_BASE = import.meta.env.VITE_API_STUDY_BASE || "http://localhost:3003/api";
-const MEDIA_BASE = import.meta.env.VITE_API_MEDIA_BASE || "http://localhost:3004/api";
+
+// ✅ per swagger: http://localhost:3004 + prefix /api/media
+const MEDIA_BASE = import.meta.env.VITE_API_MEDIA_BASE || "http://localhost:3004/api/media";
 
 export const profileClient = createApiClient(PROFILE_BASE).apiClient;
 export const groupsClient = createApiClient(GROUPS_BASE).apiClient;

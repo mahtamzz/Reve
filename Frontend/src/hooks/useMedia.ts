@@ -9,10 +9,10 @@ type UseMediaState = {
   deleting: boolean;
   error: string | null;
 
-  // ✅ چون بک meta واقعی نداره، این یا null میشه یا { exists: true }
+  // backend doesn't provide a JSON meta endpoint; we only know "exists"
   meta: (ApiAvatarMeta & { exists?: boolean }) | null;
 
-  // ✅ برای <img src>
+  // for <img src>
   avatarUrl: string;
 };
 
@@ -55,7 +55,7 @@ export function useMedia(autoLoad: boolean = true) {
   const upload = useCallback(async (file: File) => {
     setState((s) => ({ ...s, uploading: true, error: null }));
     try {
-      const meta = await uploadAvatar(file); // ✅ بک 201 json
+      const meta = await uploadAvatar(file); // backend returns 201 JSON
       setState((s) => ({
         ...s,
         meta: meta as any,
@@ -72,7 +72,7 @@ export function useMedia(autoLoad: boolean = true) {
   const remove = useCallback(async () => {
     setState((s) => ({ ...s, deleting: true, error: null }));
     try {
-      await deleteAvatar(); // ✅ بک 204
+      await deleteAvatar(); // backend returns 204
       setState((s) => ({
         ...s,
         meta: null,
@@ -85,8 +85,12 @@ export function useMedia(autoLoad: boolean = true) {
     }
   }, []);
 
+  const refreshAvatar = useCallback(() => {
+    setState((s) => ({ ...s, avatarUrl: getAvatarUrl({ bustCache: true }) }));
+  }, []);
+
   useEffect(() => {
-    if (autoLoad) loadMeta();
+    if (autoLoad) void loadMeta();
   }, [autoLoad, loadMeta]);
 
   return useMemo(
@@ -95,9 +99,8 @@ export function useMedia(autoLoad: boolean = true) {
       loadMeta,
       upload,
       remove,
-      refreshAvatar: () =>
-        setState((s) => ({ ...s, avatarUrl: getAvatarUrl({ bustCache: true }) })),
+      refreshAvatar,
     }),
-    [state, loadMeta, upload, remove]
+    [state, loadMeta, upload, remove, refreshAvatar]
   );
 }

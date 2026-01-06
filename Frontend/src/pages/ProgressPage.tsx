@@ -1,3 +1,4 @@
+// src/pages/ProgressPage.tsx
 import React, { useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -15,6 +16,10 @@ import { ApiError } from "@/api/client";
 import { useStudyDashboard, useSessions } from "@/hooks/useStudy";
 import { useUpdateWeeklyGoal } from "@/hooks/useStudy";
 
+import Sidebar from "@/components/Dashboard/SidebarIcon";
+import Topbar from "@/components/Dashboard/DashboardHeader";
+import { logout } from "@/utils/authToken";
+
 const EASE_OUT: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
 type WeekPoint = { day: string; minutes: number };
@@ -22,6 +27,7 @@ type WeekPoint = { day: string; minutes: number };
 function cx(...classes: Array<string | false | undefined | null>) {
   return classes.filter(Boolean).join(" ");
 }
+
 function getHttpStatus(err: unknown): number | undefined {
   return err instanceof ApiError ? err.status : (err as any)?.status;
 }
@@ -104,7 +110,7 @@ export default function ProgressPage() {
   const sessionsParams = useMemo(
     () => ({
       from: weekStart.toISOString(), // 00:00:00Z Monday
-      to: weekEndEx.toISOString(),   // 00:00:00Z next Monday
+      to: weekEndEx.toISOString(), // 00:00:00Z next Monday
       limit: 5000,
       offset: 0,
     }),
@@ -207,200 +213,196 @@ export default function ProgressPage() {
     });
   };
 
-  if (anyLoading) {
-    return (
-      <div className="min-h-screen bg-[#F7F8FA] flex items-center justify-center">
-        <p className="text-zinc-600">Loading progress…</p>
-      </div>
-    );
-  }
-
-  if (anyError) {
-    return (
-      <div className="min-h-screen bg-[#F7F8FA] flex items-center justify-center">
-        <p className="text-zinc-600">
-          {status === 401 ? "Session expired. Please login again." : "Failed to load progress."}
-        </p>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-[#F7F8FA]">
-      <div className="mx-auto max-w-6xl px-4 py-6">
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35, ease: EASE_OUT }}
-          className="rounded-[28px] border border-zinc-200 bg-white shadow-sm overflow-hidden"
-        >
-          <div className="relative p-6 sm:p-7">
-            <div aria-hidden className="pointer-events-none absolute -top-20 -right-28 h-64 w-64 rounded-full bg-yellow-200/35 blur-3xl" />
-            <div aria-hidden className="pointer-events-none absolute -bottom-24 -left-24 h-72 w-72 rounded-full bg-sky-200/20 blur-3xl" />
+    <div className="min-h-screen bg-creamtext text-zinc-900">
+      <div className="flex">
+        <Sidebar activeKey="progress" onLogout={logout} />
 
-            <div className="relative flex flex-col gap-5">
-              <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <div className="h-10 w-10 rounded-2xl border border-yellow-200 bg-yellow-50 flex items-center justify-center">
-                      <TrendingUp className="h-5 w-5 text-yellow-700" />
-                    </div>
+        <div className="flex-1 min-w-0 md:ml-64">
+          <Topbar />
 
-                    <div>
-                      <h1 className="text-xl font-semibold text-zinc-900">Progress</h1>
-                      <p className="mt-0.5 text-sm text-zinc-500">
-                        Weekly minutes are computed from sessions (UTC day buckets).
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="mt-3 h-[2px] w-20 rounded-full bg-yellow-300/70" />
+          <main>
+            <div className="mx-auto max-w-6xl px-4 py-6">
+              {anyLoading ? (
+                <div className="rounded-3xl border border-zinc-200 bg-white p-6 text-sm text-zinc-600 shadow-sm">
+                  Loading progress…
                 </div>
-
-                <div className="shrink-0 rounded-2xl border border-zinc-200 bg-white/70 backdrop-blur p-1 flex items-center gap-1">
-                  <Pill active={range === "week"} onClick={() => setRange("week")} label="This week" />
-                  <Pill active={range === "month"} onClick={() => setRange("month")} label="This month" />
+              ) : anyError ? (
+                <div className="rounded-3xl border border-zinc-200 bg-white p-6 text-sm text-zinc-600 shadow-sm">
+                  {status === 401
+                    ? "Session expired. Please login again."
+                    : "Failed to load progress."}
                 </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <KpiCard
-                  title="Current streak"
-                  value={`${streakDays} days`}
-                  sub={`Best day: ${bestDay}`}
-                  icon={<Flame className="h-5 w-5" />}
-                  accent="yellow"
-                />
-                <KpiCard
-                  title="Focus this week"
-                  value={`${focusThisWeekMinutes} min`}
-                  sub={`Days active: ${daysActive}/7`}
-                  icon={<Timer className="h-5 w-5" />}
-                  accent="sky"
-                />
-                <KpiCard
-                  title="Sessions this week"
-                  value={`${sessionsThisWeek}`}
-                  sub="Count of logged sessions"
-                  icon={<CalendarDays className="h-5 w-5" />}
-                  accent="zinc"
-                />
-                <KpiCard
-                  title="Weekly goal"
-                  value={`${goalPct}%`}
-                  sub={`${focusThisWeekMinutes}/${goalWeeklyMinutes || 0} min`}
-                  icon={<Target className="h-5 w-5" />}
-                  accent="yellow"
-                  progress={goalWeeklyMinutes > 0 ? goalPct : 0}
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="border-t border-zinc-200 bg-white">
-            <div className="p-5 sm:p-7 grid grid-cols-1 lg:grid-cols-3 gap-5">
-              <div className="lg:col-span-2 rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-sm font-semibold text-zinc-900">Weekly activity</p>
-                    <p className="mt-1 text-xs text-zinc-500">Minutes studied each day (Mon–Sun, UTC)</p>
-                  </div>
-
-                  <span className="inline-flex items-center rounded-full border border-yellow-200 bg-yellow-100/60 px-3 py-1 text-[11px] font-semibold text-yellow-800">
-                    {focusThisWeekMinutes} min total
-                  </span>
-                </div>
-
-                <div className="mt-5 grid grid-cols-7 gap-2 items-end h-40">
-                  {weekly.map((d) => {
-                    const h = Math.round((d.minutes / maxBar) * 100);
-                    const isZero = d.minutes === 0;
-
-                    return (
-                      <div key={d.day} className="flex flex-col items-center gap-2">
-                        <div className="w-full h-28 flex items-end">
-                          <div
-                            className={cx(
-                              "w-full rounded-2xl border transition",
-                              isZero
-                                ? "bg-zinc-100 border-zinc-200"
-                                : "bg-yellow-200/70 border-yellow-200 hover:bg-yellow-200"
-                            )}
-                            style={{ height: `${Math.max(8, h)}%` }}
-                            title={`${d.day}: ${d.minutes} min`}
-                          />
-                        </div>
-                        <div className="text-[11px] text-zinc-500">{d.day}</div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                <div className="mt-5 rounded-2xl border border-zinc-200 bg-[#FFFBF2] p-4">
-                  <p className="text-xs font-semibold text-zinc-900">Insight</p>
-                  <p className="mt-1 text-sm text-zinc-600">
-                    Your strongest day is{" "}
-                    <span className="font-semibold text-zinc-800">{bestDay}</span>.
-                  </p>
-                </div>
-              </div>
-
-              <div className="rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm">
-                <p className="text-sm font-semibold text-zinc-900">Goals</p>
-                <p className="mt-1 text-xs text-zinc-500">Small targets keep you consistent.</p>
-
-                <div className="mt-4 space-y-3">
-                  <GoalRow title="Study 4 days this week" done={daysActive >= 4} meta={`${daysActive}/4 days`} />
-                  <GoalRow
-                    title="Reach weekly minutes goal"
-                    done={goalWeeklyMinutes > 0 ? focusThisWeekMinutes >= goalWeeklyMinutes : false}
-                    meta={`${focusThisWeekMinutes}/${goalWeeklyMinutes || 0} min`}
-                  />
-                  <GoalRow title="Keep streak alive today" done={true} meta="Tracked by server streak" />
-                </div>
-
-                <div className="mt-5">
-                  <button
-                    type="button"
-                    onClick={handleAdjustWeeklyGoal}
-                    disabled={goalUpdating}
-                    className="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm font-semibold text-zinc-800 hover:border-yellow-300 hover:bg-yellow-50 transition disabled:opacity-60 disabled:cursor-not-allowed"
-                  >
-                    {goalUpdating ? "Saving..." : "Adjust weekly goal"}
-                    <ChevronRight className="inline-block ml-2 h-4 w-4" />
-                  </button>
-                </div>
-
-                <div className="mt-4 rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
-                  <p className="text-xs font-semibold text-zinc-900">Tip</p>
-                  <p className="mt-1 text-sm text-zinc-600">Short sessions daily are better than one long session.</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="px-5 sm:px-7 pb-7">
-              <AnimatePresence mode="popLayout">
+              ) : (
                 <motion.div
-                  key={range}
-                  initial={{ opacity: 0, y: 8 }}
+                  initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 8 }}
-                  transition={{ duration: 0.2, ease: "easeOut" }}
-                  className="rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm"
+                  transition={{ duration: 0.35, ease: EASE_OUT }}
+                  className="rounded-[28px] border border-zinc-200 bg-white shadow-sm overflow-hidden"
                 >
-                  <p className="text-sm font-semibold text-zinc-900">
-                    {range === "week" ? "This week summary" : "This month summary"}
-                  </p>
-                  <p className="mt-1 text-sm text-zinc-600">
-                    {range === "week"
-                      ? "If dashboard totals are buggy, this page still stays correct (sessions-based)."
-                      : "Monthly view not wired yet."}
-                  </p>
+                  <div className="relative p-6 sm:p-7">
+                    <div
+                      aria-hidden
+                      className="pointer-events-none absolute -top-20 -right-28 h-64 w-64 rounded-full bg-yellow-200/35 blur-3xl"
+                    />
+                    <div
+                      aria-hidden
+                      className="pointer-events-none absolute -bottom-24 -left-24 h-72 w-72 rounded-full bg-sky-200/20 blur-3xl"
+                    />
+
+                    <div className="relative flex flex-col gap-5">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <div className="h-10 w-10 rounded-2xl border border-yellow-200 bg-yellow-50 flex items-center justify-center">
+                              <TrendingUp className="h-5 w-5 text-yellow-700" />
+                            </div>
+
+                            <div>
+                              <h1 className="text-xl font-semibold text-zinc-900">Progress</h1>
+                              <p className="mt-0.5 text-sm text-zinc-500">
+                                Weekly minutes are computed from sessions (UTC day buckets).
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="mt-3 h-[2px] w-20 rounded-full bg-yellow-300/70" />
+                        </div>
+
+                        <div className="shrink-0 rounded-2xl border border-zinc-200 bg-white/70 backdrop-blur p-1 flex items-center gap-1">
+                          <Pill active={range === "week"} onClick={() => setRange("week")} label="This week" />
+                          <Pill active={range === "month"} onClick={() => setRange("month")} label="This month" />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <KpiCard
+                          title="Current streak"
+                          value={`${streakDays} days`}
+                          sub={`Best day: ${bestDay}`}
+                          icon={<Flame className="h-5 w-5" />}
+                          accent="yellow"
+                        />
+                        <KpiCard
+                          title="Focus this week"
+                          value={`${focusThisWeekMinutes} min`}
+                          sub={`Days active: ${daysActive}/7`}
+                          icon={<Timer className="h-5 w-5" />}
+                          accent="sky"
+                        />
+                        <KpiCard
+                          title="Sessions this week"
+                          value={`${sessionsThisWeek}`}
+                          sub="Count of logged sessions"
+                          icon={<CalendarDays className="h-5 w-5" />}
+                          accent="zinc"
+                        />
+                        <KpiCard
+                          title="Weekly goal"
+                          value={`${goalPct}%`}
+                          sub={`${focusThisWeekMinutes}/${goalWeeklyMinutes || 0} min`}
+                          icon={<Target className="h-5 w-5" />}
+                          accent="yellow"
+                          progress={goalWeeklyMinutes > 0 ? goalPct : 0}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="border-t border-zinc-200 bg-white">
+                    <div className="p-5 sm:p-7 grid grid-cols-1 lg:grid-cols-3 gap-5">
+                      <div className="lg:col-span-2 rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm">
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <p className="text-sm font-semibold text-zinc-900">Weekly activity</p>
+                            <p className="mt-1 text-xs text-zinc-500">
+                              Minutes studied each day (Mon–Sun, UTC)
+                            </p>
+                          </div>
+
+                          <span className="inline-flex items-center rounded-full border border-yellow-200 bg-yellow-100/60 px-3 py-1 text-[11px] font-semibold text-yellow-800">
+                            {focusThisWeekMinutes} min total
+                          </span>
+                        </div>
+
+                        <div className="mt-5 grid grid-cols-7 gap-2 items-end h-40">
+                          {weekly.map((d) => {
+                            const h = Math.round((d.minutes / maxBar) * 100);
+                            const isZero = d.minutes === 0;
+
+                            return (
+                              <div key={d.day} className="flex flex-col items-center gap-2">
+                                <div className="w-full h-28 flex items-end">
+                                  <div
+                                    className={cx(
+                                      "w-full rounded-2xl border transition",
+                                      isZero
+                                        ? "bg-zinc-100 border-zinc-200"
+                                        : "bg-yellow-200/70 border-yellow-200 hover:bg-yellow-200"
+                                    )}
+                                    style={{ height: `${Math.max(8, h)}%` }}
+                                    title={`${d.day}: ${d.minutes} min`}
+                                  />
+                                </div>
+                                <div className="text-[11px] text-zinc-500">{d.day}</div>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        <div className="mt-5 rounded-2xl border border-zinc-200 bg-[#FFFBF2] p-4">
+                          <p className="text-xs font-semibold text-zinc-900">Insight</p>
+                          <p className="mt-1 text-sm text-zinc-600">
+                            Your strongest day is{" "}
+                            <span className="font-semibold text-zinc-800">{bestDay}</span>.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm">
+                        <p className="text-sm font-semibold text-zinc-900">Goals</p>
+                        <p className="mt-1 text-xs text-zinc-500">Small targets keep you consistent.</p>
+
+                        <div className="mt-4 space-y-3">
+                          <GoalRow title="Study 4 days this week" done={daysActive >= 4} meta={`${daysActive}/4 days`} />
+                          <GoalRow
+                            title="Reach weekly minutes goal"
+                            done={goalWeeklyMinutes > 0 ? focusThisWeekMinutes >= goalWeeklyMinutes : false}
+                            meta={`${focusThisWeekMinutes}/${goalWeeklyMinutes || 0} min`}
+                          />
+                          <GoalRow title="Keep streak alive today" done={true} meta="Tracked by server streak" />
+                        </div>
+
+                        <div className="mt-5">
+                          <button
+                            type="button"
+                            onClick={handleAdjustWeeklyGoal}
+                            disabled={goalUpdating}
+                            className="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm font-semibold text-zinc-800 hover:border-yellow-300 hover:bg-yellow-50 transition disabled:opacity-60 disabled:cursor-not-allowed"
+                          >
+                            {goalUpdating ? "Saving..." : "Adjust weekly goal"}
+                            <ChevronRight className="inline-block ml-2 h-4 w-4" />
+                          </button>
+                        </div>
+
+                        <div className="mt-4 rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
+                          <p className="text-xs font-semibold text-zinc-900">Tip</p>
+                          <p className="mt-1 text-sm text-zinc-600">
+                            Short sessions daily are better than one long session.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="px-5 sm:px-7 pb-7">
+
+                    </div>
+                  </div>
                 </motion.div>
-              </AnimatePresence>
+              )}
             </div>
-          </div>
-        </motion.div>
+          </main>
+        </div>
       </div>
     </div>
   );

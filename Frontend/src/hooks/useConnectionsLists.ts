@@ -34,11 +34,17 @@ export function useFollowing(uid?: number, params?: { limit?: number; offset?: n
 }
 
 export function useFollowCounts(uid?: number) {
+  const safeUid = typeof uid === "number" && Number.isFinite(uid) && uid > 0 ? uid : undefined;
+
   return useQuery({
-    queryKey: uid ? followCountsKey(uid) : ["profile", "followCounts", "missing"],
-    queryFn: () => profileSocialApi.followCounts(uid as number),
-    enabled: Number.isFinite(uid),
-    staleTime: 10_000,
-    retry: false,
+    queryKey: ["followCounts", safeUid],
+    enabled: !!safeUid,
+    queryFn: () => profileSocialApi.followCounts(safeUid!),
+    staleTime: 15_000,
+    retry: (count, err: any) => {
+      const status = err?.status;
+      if (status && status >= 400 && status < 500) return false;
+      return count < 2;
+    },
   });
 }

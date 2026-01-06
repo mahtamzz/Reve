@@ -15,6 +15,7 @@ import { logout } from "@/utils/authToken";
 import { GroupCard } from "@/components/Groups/GroupCard";
 
 import { useCreateGroup, useDeleteGroup, useDiscoverGroups, useMyGroups } from "@/hooks/useGroups";
+import Topbar from "@/components/Dashboard/DashboardHeader";
 
 
 
@@ -22,10 +23,11 @@ function mapApiGroupToCard(g: ApiGroup) {
   return {
     id: g.id,
     name: g.name,
-    // backend does not provide score yet => keep 0
     score: 0,
+    xp: (g as any).xp ?? 0,
   };
 }
+
 
 function matchLoose(g: ApiGroup, q: string) {
   const qq = q.trim().toLowerCase();
@@ -232,13 +234,17 @@ export default function Groups() {
   };
 
   const showSuggest = openSuggest && debouncedQ.trim().length > 0;
+  
 
   return (
     <div className="min-h-screen bg-creamtext text-zinc-900">
+
       <div className="flex">
         <Sidebar activeKey="groups" onLogout={logout} />
 
         <div className="flex-1 min-w-0 md:ml-64">
+          <Topbar/>
+
           <div className="mx-auto max-w-6xl px-4 py-10">
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
@@ -416,9 +422,10 @@ export default function Groups() {
                         transition={{ duration: 0.25, ease: "easeOut" }}
                         className={
                           newCardIdRef.current === uiGroup.id
-                            ? "ring-2 ring-yellow-300/60 rounded-3xl"
+                            ? "rounded-3xl ring-2 ring-yellow-300/70 shadow-[0_0_0_6px_rgba(253,224,71,0.18)]"
                             : ""
-                        }
+                        }                        
+                        
                       >
                         <GroupCard
                           group={uiGroup as any}

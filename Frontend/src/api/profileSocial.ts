@@ -57,6 +57,18 @@ export const profileSocialApi = {
       `${P}/${uid}/following${qs ? `?${qs}` : ""}`
     );
   },
+    /** GET /api/profile/search?q=... */
+    searchUsers: (params: { q: string; limit?: number; offset?: number }) => {
+      const q = new URLSearchParams();
+      q.set("q", params.q);
+      if (params.limit != null) q.set("limit", String(params.limit));
+      if (params.offset != null) q.set("offset", String(params.offset));
+  
+      return profileClient.get<ListResponse<PublicProfileLite>>(
+        `${P}/search?${q.toString()}`
+      );
+    },
+  
 
   /** GET /api/profile/:uid/follow-status  (current user => target uid) */
   followStatus: (uid: number) =>

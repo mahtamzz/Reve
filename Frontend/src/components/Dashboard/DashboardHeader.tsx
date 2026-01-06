@@ -1,108 +1,130 @@
-import { Search, Bell, Mail, User2, Settings2 } from "lucide-react";
-import CommandPalette from "../ui/CommandPalette";
+// src/components/layout/Topbar.tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { useNavigate } from "react-router-dom";
+import { Bell, Mail, Search, Settings2, User2 } from "lucide-react";
+import { useLocation, useNavigate } from "react-router-dom";
 
+import CommandPalette from "../ui/CommandPalette";
 import { authClient } from "@/api/client";
-import { getAccessToken, setAccessToken } from "@/utils/authToken";
-
-const EASE_OUT: [number, number, number, number] = [0.16, 1, 0.3, 1];
+import { getAvatarUrl } from "@/api/media";
 
 type TopbarProfile = {
   username: string;
   email?: string;
   fullName?: string;
   role?: string;
-  avatarUrl?: string | null;
 };
 
-function stripTrailingSlashes(url: string) {
-  return url.replace(/\/+$/, "");
+type BreadcrumbItem = {
+  label: string;
+  to?: string; // optional link
+};
+
+type TopbarProps = {
+  /** Title shown on left. If not provided, derives from route. */
+  title?: string;
+
+  /** Optional subtitle/breadcrumb row under title (small text). */
+  subtitle?: string;
+
+  /** Optional breadcrumb-like items shown next to title */
+  crumbs?: BreadcrumbItem[];
+
+  /** Right side actions (before notifications/profile). */
+  actions?: React.ReactNode;
+
+  /** Hide search box completely */
+  hideSearch?: boolean;
+
+  /** Override profile if parent already has it */
+  profile?: (TopbarProfile & { avatarUrl?: string | null }) | null;
+
+  /** Called when user submits search (Enter) */
+  onSearchSubmit?: (q: string) => void;
+
+  /** Default search placeholder */
+  searchPlaceholder?: string;
+};
+
+function cx(...xs: Array<string | false | null | undefined>) {
+  return xs.filter(Boolean).join(" ");
 }
 
-const AUTH_BASE = stripTrailingSlashes(
-  import.meta.env.VITE_API_AUTH_BASE || "http://localhost:3000/api"
-);
-const REFRESH_URL = `${AUTH_BASE}/auth/refresh-token`;
-
-const MEDIA_ORIGIN = stripTrailingSlashes(
-  import.meta.env.VITE_API_MEDIA_ORIGIN || "http://localhost:3004"
-);
-const MEDIA_AVATAR_URL = `${MEDIA_ORIGIN}/api/media/avatar`;
-
-async function refreshAccessTokenOnce(): Promise<boolean> {
-  try {
-    const res = await fetch(REFRESH_URL, {
-      method: "POST",
-      credentials: "include",
-    });
-    if (!res.ok) return false;
-
-    const ct = res.headers.get("content-type") || "";
-    if (ct.includes("application/json")) {
-      const data: any = await res.json().catch(() => null);
-      if (data?.token) setAccessToken(data.token);
-    }
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function fetchAvatarBlobWithRetry(): Promise<Blob | null> {
-  const doReq = async () => {
-    const token = getAccessToken();
-    return fetch(MEDIA_AVATAR_URL, {
-      method: "GET",
-      credentials: "include",
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-  };
-
-  let res = await doReq();
-
-  if (res.status === 401) {
-    const ok = await refreshAccessTokenOnce();
-    if (!ok) return null;
-    res = await doReq();
-  }
-
-  if (!res.ok) return null;
-  return await res.blob();
+// very small default mapping (you can extend)
+function routeTitle(pathname: string) {
+  if (pathname === "/" || pathname.startsWith("/dashboard")) return "Dashboard";
+  if (pathname.startsWith("/profile")) return "Profile";
+  if (pathname.startsWith("/connections")) return "Connections";
+  if (pathname.startsWith("/groups")) return "Groups";
+  if (pathname.startsWith("/study")) return "Study";
+  if (pathname.startsWith("/notifications")) return "Notifications";
+  return "App";
 }
 
 export default function Topbar({
-  username,
+  title,
+  subtitle,
+  crumbs,
+  actions,
+  hideSearch,
   profile,
-}: {
-  username: string;
-  profile?: TopbarProfile;
-}) {
+  onSearchSubmit,
+  searchPlaceholder = "Search…",
+}: TopbarProps) {
+  const navigate = useNavigate();
+  const loc = useLocation();
+
   const [openCmd, setOpenCmd] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
-  const navigate = useNavigate();
 
-  // ✅ state داخلی برای وقتی profile پاس داده نشده
   const [remoteProfile, setRemoteProfile] = useState<TopbarProfile | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
 
-  // ✅ avatar blob url management
-  const avatarObjectUrlRef = useRef<string | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
 
-  const p = useMemo<TopbarProfile>(() => {
-    if (profile) return profile;
-    if (remoteProfile) return remoteProfile;
+  const [search, setSearch] = useState("");
+
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const computedTitle = title ?? routeTitle(loc.pathname);
+
+  const p = useMemo(() => {
+    if (profile) {
+      return {
+        username: profile.username,
+        email: profile.email,
+        fullName: profile.fullName ?? profile.username,
+        role: profile.role ?? "Student",
+        avatarUrl: profile.avatarUrl ?? null,
+      };
+    }
+
+    if (remoteProfile) {
+      return {
+        username: remoteProfile.username,
+        email: remoteProfile.email,
+        fullName: remoteProfile.fullName ?? remoteProfile.username,
+        role: remoteProfile.role ?? "Student",
+        avatarUrl,
+      };
+    }
 
     return {
-      username,
+      username: "user",
       email: undefined,
-      fullName: username,
+      fullName: "User",
       role: "Student",
-      avatarUrl: null,
+      avatarUrl,
     };
-  }, [profile, remoteProfile, username]);
+  }, [profile, remoteProfile, avatarUrl]);
 
+  // keyboard shortcuts
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
@@ -118,70 +140,54 @@ export default function Topbar({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // ✅ اگر profile از بیرون نیومده، از API بگیر
+  // Fetch /auth/me only if profile prop not provided
   useEffect(() => {
-    if (profile) return; // parent خودش می‌ده
-    let mounted = true;
+    if (profile) return;
+
+    let cancelled = false;
 
     const run = async () => {
       setLoadingProfile(true);
       try {
-        // 1) me از سرویس auth
         const data: any = await authClient.get("/auth/me");
         const u = (data?.user ?? data) as any;
 
         const next: TopbarProfile = {
-          username: u?.username ?? username,
+          username: u?.username ?? "user",
           email: u?.email ?? undefined,
-          fullName: u?.fullName ?? u?.name ?? u?.username ?? username,
+          fullName: u?.fullName ?? u?.name ?? u?.username ?? "User",
           role: u?.role ?? "Student",
-          avatarUrl: null,
         };
 
-        // 2) avatar از سرویس media (blob)
-        const blob = await fetchAvatarBlobWithRetry();
-        if (blob) {
-          const objUrl = URL.createObjectURL(blob);
-
-          // revoke قبلی
-          if (avatarObjectUrlRef.current) {
-            try {
-              URL.revokeObjectURL(avatarObjectUrlRef.current);
-            } catch {}
-          }
-          avatarObjectUrlRef.current = objUrl;
-          next.avatarUrl = objUrl;
-        }
-
-        if (!mounted) return;
-        setRemoteProfile(next);
+        if (!cancelled && mountedRef.current) setRemoteProfile(next);
+        if (!cancelled && mountedRef.current) setAvatarUrl(getAvatarUrl({ bustCache: true }));
       } catch {
-        // اگر session خراب بود، فقط fallback نگه دار
-        if (!mounted) return;
-        setRemoteProfile({
-          username,
-          fullName: username,
-          role: "Student",
-          avatarUrl: null,
-        });
+        if (!cancelled && mountedRef.current) {
+          setRemoteProfile({
+            username: "user",
+            fullName: "User",
+            role: "Student",
+          });
+          setAvatarUrl(null);
+        }
       } finally {
-        if (mounted) setLoadingProfile(false);
+        if (!cancelled && mountedRef.current) setLoadingProfile(false);
       }
     };
 
     run();
 
     return () => {
-      mounted = false;
-      // cleanup blob url
-      if (avatarObjectUrlRef.current) {
-        try {
-          URL.revokeObjectURL(avatarObjectUrlRef.current);
-        } catch {}
-        avatarObjectUrlRef.current = null;
-      }
+      cancelled = true;
     };
-  }, [profile, username]);
+  }, [profile]);
+
+  const submitSearch = () => {
+    const q = search.trim();
+    if (!q) return;
+    onSearchSubmit?.(q);
+    setSearch("");
+  };
 
   return (
     <>
@@ -194,13 +200,38 @@ export default function Topbar({
             <div className="min-w-0">
               <div className="flex items-baseline gap-3">
                 <div className="text-[17px] font-semibold tracking-tight text-zinc-900">
-                  Dashboard
+                  {computedTitle}
                 </div>
 
-                <div className="hidden sm:flex items-center gap-2 text-xs text-zinc-500">
-                  <span className="text-zinc-300">/</span>
-                  <span className="truncate">Study overview</span>
-                </div>
+                {/* crumbs */}
+                {crumbs?.length ? (
+                  <div className="hidden sm:flex items-center gap-2 text-xs text-zinc-500 min-w-0">
+                    <span className="text-zinc-300">/</span>
+                    <div className="flex items-center gap-2 min-w-0">
+                      {crumbs.map((c, idx) => (
+                        <React.Fragment key={`${c.label}-${idx}`}>
+                          {idx !== 0 ? <span className="text-zinc-300">·</span> : null}
+                          {c.to ? (
+                            <button
+                              onClick={() => navigate(c.to!)}
+                              className="truncate hover:text-zinc-700 transition"
+                              type="button"
+                            >
+                              {c.label}
+                            </button>
+                          ) : (
+                            <span className="truncate">{c.label}</span>
+                          )}
+                        </React.Fragment>
+                      ))}
+                    </div>
+                  </div>
+                ) : subtitle ? (
+                  <div className="hidden sm:flex items-center gap-2 text-xs text-zinc-500 min-w-0">
+                    <span className="text-zinc-300">/</span>
+                    <span className="truncate">{subtitle}</span>
+                  </div>
+                ) : null}
               </div>
 
               <div className="mt-1 h-[2px] w-14 rounded-full bg-yellow-300/70" />
@@ -208,33 +239,38 @@ export default function Topbar({
 
             {/* Right */}
             <div className="flex items-center gap-3">
+              {/* actions slot */}
+              {actions ? <div className="hidden md:flex items-center gap-2">{actions}</div> : null}
+
               {/* Search */}
-              <div
-                className="
-                  hidden md:flex items-center gap-2
-                  rounded-xl border border-zinc-200 bg-white
-                  px-3 py-2
-                  shadow-sm
-                  transition-all duration-300
-                  hover:border-yellow-300 hover:shadow-md
-                  focus-within:border-yellow-400 focus-within:shadow-md
-                  focus-within:ring-4 focus-within:ring-yellow-200/40
-                "
-              >
-                <Search className="h-4 w-4 text-zinc-400 transition-colors duration-300 group-focus-within:text-zinc-600" />
-                <input
+              {!hideSearch ? (
+                <div
                   className="
-                    w-44 outline-none bg-transparent text-sm
-                    placeholder:text-zinc-400
+                    hidden md:flex items-center gap-2
+                    rounded-xl border border-zinc-200 bg-white
+                    px-3 py-2
+                    shadow-sm
                     transition-all duration-300
-                    focus:w-64
+                    hover:border-yellow-300 hover:shadow-md
+                    focus-within:border-yellow-400 focus-within:shadow-md
+                    focus-within:ring-4 focus-within:ring-yellow-200/40
                   "
-                  placeholder="Search..."
-                />
-                <kbd className="ml-1 hidden lg:inline-flex rounded-lg border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[10px] text-zinc-500">
-                  ⌘ K
-                </kbd>
-              </div>
+                >
+                  <Search className="h-4 w-4 text-zinc-400" />
+                  <input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") submitSearch();
+                    }}
+                    className="w-44 outline-none bg-transparent text-sm placeholder:text-zinc-400 transition-all duration-300 focus:w-64"
+                    placeholder={searchPlaceholder}
+                  />
+                  <kbd className="ml-1 hidden lg:inline-flex rounded-lg border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[10px] text-zinc-500">
+                    ⌘ K
+                  </kbd>
+                </div>
+              ) : null}
 
               {/* Notifications */}
               <button
@@ -247,6 +283,7 @@ export default function Topbar({
                   hover:-translate-y-0.5 hover:shadow-md
                   hover:border-yellow-300
                 "
+                type="button"
               >
                 <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-yellow-400" />
                 <Bell className="h-4 w-4 text-zinc-600 transition-transform duration-300 group-hover:-rotate-6" />
@@ -272,10 +309,14 @@ export default function Topbar({
                     focus:outline-none focus:ring-4 focus:ring-yellow-200/40
                   "
                 >
-                  {/* Avatar */}
                   <div className="h-8 w-8 rounded-full overflow-hidden border border-zinc-200 bg-zinc-100">
                     {p.avatarUrl ? (
-                      <img src={p.avatarUrl} alt="avatar" className="h-full w-full object-cover" />
+                      <img
+                        src={p.avatarUrl}
+                        alt="avatar"
+                        className="h-full w-full object-cover"
+                        onError={() => setAvatarUrl(null)}
+                      />
                     ) : (
                       <div className="h-full w-full bg-[radial-gradient(circle_at_30%_30%,rgba(250,204,21,0.35),transparent_55%),radial-gradient(circle_at_70%_70%,rgba(0,0,0,0.04),transparent_60%)]" />
                     )}
@@ -295,7 +336,6 @@ export default function Topbar({
                   </div>
                 </button>
 
-                {/* Hover card */}
                 <AnimatePresence>
                   {profileOpen && (
                     <motion.div
@@ -359,7 +399,7 @@ export default function Topbar({
                           <div className="rounded-2xl border border-zinc-200 bg-[#FFFBF2] p-3">
                             <p className="text-xs font-semibold text-zinc-900">Tip</p>
                             <p className="mt-1 text-xs text-zinc-600">
-                              Click your profile to open profile.
+                              Press <span className="font-semibold">⌘K</span> for quick actions.
                             </p>
                           </div>
                         </div>
@@ -385,23 +425,30 @@ export default function Topbar({
           </div>
 
           {/* Mobile search */}
-          <div className="mt-3 md:hidden">
-            <div
-              className="
-                flex items-center gap-2
-                rounded-xl border border-zinc-200 bg-white
-                px-3 py-2 shadow-sm
-                transition-all duration-300
-                focus-within:border-yellow-400 focus-within:ring-4 focus-within:ring-yellow-200/40
-              "
-            >
-              <Search className="h-4 w-4 text-zinc-400" />
-              <input
-                className="w-full outline-none bg-transparent text-sm placeholder:text-zinc-400"
-                placeholder="Search..."
-              />
+          {!hideSearch ? (
+            <div className="mt-3 md:hidden">
+              <div
+                className="
+                  flex items-center gap-2
+                  rounded-xl border border-zinc-200 bg-white
+                  px-3 py-2 shadow-sm
+                  transition-all duration-300
+                  focus-within:border-yellow-400 focus-within:ring-4 focus-within:ring-yellow-200/40
+                "
+              >
+                <Search className="h-4 w-4 text-zinc-400" />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") submitSearch();
+                  }}
+                  className="w-full outline-none bg-transparent text-sm placeholder:text-zinc-400"
+                  placeholder={searchPlaceholder}
+                />
+              </div>
             </div>
-          </div>
+          ) : null}
         </div>
       </header>
     </>

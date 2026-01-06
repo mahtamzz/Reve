@@ -1,13 +1,21 @@
 import React, { useMemo } from "react";
-import { motion } from "framer-motion";
-import { UsersRound, Trash2, Sparkles, ChevronRight, Zap } from "lucide-react";
+import { motion, useMotionValue, useTransform } from "framer-motion";
+import { UsersRound, Trash2, ChevronRight, Zap, Sparkles } from "lucide-react";
+import type { Variants } from "framer-motion";
+
+const EASE_OUT: [number, number, number, number] = [0.16, 1, 0.3, 1];
+
 
 export type Group = {
   id: string;
   name: string;
   score: number;
-  xp: number; // ✅ امتیاز گروه (Group Points)
+  xp: number;
 };
+
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
 
 export function GroupCard({
   group,
@@ -31,6 +39,44 @@ export function GroupCard({
   const progress =
     xpCap > 0 ? Math.min(100, Math.round(((group.xp || 0) / xpCap) * 100)) : 0;
 
+  // 3D tilt (match with clean dashboard feel; subtle)
+  const mx = useMotionValue(0);
+  const my = useMotionValue(0);
+  const rX = useTransform(my, [-0.5, 0.5], [9, -9]);
+  const rY = useTransform(mx, [-0.5, 0.5], [-11, 11]);
+
+  const onMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const px = (e.clientX - rect.left) / rect.width - 0.5;
+    const py = (e.clientY - rect.top) / rect.height - 0.5;
+    mx.set(clamp(px, -0.5, 0.5));
+    my.set(clamp(py, -0.5, 0.5));
+  };
+  const onLeave = () => {
+    mx.set(0);
+    my.set(0);
+  };
+
+  const container: Variants = {
+    hidden: { opacity: 0, y: 12, scale: 0.99 },
+    show: {
+      opacity: 1,
+      y: 0,
+      scale: 1,
+      transition: { duration: 0.42, ease: EASE_OUT, staggerChildren: 0.06 },
+    },
+  };
+  
+  const item: Variants = {
+    hidden: { opacity: 0, y: 10 },
+    show: {
+      opacity: 1,
+      y: 0,
+      transition: { duration: 0.38, ease: EASE_OUT },
+    },
+  };
+  
+
   return (
     <motion.div
       role="button"
@@ -42,155 +88,153 @@ export function GroupCard({
           handleOpen();
         }
       }}
-      initial={{ opacity: 0, y: 14, scale: 0.985 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      whileHover={{ y: -6, scale: 1.012 }}
-      whileTap={{ scale: 0.995 }}
-      transition={{ duration: 0.34, ease: [0.16, 1, 0.3, 1] }}
+      variants={container}
+      initial="hidden"
+      animate="show"
+      whileHover={{ y: -7 }}
+      whileTap={{ scale: 0.992 }}
+      transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
+      onMouseMove={onMove}
+      onMouseLeave={onLeave}
       className="
         group relative w-full text-left outline-none
         overflow-hidden rounded-[30px]
-        border border-white/25
+        border border-zinc-200/70
         p-6
-        shadow-[0_18px_60px_-26px_rgba(0,0,0,0.22)]
-        hover:shadow-[0_28px_90px_-40px_rgba(0,0,0,0.28)]
-        focus:ring-2 focus:ring-white/50
+        shadow-[0_18px_60px_-35px_rgba(0,0,0,0.25)]
+        hover:shadow-[0_34px_110px_-52px_rgba(0,0,0,0.34)]
+        focus:ring-2 focus:ring-yellow-300/60
         transition-shadow
+        will-change-transform
       "
       style={{
+        transformStyle: "preserve-3d",
+        rotateX: rX as any,
+        rotateY: rY as any,
         background:
-          // 🌿 pastel lofi aurora: warm بسیار کنترل‌شده، بدون جیغ
-          "radial-gradient(900px 520px at 12% 8%, rgba(255,247,232,0.88), transparent 60%)," +
-          "radial-gradient(820px 520px at 92% 16%, rgba(232,246,255,0.58), transparent 56%)," +
-          "radial-gradient(920px 560px at 42% 112%, rgba(244,240,255,0.62), transparent 62%)," +
-          "linear-gradient(180deg, rgba(255,255,255,0.62), rgba(255,255,255,0.36))",
-        backdropFilter: "blur(22px)",
-        WebkitBackdropFilter: "blur(22px)",
+        "radial-gradient(900px 520px at 12% 10%, rgba(255,228,210,0.85), transparent 62%)," +
+        "radial-gradient(860px 520px at 88% 14%, rgba(238,225,255,0.72), transparent 58%)," +
+        "radial-gradient(720px 520px at 82% 92%, rgba(255,244,200,0.55), transparent 58%)," +
+        "linear-gradient(180deg, rgba(255,255,255,0.82), rgba(255,255,255,0.54))",      
+        backdropFilter: "blur(18px)",
+        WebkitBackdropFilter: "blur(18px)",
       }}
     >
-      {/* --- soft noise (lofi texture) --- */}
+      {/* soft noise */}
       <div
-        className="pointer-events-none absolute inset-0 opacity-[0.08] mix-blend-overlay"
+        className="pointer-events-none absolute inset-0 opacity-[0.07] mix-blend-overlay"
         style={{
           backgroundImage:
-            "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='.30'/%3E%3C/svg%3E\")",
+            "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='.30'/%3E%3C/svg%3E\")",
         }}
       />
 
-      {/* --- gentle glass edge ring (breathing, very subtle) --- */}
+      {/* breathing ring */}
       <motion.div
         aria-hidden
         className="pointer-events-none absolute inset-0 rounded-[30px]"
-        initial={{ opacity: 0.18 }}
-        animate={{ opacity: [0.14, 0.28, 0.14] }}
-        transition={{ duration: 4.6, repeat: Infinity, ease: "easeInOut" }}
+        initial={{ opacity: 0.22 }}
+        animate={{ opacity: [0.16, 0.32, 0.16] }}
+        transition={{ duration: 5.2, repeat: Infinity, ease: "easeInOut" }}
         style={{
-          border: "1px solid rgba(255,255,255,0.22)",
-          boxShadow:
-            "inset 0 1px 0 rgba(255,255,255,0.16), 0 0 0 1px rgba(0,0,0,0.03)",
+          border: "1px solid rgba(255,255,255,0.24)",
+          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.18)",
         }}
       />
 
-      {/* --- calm grid sheen (only on top-left) --- */}
-      <div
-        className="pointer-events-none absolute inset-0 opacity-[0.09]"
+      {/* gentle aurora drift */}
+      <motion.div
+        aria-hidden
+        className="pointer-events-none absolute -inset-20 blur-3xl opacity-[0.28]"
+        animate={{ x: [0, 22, -10, 0], y: [0, -12, 16, 0] }}
+        transition={{ duration: 16, repeat: Infinity, ease: "easeInOut" }}
         style={{
-          backgroundImage:
-            "linear-gradient(rgba(255,255,255,0.26) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.26) 1px, transparent 1px)",
-          backgroundSize: "22px 22px",
-          maskImage:
-            "radial-gradient(circle at 18% 12%, black 0%, transparent 66%)",
-          WebkitMaskImage:
-            "radial-gradient(circle at 18% 12%, black 0%, transparent 66%)",
+          background:
+            "conic-gradient(from 220deg at 50% 50%, rgba(253,224,71,0.14), rgba(210,245,255,0.30), rgba(225,215,255,0.30), rgba(210,255,232,0.26), rgba(253,224,71,0.14))",
         }}
       />
 
-      {/* --- pastel orbs (floating very gently) --- */}
-      <motion.div
-        aria-hidden
-        className="pointer-events-none absolute -top-28 -right-28 h-72 w-72 rounded-full blur-[120px]"
-        style={{ background: "rgba(255,244,228,0.55)" }}
-        animate={{ y: [0, 10, 0], x: [0, -8, 0], opacity: [0.45, 0.6, 0.45] }}
-        transition={{ duration: 9, repeat: Infinity, ease: "easeInOut" }}
-      />
-      <motion.div
-        aria-hidden
-        className="pointer-events-none absolute -bottom-32 -left-32 h-80 w-80 rounded-full blur-[140px]"
-        style={{ background: "rgba(229,246,255,0.46)" }}
-        animate={{ y: [0, -12, 0], x: [0, 9, 0], opacity: [0.34, 0.55, 0.34] }}
-        transition={{ duration: 11, repeat: Infinity, ease: "easeInOut" }}
-      />
-
-      {/* --- soft highlight sweep (not flashy) --- */}
+      {/* hover sweep */}
       <motion.span
         aria-hidden
         className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100"
-        initial={{ x: "-120%" }}
-        whileHover={{ x: "120%" }}
+        initial={{ x: "-130%" }}
+        whileHover={{ x: "130%" }}
         transition={{ duration: 1.05, ease: "easeInOut" }}
         style={{
           background:
-            "linear-gradient(90deg, transparent, rgba(255,255,255,0.18), transparent)",
+            "linear-gradient(90deg, transparent, rgba(255,255,255,0.22), transparent)",
           transform: "skewX(-14deg)",
         }}
       />
 
-      <div className="relative">
+      {/* mini badge (matches search dropdown vibe) */}
+      <motion.div
+        aria-hidden
+        className="pointer-events-none absolute right-5 top-5"
+        initial={{ opacity: 0, y: -6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35, ease: "easeOut" }}
+      >
+
+      </motion.div>
+
+      <div className="relative" style={{ transform: "translateZ(1px)" }}>
         {/* header */}
-        <div className="flex items-start justify-between gap-3">
+        <motion.div variants={item} className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <h3 className="text-lg sm:text-xl font-semibold tracking-tight text-zinc-900 truncate">
                 {group.name}
               </h3>
-
-              <motion.span
+              <span
                 className="
                   inline-flex items-center gap-1
-                  rounded-full border border-white/35 bg-white/25
+                  rounded-full border border-zinc-200/80 bg-white/55
                   px-2 py-1 text-[11px] font-semibold text-zinc-700
                   backdrop-blur
                 "
-                initial={{ opacity: 0, y: -2 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, ease: "easeOut" }}
-                title="Soft vibe"
+                title="Study group"
               >
-              </motion.span>
+                <UsersRound className="h-3.5 w-3.5 text-zinc-600" />
+                Group
+              </span>
             </div>
 
-            <p className="mt-1 text-xs text-zinc-600 flex items-center gap-2">
-              <UsersRound className="h-4 w-4 text-zinc-500" />
-              Study group
+            <p className="mt-1 text-sm text-zinc-600">
+              Tap to open details & members
             </p>
           </div>
 
           {/* actions */}
           <div className="flex items-center gap-2 shrink-0">
-            <div
+            <motion.div
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.98 }}
               className="
-                rounded-full border border-white/35 bg-white/25
+                rounded-full border border-zinc-200/80 bg-white/55
                 px-2.5 py-1 text-[11px] font-semibold text-zinc-700
                 backdrop-blur
               "
               title={`Progress: ${progress}%`}
             >
               {progress}%
-            </div>
+            </motion.div>
 
             {onDelete && (
-              <button
+              <motion.button
                 type="button"
                 disabled={deleteDisabled}
                 onClick={(e) => {
                   e.stopPropagation();
                   onDelete(group);
                 }}
+                whileHover={{ scale: 1.06, rotate: -2 }}
+                whileTap={{ scale: 0.97 }}
                 className="
-                  rounded-xl border border-white/35 bg-white/25
+                  rounded-2xl border border-zinc-200/80 bg-white/55
                   p-2 text-zinc-700
-                  hover:bg-white/35
-                  hover:border-white/50
+                  hover:bg-white/70 hover:border-yellow-300/70
                   hover:text-rose-600
                   transition
                   disabled:opacity-60 disabled:cursor-not-allowed
@@ -200,27 +244,40 @@ export function GroupCard({
                 title="Delete group"
               >
                 <Trash2 className="h-4 w-4" />
-              </button>
+              </motion.button>
             )}
           </div>
-        </div>
+        </motion.div>
+
+        {/* divider */}
+        <motion.div
+          variants={item}
+          className="my-5 h-px w-full"
+          style={{
+            background:
+              "linear-gradient(90deg, transparent, rgba(250,204,21,0.35), rgba(228,228,231,0.7), transparent)",
+          }}
+        />
 
         {/* stats */}
-        <div className="mt-5 grid grid-cols-2 gap-4">
+        <motion.div variants={item} className="grid grid-cols-2 gap-4">
           <motion.div
-            whileHover={{ y: -2 }}
+            whileHover={{ y: -4 }}
             transition={{ duration: 0.22, ease: "easeOut" }}
             className="
-              relative overflow-hidden rounded-2xl
-              border border-white/30 bg-white/22
+              relative overflow-hidden rounded-3xl
+              border border-zinc-200/70 bg-white/55
               p-4 backdrop-blur
             "
           >
-            <div
-              className="pointer-events-none absolute -top-10 -right-10 h-24 w-24 rounded-full blur-2xl opacity-70"
+            <motion.div
+              aria-hidden
+              className="pointer-events-none absolute -top-12 -right-12 h-28 w-28 rounded-full blur-2xl"
+              animate={{ scale: [1, 1.08, 1], opacity: [0.45, 0.72, 0.45] }}
+              transition={{ duration: 5.6, repeat: Infinity, ease: "easeInOut" }}
               style={{
                 background:
-                  "radial-gradient(circle at 30% 30%, rgba(16,185,129,0.18), transparent 62%)",
+                  "radial-gradient(circle at 30% 30%, rgba(34,197,94,0.16), transparent 62%)",
               }}
             />
             <p className="text-[11px] text-zinc-600">Score</p>
@@ -231,19 +288,22 @@ export function GroupCard({
           </motion.div>
 
           <motion.div
-            whileHover={{ y: -2 }}
+            whileHover={{ y: -4 }}
             transition={{ duration: 0.22, ease: "easeOut" }}
             className="
-              relative overflow-hidden rounded-2xl
-              border border-white/30 bg-white/22
+              relative overflow-hidden rounded-3xl
+              border border-zinc-200/70 bg-white/55
               p-4 backdrop-blur
             "
           >
-            <div
-              className="pointer-events-none absolute -top-10 -right-10 h-24 w-24 rounded-full blur-2xl opacity-70"
+            <motion.div
+              aria-hidden
+              className="pointer-events-none absolute -top-12 -right-12 h-28 w-28 rounded-full blur-2xl"
+              animate={{ scale: [1, 1.09, 1], opacity: [0.42, 0.74, 0.42] }}
+              transition={{ duration: 6.2, repeat: Infinity, ease: "easeInOut" }}
               style={{
                 background:
-                  "radial-gradient(circle at 30% 30%, rgba(59,130,246,0.16), transparent 62%)",
+                  "radial-gradient(circle at 30% 30%, rgba(59,130,246,0.14), transparent 62%)",
               }}
             />
             <p className="text-[11px] text-zinc-600">Group Points</p>
@@ -258,26 +318,46 @@ export function GroupCard({
             </div>
             <p className="mt-1 text-[11px] text-zinc-500">Total group score</p>
           </motion.div>
-        </div>
+        </motion.div>
 
         {/* progress */}
-        <div className="mt-5">
+        <motion.div variants={item} className="mt-5">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-zinc-700">
+              Progress to next cap
+            </span>
+            <span className="text-[11px] text-zinc-600">
+              {group.xp} / {xpCap}
+            </span>
+          </div>
 
-
-          <div className="mt-2 h-3 rounded-full overflow-hidden border border-white/35 bg-white/22">
+          <div className="mt-2 h-3.5 rounded-full overflow-hidden border border-zinc-200/70 bg-white/45">
             <motion.div
               initial={{ width: 0 }}
               animate={{ width: `${progress}%` }}
-              transition={{ duration: 0.95, ease: [0.16, 1, 0.3, 1] }}
-              className="h-full rounded-full"
+              transition={{ type: "spring", stiffness: 110, damping: 18 }}
+              className="relative h-full rounded-full"
               style={{
-                // ✅ pastel gradient: warm خیلی کم + آبی ملایم + کرم
                 background:
-                  "linear-gradient(90deg, rgba(244,220,186,0.95), rgba(199,230,255,0.88), rgba(242,240,255,0.92))",
+                  "linear-gradient(90deg, rgba(253,224,71,0.55), rgba(195,232,255,0.88), rgba(224,214,255,0.90), rgba(199,255,226,0.82))",
                 boxShadow:
-                  "0 0 20px rgba(199,230,255,0.20), 0 0 28px rgba(244,220,186,0.16)",
+                  "0 0 18px rgba(253,224,71,0.14), 0 0 26px rgba(195,232,255,0.18)",
               }}
-            />
+            >
+              {/* shimmer */}
+              <motion.span
+                aria-hidden
+                className="absolute inset-0"
+                animate={{ x: ["-60%", "120%"] }}
+                transition={{ duration: 1.55, repeat: Infinity, ease: "easeInOut" }}
+                style={{
+                  background:
+                    "linear-gradient(90deg, transparent, rgba(255,255,255,0.34), transparent)",
+                  transform: "skewX(-18deg)",
+                  opacity: 0.9,
+                }}
+              />
+            </motion.div>
           </div>
 
           <div className="mt-2 flex items-center justify-end">
@@ -286,10 +366,10 @@ export function GroupCard({
               <span className="font-semibold text-zinc-800">{progress}%</span>
             </span>
           </div>
-        </div>
+        </motion.div>
 
         {/* open hint */}
-        <div className="mt-4 flex items-center justify-end">
+        <motion.div variants={item} className="mt-4 flex items-center justify-end">
           <motion.span
             className="
               inline-flex items-center gap-1
@@ -297,24 +377,14 @@ export function GroupCard({
               opacity-80 group-hover:opacity-100
               transition-opacity
             "
-            whileHover={{ x: 2 }}
+            whileHover={{ x: 3 }}
             transition={{ duration: 0.18, ease: "easeOut" }}
           >
             Open
             <ChevronRight className="h-4 w-4" />
           </motion.span>
-        </div>
+        </motion.div>
       </div>
-
-      {/* corner glow (soft) */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute right-0 top-0 h-24 w-24 opacity-70"
-        style={{
-          background:
-            "radial-gradient(circle at 100% 0%, rgba(255,255,255,0.38), transparent 62%)",
-        }}
-      />
     </motion.div>
   );
 }
