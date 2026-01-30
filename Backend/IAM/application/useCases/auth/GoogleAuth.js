@@ -53,7 +53,7 @@ class GoogleAuth {
         });
 
         // ✅ STORE THE NEW jti (rotation baseline)
-        const refreshPayload = this.tokenService.verifyRefresh(refreshToken);
+        const refreshPayload = this.jwtService.verifyRefresh(refreshToken);
         await this.refreshTokenStore.set(user.id, refreshPayload.jti, 7 * 24 * 60 * 60);
 
         return { user, accessToken, refreshToken };

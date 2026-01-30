@@ -23,6 +23,7 @@ class ListGroupMembers {
         try {
             profiles = await this.userProfileClient.getPublicProfilesBatch(authHeader, uids);
         } catch (e) {
+            console.error("[ListGroupMembers] getPublicProfilesBatch failed:", e.message);
             profiles = [];
         }
 
