@@ -140,7 +140,7 @@ export default function ManageSubjects() {
         <Sidebar activeKey="dashboard" onLogout={() => navigate("/login")} />
 
         <div className="flex-1 min-w-0 md:ml-64">
-          <Topbar username={username} />
+          <Topbar />
 
           <div className="mx-auto max-w-6xl px-4 py-6">
             {/* Header */}

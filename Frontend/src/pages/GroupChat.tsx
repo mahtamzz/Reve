@@ -207,7 +207,7 @@ export default function GroupChat() {
         <Sidebar activeKey="groups" onLogout={logout} />
 
         <div className="flex-1 min-w-0 md:ml-64 flex flex-col h-full">
-          <Topbar username="User" />
+          <Topbar/>
 
           <div className="flex-1 min-h-0 w-full px-4 py-4">
             <div className="max-w-7xl mx-auto h-full min-h-0">

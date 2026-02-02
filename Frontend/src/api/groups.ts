@@ -1,5 +1,5 @@
 // src/api/groups.ts
-import { groupsClient as apiClient } from "@/api/client";
+import { groupsClient as apiClient, ApiError } from "@/api/client";
 import type {
   ApiGroup,
   ApiGroupDetailsResponse,
@@ -51,51 +51,51 @@ function mapGroup(g: any): ApiGroup {
 }
 
 function normalizeMembersPayload(raw: any): ApiGroupMember[] {
-  // backend: {items: [...]}
   if (raw && Array.isArray(raw.items)) return raw.items as ApiGroupMember[];
-  // maybe backend returns array
   if (Array.isArray(raw)) return raw as ApiGroupMember[];
-  // already in shape
   if (raw && Array.isArray(raw.members)) return raw.members as ApiGroupMember[];
   return [];
 }
 
-async function tryGet<T>(paths: string[]): Promise<T> {
-  let lastErr: any = null;
-  for (const p of paths) {
-    try {
-      return await apiClient.get<T>(p);
-    } catch (e) {
-      lastErr = e;
-    }
-  }
-  throw lastErr;
+function minimalPrivateGroup(id: string): ApiGroup {
+  return mapGroup({
+    id,
+    name: "Private group",
+    description: "This is a private group. Join to see full details.",
+    visibility: "private",
+    weekly_xp: null,
+    minimum_dst_mins: null,
+  });
 }
 
 export const groupsApi = {
-  // ---- core details ----
-  getGroup: (id: string) =>
-    tryGet<any>([
-      `${GROUPS_PREFIX}/${id}`,
-      `${GROUPS_PREFIX}/${id}/details`,
-    ]).then((x) => {
-      // بعضی بک‌اندها مستقیم group رو میدن، بعضی {group,...}
+  // ---- group ----
+  getGroup: async (id: string): Promise<ApiGroup> => {
+    try {
+      const x = await apiClient.get<any>(`${GROUPS_PREFIX}/${id}`);
       const g = x?.group ?? x;
       return mapGroup(g);
-    }),
+    } catch (e: any) {
+      // ✅ swallow 403 for private group preview
+      if (e instanceof ApiError && e.status === 403) {
+        return minimalPrivateGroup(id);
+      }
+      throw e;
+    }
+  },
 
-    listMembers: async (groupId: string): Promise<ApiListGroupMembersResponse> => {
-      const res = await apiClient.get<ApiListGroupMembersResponse>(
-        `${GROUPS_PREFIX}/${groupId}/members`
-      );
-    
-      const items = normalizeMembersPayload(res);
-      return {
-        ...res,
-        total: (res as any)?.total ?? items.length,
-        items,
-      } as ApiListGroupMembersResponse;
-    },
+  // ---- members ----
+  listMembers: async (groupId: string): Promise<ApiListGroupMembersResponse> => {
+    const res = await apiClient.get<ApiListGroupMembersResponse>(
+      `${GROUPS_PREFIX}/${groupId}/members`
+    );
+    const items = normalizeMembersPayload(res);
+    return {
+      ...res,
+      total: (res as any)?.total ?? items.length,
+      items,
+    } as ApiListGroupMembersResponse;
+  },
 
   getDetails: async (id: string): Promise<ApiGroupDetailsResponse> => {
     const group = await groupsApi.getGroup(id);
@@ -106,10 +106,12 @@ export const groupsApi = {
         `${GROUPS_PREFIX}/${id}/members`
       );
       members = normalizeMembersPayload(memRes);
-      // اگر payload استاندارد بود:
-      if (Array.isArray((memRes as any).items)) members = (memRes as any).items;
-    } catch {
-      members = [];
+    } catch (e: any) {
+      if (e instanceof ApiError && (e.status === 403 || e.status === 401)) {
+        members = [];
+      } else {
+        members = [];
+      }
     }
 
     return { group, members };
@@ -117,24 +119,26 @@ export const groupsApi = {
 
   // ---- create/update/delete ----
   create: (body: CreateGroupBody) =>
-    apiClient.post<ApiGroup>(GROUPS_PREFIX, {
-      name: body.name,
-      description: body.description ?? null,
-      visibility: body.visibility,
-      weeklyXp: body.weeklyXp ?? undefined,
-      minimumDstMins: body.minimumDstMins ?? undefined,
-      // بک‌اند UpdateGroup خودش weeklyXp/minimumDstMins رو map میکنه
-      // و CreateGroup هم weeklyXp/minimumDstMins رو می‌گیره.
-    }).then(mapGroup),
+    apiClient
+      .post<ApiGroup>(GROUPS_PREFIX, {
+        name: body.name,
+        description: body.description ?? null,
+        visibility: body.visibility,
+        weeklyXp: body.weeklyXp ?? undefined,
+        minimumDstMins: body.minimumDstMins ?? undefined,
+      })
+      .then(mapGroup),
 
   update: (groupId: string, fields: UpdateGroupBody) =>
-    apiClient.patch<ApiGroup>(`${GROUPS_PREFIX}/${groupId}`, {
-      ...(fields.name !== undefined ? { name: fields.name } : {}),
-      ...(fields.description !== undefined ? { description: fields.description } : {}),
-      ...(fields.visibility !== undefined ? { visibility: fields.visibility } : {}),
-      ...(fields.weeklyXp !== undefined ? { weeklyXp: fields.weeklyXp } : {}),
-      ...(fields.minimumDstMins !== undefined ? { minimumDstMins: fields.minimumDstMins } : {}),
-    }).then(mapGroup),
+    apiClient
+      .patch<ApiGroup>(`${GROUPS_PREFIX}/${groupId}`, {
+        ...(fields.name !== undefined ? { name: fields.name } : {}),
+        ...(fields.description !== undefined ? { description: fields.description } : {}),
+        ...(fields.visibility !== undefined ? { visibility: fields.visibility } : {}),
+        ...(fields.weeklyXp !== undefined ? { weeklyXp: fields.weeklyXp } : {}),
+        ...(fields.minimumDstMins !== undefined ? { minimumDstMins: fields.minimumDstMins } : {}),
+      })
+      .then(mapGroup),
 
   remove: (groupId: string) => apiClient.delete<void>(`${GROUPS_PREFIX}/${groupId}`),
 
@@ -151,20 +155,24 @@ export const groupsApi = {
   list: (params: { limit?: number; offset?: number } = {}) => {
     const limit = params.limit ?? 20;
     const offset = params.offset ?? 0;
-    return apiClient.get<ApiGroup[]>(
-      `${GROUPS_PREFIX}?limit=${encodeURIComponent(limit)}&offset=${encodeURIComponent(offset)}`
-    ).then((arr) => (Array.isArray(arr) ? arr.map(mapGroup) : arr));
+    return apiClient
+      .get<ApiGroup[]>(
+        `${GROUPS_PREFIX}?limit=${encodeURIComponent(limit)}&offset=${encodeURIComponent(offset)}`
+      )
+      .then((arr) => (Array.isArray(arr) ? arr.map(mapGroup) : arr));
   },
 
   search: (params: { q: string; limit?: number; offset?: number }) => {
     const q = params.q ?? "";
     const limit = params.limit ?? 20;
     const offset = params.offset ?? 0;
-    return apiClient.get<ApiGroup[]>(
-      `${GROUPS_PREFIX}/search?q=${encodeURIComponent(q)}&limit=${encodeURIComponent(
-        limit
-      )}&offset=${encodeURIComponent(offset)}`
-    ).then((arr) => (Array.isArray(arr) ? arr.map(mapGroup) : arr));
+    return apiClient
+      .get<ApiGroup[]>(
+        `${GROUPS_PREFIX}/search?q=${encodeURIComponent(q)}&limit=${encodeURIComponent(
+          limit
+        )}&offset=${encodeURIComponent(offset)}`
+      )
+      .then((arr) => (Array.isArray(arr) ? arr.map(mapGroup) : arr));
   },
 
   listMine: () => apiClient.get<any[]>(`${GROUPS_PREFIX}/me`).then((arr) => arr),

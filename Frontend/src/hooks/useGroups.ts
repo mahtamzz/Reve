@@ -6,7 +6,6 @@ import { profileClient } from "@/api/client";
 
 // ---------- helpers ----------
 export function isUuid(v: string) {
-  // UUID v4-ish (accepts v1..v5 formats)
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
 }
 
@@ -18,7 +17,6 @@ function pickUid(m: any): string | null {
 }
 
 function pickProfileFromMember(m: any) {
-  // tolerate many shapes
   const displayName =
     m?.profile?.display_name ??
     m?.profile?.displayName ??
@@ -54,7 +52,6 @@ function pickProfileFromMember(m: any) {
 }
 
 async function fetchUserByUid(uid: string) {
-  // ✅ profile-service endpoint (اگر فرق داشت همینو عوض کن)
   return profileClient.get<any>(`/users/${uid}`);
 }
 
@@ -69,10 +66,11 @@ export const groupsDiscoverKey = (limit: number, offset: number) =>
 
 // ---------- queries ----------
 export function useGroupDetails(groupId?: string, enabled = true) {
+  const gid = groupId || "";
   return useQuery({
-    queryKey: groupKey(groupId || ""),
-    queryFn: () => groupsApi.getGroup(groupId as string),
-    enabled: Boolean(groupId) && enabled,
+    queryKey: groupKey(gid),
+    queryFn: () => groupsApi.getGroup(gid),
+    enabled: Boolean(gid) && enabled,
     retry: false,
     staleTime: 30_000,
   });
@@ -96,10 +94,6 @@ export function useDiscoverGroups(limit: number, offset: number) {
   });
 }
 
-/**
- * ✅ Membership:
- * - فقط وقتی gid واقعاً UUID هست می‌زنیم، چون بک‌اند group_id رو UUID می‌خواهد وگرنه 500 می‌خوری.
- */
 export function useMyMembership(groupId?: string, enabled = true) {
   const gid = groupId || "";
   const canCall = Boolean(gid) && isUuid(gid) && enabled;
@@ -114,9 +108,7 @@ export function useMyMembership(groupId?: string, enabled = true) {
 }
 
 /**
- * ✅ Members with FULL meta:
- * - اول از groups-service: /groups/:id/members (online/role/uid)
- * - اگر profile داخل پاسخ نبود => از profile-service /users/:uid می‌گیریم و merge می‌کنیم
+ * Members with optional profile merge
  */
 export function useGroupMembers(groupId?: string, enabled = true) {
   const gid = groupId || "";
@@ -130,23 +122,13 @@ export function useGroupMembers(groupId?: string, enabled = true) {
   });
 
   const rawItems = (membersQ.data as any)?.items ?? [];
-  const uids = useMemo(() => {
-    const set = new Set<string>();
-    for (const m of rawItems) {
-      const uid = pickUid(m);
-      if (uid) set.add(uid);
-    }
-    return Array.from(set);
-  }, [rawItems]);
 
-  // fetch profiles only for users that don't have enough profile info
   const needProfileUids = useMemo(() => {
     const need: string[] = [];
     for (const m of rawItems) {
       const uid = pickUid(m);
       if (!uid) continue;
       const p = pickProfileFromMember(m);
-      // اگر displayName/username/avatar هیچکدوم نبود، برو پروفایل بگیر
       if (!p.displayName && !p.username && !p.avatarUrl) need.push(uid);
     }
     return Array.from(new Set(need));
@@ -211,7 +193,6 @@ export function useGroupMembers(groupId?: string, enabled = true) {
     });
 
     const total = (membersQ.data as any)?.total ?? items.length;
-
     return { items, total };
   }, [rawItems, profileMap, membersQ.data]);
 
