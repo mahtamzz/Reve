@@ -76,7 +76,7 @@ async function createContainer() {
     const createGroup = new CreateGroup({ groupRepo, membershipRepo: groupMemberRepo, auditRepo, eventBus });
     const deleteGroup = new DeleteGroup(groupRepo, groupMemberRepo, auditRepo, eventBus);
     const getGroupDetails = new GetGroupDetails(groupRepo, groupMemberRepo);
-    const joinGroup = new JoinGroup(groupRepo, groupMemberRepo, joinRequestRepo, banRepo);
+    const joinGroup = new JoinGroup(groupRepo, groupMemberRepo, joinRequestRepo, banRepo, eventBus);
     const leaveGroup = new LeaveGroup(groupMemberRepo, groupRepo, eventBus);
     const updateGroup = new UpdateGroup(groupRepo, groupMemberRepo, auditRepo);
     const listGroups = new ListGroups(groupRepo);
