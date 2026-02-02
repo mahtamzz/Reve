@@ -1,12 +1,13 @@
 // src/components/layout/Topbar.tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Bell, Mail, Search, Settings2, User2 } from "lucide-react";
+import { Bell, Mail, Search, Settings2, User2, Users, Clock } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import CommandPalette from "../ui/CommandPalette";
 import { authClient } from "@/api/client";
 import { getAvatarUrl } from "@/api/media";
+import { useJoinRequestNotifications } from "@/hooks/useJoinRequestNotifications";
 
 type TopbarProfile = {
   username: string;
@@ -17,40 +18,20 @@ type TopbarProfile = {
 
 type BreadcrumbItem = {
   label: string;
-  to?: string; // optional link
+  to?: string;
 };
 
 type TopbarProps = {
-  /** Title shown on left. If not provided, derives from route. */
   title?: string;
-
-  /** Optional subtitle/breadcrumb row under title (small text). */
   subtitle?: string;
-
-  /** Optional breadcrumb-like items shown next to title */
   crumbs?: BreadcrumbItem[];
-
-  /** Right side actions (before notifications/profile). */
   actions?: React.ReactNode;
-
-  /** Hide search box completely */
   hideSearch?: boolean;
-
-  /** Override profile if parent already has it */
   profile?: (TopbarProfile & { avatarUrl?: string | null }) | null;
-
-  /** Called when user submits search (Enter) */
   onSearchSubmit?: (q: string) => void;
-
-  /** Default search placeholder */
   searchPlaceholder?: string;
 };
 
-function cx(...xs: Array<string | false | null | undefined>) {
-  return xs.filter(Boolean).join(" ");
-}
-
-// very small default mapping (you can extend)
 function routeTitle(pathname: string) {
   if (pathname === "/" || pathname.startsWith("/dashboard")) return "Dashboard";
   if (pathname.startsWith("/profile")) return "Profile";
@@ -59,6 +40,20 @@ function routeTitle(pathname: string) {
   if (pathname.startsWith("/study")) return "Study";
   if (pathname.startsWith("/notifications")) return "Notifications";
   return "App";
+}
+
+function formatWhen(iso: string) {
+  const d = new Date(iso);
+  const t = d.getTime();
+  if (!Number.isFinite(t)) return "";
+  const diff = Date.now() - t;
+  const min = Math.floor(diff / 60000);
+  if (min < 1) return "just now";
+  if (min < 60) return `${min}m`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h}h`;
+  const day = Math.floor(h / 24);
+  return `${day}d`;
 }
 
 export default function Topbar({
@@ -77,12 +72,17 @@ export default function Topbar({
   const [openCmd, setOpenCmd] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
 
+  const [notifOpen, setNotifOpen] = useState(false);
+
   const [remoteProfile, setRemoteProfile] = useState<TopbarProfile | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
-
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
+
+  // ✅ join request notifications (admin/owner)
+  const joinNotif = useJoinRequestNotifications(15_000, 6);
+  const hasNotif = joinNotif.count > 0;
 
   const mountedRef = useRef(true);
   useEffect(() => {
@@ -124,7 +124,6 @@ export default function Topbar({
     };
   }, [profile, remoteProfile, avatarUrl]);
 
-  // keyboard shortcuts
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
@@ -134,13 +133,21 @@ export default function Topbar({
       if (e.key === "Escape") {
         setOpenCmd(false);
         setProfileOpen(false);
+        setNotifOpen(false);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // Fetch /auth/me only if profile prop not provided
+  // close notif popover on outside click
+  useEffect(() => {
+    if (!notifOpen) return;
+    const onDoc = () => setNotifOpen(false);
+    window.addEventListener("click", onDoc);
+    return () => window.removeEventListener("click", onDoc);
+  }, [notifOpen]);
+
   useEffect(() => {
     if (profile) return;
 
@@ -203,7 +210,6 @@ export default function Topbar({
                   {computedTitle}
                 </div>
 
-                {/* crumbs */}
                 {crumbs?.length ? (
                   <div className="hidden sm:flex items-center gap-2 text-xs text-zinc-500 min-w-0">
                     <span className="text-zinc-300">/</span>
@@ -239,23 +245,11 @@ export default function Topbar({
 
             {/* Right */}
             <div className="flex items-center gap-3">
-              {/* actions slot */}
               {actions ? <div className="hidden md:flex items-center gap-2">{actions}</div> : null}
 
               {/* Search */}
               {!hideSearch ? (
-                <div
-                  className="
-                    hidden md:flex items-center gap-2
-                    rounded-xl border border-zinc-200 bg-white
-                    px-3 py-2
-                    shadow-sm
-                    transition-all duration-300
-                    hover:border-yellow-300 hover:shadow-md
-                    focus-within:border-yellow-400 focus-within:shadow-md
-                    focus-within:ring-4 focus-within:ring-yellow-200/40
-                  "
-                >
+                <div className="hidden md:flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 shadow-sm transition-all duration-300 hover:border-yellow-300 hover:shadow-md focus-within:border-yellow-400 focus-within:shadow-md focus-within:ring-4 focus-within:ring-yellow-200/40">
                   <Search className="h-4 w-4 text-zinc-400" />
                   <input
                     value={search}
@@ -272,24 +266,124 @@ export default function Topbar({
                 </div>
               ) : null}
 
-              {/* Notifications */}
-              <button
-                onClick={() => navigate("/notifications")}
-                className="
-                  group relative h-10 w-10 rounded-xl
-                  border border-zinc-200 bg-white
-                  flex items-center justify-center
-                  shadow-sm transition-all duration-300
-                  hover:-translate-y-0.5 hover:shadow-md
-                  hover:border-yellow-300
-                "
-                type="button"
-              >
-                <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-yellow-400" />
-                <Bell className="h-4 w-4 text-zinc-600 transition-transform duration-300 group-hover:-rotate-6" />
-              </button>
+              {/* Notifications (Instagram-ish) */}
+              <div className="relative" onClick={(e) => e.stopPropagation()}>
+                <button
+                  onClick={() => {
+                    // اگر نوتیف نداره، مستقیم برو صفحه نوتیف‌ها
+                    if (!hasNotif) {
+                      navigate("/notifications");
+                      return;
+                    }
+                    setNotifOpen((v) => !v);
+                  }}
+                  className="
+                    group relative h-10 w-10 rounded-xl
+                    border border-zinc-200 bg-white
+                    flex items-center justify-center
+                    shadow-sm transition-all duration-300
+                    hover:-translate-y-0.5 hover:shadow-md
+                    hover:border-yellow-300
+                  "
+                  type="button"
+                  aria-label="Notifications"
+                >
+                  {/* ✅ Badge فقط وقتی نوتیف واقعی داریم */}
+                  {hasNotif ? (
+                    <>
+                      <span className="absolute -right-1 -top-1 h-3 w-3 rounded-full bg-rose-400 ring-2 ring-white" />
+                      <span className="absolute -right-2 -top-2 h-5 min-w-[20px] px-1 rounded-full bg-rose-400 text-white text-[10px] font-bold grid place-items-center ring-2 ring-white">
+                        {joinNotif.count > 99 ? "99+" : joinNotif.count}
+                      </span>
+                    </>
+                  ) : null}
+                  <Bell className="h-4 w-4 text-zinc-600 transition-transform duration-300 group-hover:-rotate-6" />
+                </button>
 
-              {/* Profile */}
+                <AnimatePresence>
+                  {notifOpen && hasNotif ? (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 10, scale: 0.98 }}
+                      transition={{ duration: 0.18, ease: "easeOut" }}
+                      className="
+                        absolute right-0 top-[calc(100%+10px)]
+                        w-[340px]
+                        rounded-3xl border border-zinc-200
+                        bg-white/95 backdrop-blur
+                        shadow-xl overflow-hidden z-50
+                      "
+                    >
+                      <div className="p-4 border-b border-zinc-200 bg-white/70">
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm font-semibold text-zinc-900">Requests</p>
+                          <span className="text-xs font-semibold text-zinc-500">
+                            {joinNotif.count} pending
+                          </span>
+                        </div>
+                        <p className="mt-1 text-xs text-zinc-500">
+                          New join requests for your private groups
+                        </p>
+                      </div>
+
+                      <div className="p-2 max-h-[360px] overflow-auto">
+                        {joinNotif.items.map((it) => (
+                          <button
+                            key={`${it.groupId}-${it.uid}-${it.createdAt}`}
+                            className="
+                              w-full text-left
+                              rounded-2xl border border-zinc-200 bg-white
+                              px-3 py-3 mb-2
+                              hover:border-yellow-300 hover:bg-yellow-50/40 transition
+                            "
+                            type="button"
+                            onClick={() => {
+                              setNotifOpen(false);
+                              navigate("/notifications", { state: { focus: "requests" } });
+                            }}
+                          >
+                            <div className="flex items-start gap-3">
+                              <div className="h-10 w-10 rounded-2xl border border-zinc-200 bg-[#FFFBF2] grid place-items-center">
+                                <Users className="h-4 w-4 text-zinc-700" />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-semibold text-zinc-900 truncate">
+                                  Join request
+                                </p>
+                                <p className="mt-0.5 text-xs text-zinc-600 truncate">
+                                  User #{it.uid} → <span className="font-semibold">{it.groupName}</span>
+                                </p>
+                                <div className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-zinc-500">
+                                  <Clock className="h-3 w-3" />
+                                  {formatWhen(it.createdAt)}
+                                </div>
+                              </div>
+                            </div>
+                          </button>
+                        ))}
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNotifOpen(false);
+                            navigate("/notifications", { state: { focus: "requests" } });
+                          }}
+                          className="
+                            w-full rounded-2xl border border-zinc-200 bg-white
+                            px-4 py-3 text-sm font-semibold text-zinc-800
+                            hover:border-yellow-300 hover:bg-yellow-50 transition-colors
+                          "
+                        >
+                          View all →
+                        </button>
+                      </div>
+                    </motion.div>
+                  ) : null}
+                </AnimatePresence>
+              </div>
+
+              {/* Profile (همون کد خودت) */}
               <div
                 className="relative"
                 onMouseEnter={() => setProfileOpen(true)}
@@ -301,8 +395,7 @@ export default function Topbar({
                   className="
                     group flex items-center gap-2
                     rounded-xl border border-zinc-200 bg-white
-                    px-2.5 py-2
-                    shadow-sm
+                    px-2.5 py-2 shadow-sm
                     transition-all duration-300
                     hover:-translate-y-0.5 hover:shadow-md
                     hover:border-yellow-300
@@ -336,90 +429,6 @@ export default function Topbar({
                   </div>
                 </button>
 
-                <AnimatePresence>
-                  {profileOpen && (
-                    <motion.div
-                      initial={{ opacity: 0, y: 10, scale: 0.98 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: 10, scale: 0.98 }}
-                      transition={{ duration: 0.18, ease: "easeOut" }}
-                      className="
-                        absolute right-0 top-[calc(100%+10px)]
-                        w-[280px]
-                        rounded-3xl border border-zinc-200
-                        bg-white/90 backdrop-blur
-                        shadow-xl
-                        overflow-hidden
-                        z-40
-                      "
-                    >
-                      <div className="pointer-events-none absolute -top-12 -right-14 h-44 w-44 rounded-full bg-yellow-200/35 blur-3xl" />
-                      <div className="pointer-events-none absolute -bottom-16 -left-16 h-52 w-52 rounded-full bg-sky-200/20 blur-3xl" />
-
-                      <div className="relative p-4">
-                        <div className="flex items-start gap-3">
-                          <div className="h-11 w-11 rounded-2xl border border-zinc-200 bg-white shadow-sm overflow-hidden">
-                            {p.avatarUrl ? (
-                              <img src={p.avatarUrl} alt="avatar" className="h-full w-full object-cover" />
-                            ) : (
-                              <div className="h-full w-full flex items-center justify-center text-zinc-600">
-                                <User2 className="h-5 w-5" />
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="min-w-0">
-                            <p className="text-sm font-semibold text-zinc-900 truncate">
-                              {p.fullName?.trim() || p.username}
-                            </p>
-                            <p className="mt-0.5 text-xs text-zinc-500 truncate">
-                              {loadingProfile ? "Loading..." : (p.role ?? "Student")}
-                            </p>
-
-                            <div className="mt-2 flex flex-wrap gap-2">
-                              <span className="inline-flex items-center rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-[11px] font-semibold text-zinc-600">
-                                @{p.username}
-                              </span>
-                              <span className="inline-flex items-center rounded-full border border-yellow-200 bg-yellow-100/60 px-2.5 py-1 text-[11px] font-semibold text-yellow-800">
-                                Profile
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="mt-4 space-y-2">
-                          <div className="rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm">
-                            <div className="flex items-center gap-2">
-                              <Mail className="h-4 w-4 text-zinc-500" />
-                              <p className="text-xs font-semibold text-zinc-700">Email</p>
-                            </div>
-                            <p className="mt-1 text-sm text-zinc-900 truncate">{p.email ?? "—"}</p>
-                          </div>
-
-                          <div className="rounded-2xl border border-zinc-200 bg-[#FFFBF2] p-3">
-                            <p className="text-xs font-semibold text-zinc-900">Tip</p>
-                            <p className="mt-1 text-xs text-zinc-600">
-                              Press <span className="font-semibold">⌘K</span> for quick actions.
-                            </p>
-                          </div>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => navigate("/profile")}
-                          className="
-                            mt-3 w-full
-                            rounded-2xl border border-zinc-200 bg-white
-                            px-4 py-3 text-sm font-semibold text-zinc-800
-                            hover:border-yellow-300 hover:bg-yellow-50 transition-colors
-                          "
-                        >
-                          Open profile →
-                        </button>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
               </div>
             </div>
           </div>
@@ -427,15 +436,7 @@ export default function Topbar({
           {/* Mobile search */}
           {!hideSearch ? (
             <div className="mt-3 md:hidden">
-              <div
-                className="
-                  flex items-center gap-2
-                  rounded-xl border border-zinc-200 bg-white
-                  px-3 py-2 shadow-sm
-                  transition-all duration-300
-                  focus-within:border-yellow-400 focus-within:ring-4 focus-within:ring-yellow-200/40
-                "
-              >
+              <div className="flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 shadow-sm transition-all duration-300 focus-within:border-yellow-400 focus-within:ring-4 focus-within:ring-yellow-200/40">
                 <Search className="h-4 w-4 text-zinc-400" />
                 <input
                   value={search}

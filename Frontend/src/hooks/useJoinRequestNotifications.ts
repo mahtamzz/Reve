@@ -1,9 +1,9 @@
 // src/hooks/useJoinRequestNotifications.ts
 import { useEffect, useMemo, useRef, useState } from "react";
+import { groupsApi } from "@/api/groups";
 import { useMyGroups } from "@/hooks/useGroups";
-import { groupsApi, type JoinRequestsResponse } from "@/api/groups";
 
-type LatestJoinRequest = {
+export type JoinRequestNotifItem = {
   groupId: string;
   groupName: string;
   uid: number;
@@ -14,37 +14,35 @@ function safeArray<T>(x: any): T[] {
   return Array.isArray(x) ? (x as T[]) : [];
 }
 
-export function useJoinRequestNotifications(pollMs = 15_000) {
+function toTimeMs(s: string) {
+  const t = new Date(s).getTime();
+  return Number.isFinite(t) ? t : 0;
+}
+
+export function useJoinRequestNotifications(pollMs = 15_000, maxItems = 10) {
   const myGroupsQ = useMyGroups();
 
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [count, setCount] = useState<number>(0);
-  const [latest, setLatest] = useState<LatestJoinRequest | null>(null);
+  const [count, setCount] = useState(0);
+  const [latest, setLatest] = useState<JoinRequestNotifItem | null>(null);
+  const [items, setItems] = useState<JoinRequestNotifItem[]>([]);
 
   const timerRef = useRef<number | null>(null);
-  const stoppedRef = useRef<boolean>(false);
+  const stoppedRef = useRef(false);
 
-  const adminGroupIds = useMemo(() => {
+  // فقط گروه‌هایی که ممکنه join request داشته باشن
+  // (private / invite_only)
+  const candidateGroups = useMemo(() => {
     const groups = safeArray<any>(myGroupsQ.data);
-    // We don't know exact shape; tolerate common ones:
-    // - group.role / membershipRole
-    // - group.my_role
-    // - group.is_admin
     return groups
-      .filter((g) => {
-        const role = g?.role ?? g?.my_role ?? g?.membershipRole ?? null;
-        const isAdminish =
-          role === "owner" || role === "admin" || g?.is_admin === true || g?.is_owner === true;
-        const visibility = g?.visibility ?? "public";
-        return isAdminish && (visibility === "private" || visibility === "invite_only");
-      })
       .map((g) => ({
-        id: String(g.id ?? g.groupId ?? ""),
-        name: String(g.name ?? g.title ?? "Group"),
+        id: String(g?.id ?? ""),
+        name: String(g?.name ?? "Group"),
+        visibility: String(g?.visibility ?? "public"),
       }))
-      .filter((g) => Boolean(g.id));
+      .filter((g) => Boolean(g.id) && (g.visibility === "private" || g.visibility === "invite_only"));
   }, [myGroupsQ.data]);
 
   useEffect(() => {
@@ -67,43 +65,47 @@ export function useJoinRequestNotifications(pollMs = 15_000) {
         setLoading(true);
         setError(null);
 
-        let total = 0;
-        let best: LatestJoinRequest | null = null;
+        const all: JoinRequestNotifItem[] = [];
 
-        // Fetch requests for each admin private group
-        for (const g of adminGroupIds) {
-          let res: JoinRequestsResponse | null = null;
+        for (const g of candidateGroups) {
+          let role: string | null = null;
           try {
-            res = await groupsApi.listJoinRequests(g.id);
+            const mem = await groupsApi.getMyMembership(g.id);
+            role = mem?.role ?? null;
           } catch {
-            // Not admin/owner or endpoint fails -> ignore this group for notifications
             continue;
           }
 
-          const items = safeArray<any>(res?.items);
-          total += items.length;
+          const isAdminish = role === "owner" || role === "admin";
+          if (!isAdminish) continue;
 
-          // pick latest by created_at
-          for (const it of items) {
-            const createdAt = String(it?.created_at ?? it?.createdAt ?? "");
-            const uid = Number(it?.uid);
-            if (!createdAt || !Number.isFinite(uid)) continue;
+          try {
+            const res = await groupsApi.listJoinRequests(g.id);
+            const reqs = safeArray<any>(res?.items);
 
-            if (!best) {
-              best = { groupId: g.id, groupName: g.name, uid, createdAt };
-              continue;
+            for (const it of reqs) {
+              const createdAt = String(it?.created_at ?? it?.createdAt ?? "");
+              const uid = Number(it?.uid);
+              if (!createdAt || !Number.isFinite(uid)) continue;
+
+              all.push({
+                groupId: g.id,
+                groupName: g.name,
+                uid,
+                createdAt,
+              });
             }
-
-            const a = new Date(best.createdAt).getTime();
-            const b = new Date(createdAt).getTime();
-            if (Number.isFinite(b) && (Number.isNaN(a) || b > a)) {
-              best = { groupId: g.id, groupName: g.name, uid, createdAt };
-            }
+          } catch {
+            // اگر 403 یا هرچیزی شد یعنی دسترسی نداری یا بک‌اند محدود کرده
+            continue;
           }
         }
 
-        setCount(total);
-        setLatest(best);
+        all.sort((a, b) => toTimeMs(b.createdAt) - toTimeMs(a.createdAt));
+
+        setCount(all.length);
+        setLatest(all.length ? all[0] : null);
+        setItems(all.slice(0, Math.max(1, maxItems)));
       } catch (e: any) {
         setError(e?.message || "Failed to fetch join requests");
       } finally {
@@ -111,10 +113,8 @@ export function useJoinRequestNotifications(pollMs = 15_000) {
       }
     }
 
-    // immediate tick
     tick();
 
-    // poll
     if (timerRef.current) window.clearInterval(timerRef.current);
     timerRef.current = window.setInterval(tick, pollMs);
 
@@ -123,7 +123,13 @@ export function useJoinRequestNotifications(pollMs = 15_000) {
       if (timerRef.current) window.clearInterval(timerRef.current);
       timerRef.current = null;
     };
-  }, [pollMs, myGroupsQ.isLoading, myGroupsQ.isError, adminGroupIds.map((x) => x.id).join("|")]);
+  }, [
+    pollMs,
+    maxItems,
+    myGroupsQ.isLoading,
+    myGroupsQ.isError,
+    candidateGroups.map((x) => x.id).join("|"),
+  ]);
 
-  return { loading, error, count, latest, adminGroupIds };
+  return { loading, error, count, latest, items };
 }
