@@ -47,11 +47,14 @@ const CustomTooltip = ({
 
 
 export const WeeklyStudyChart: React.FC<{ data: WeeklyPoint[] }> = ({ data }) => {
-  const chartData = data.map((d) => ({
+  const chartData = [...data]
+  .reverse()                
+  .map((d) => ({
     ...d,
-    day: format(parseISO(d.date), "EEE"),          // Mon
-    full: format(parseISO(d.date), "MMM d, yyyy"), // Dec 17, 2025
+    day: format(parseISO(d.date), "EEE"),
+    full: format(parseISO(d.date), "MMM d, yyyy"),
   }));
+
 
   const maxHours = Math.max(1, ...chartData.map((d) => d.hours));
   const yMax = Math.ceil(maxHours + 1);

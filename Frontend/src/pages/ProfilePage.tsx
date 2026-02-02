@@ -158,14 +158,16 @@ export default function ProfilePage() {
   const viewingOther = params.uid != null;
   const routeUid = Number(params.uid);
 
-  // hooks order ثابت
+  // ✅ همه‌ی hookها همیشه باید اجرا شوند (قبل از هر return)
   const meQ = useProfileInfoMe();
   const dashQ = useProfileInfoDashboard();
   const updateM = useUpdateProfileInfo();
   const groupsQ = useMyGroups();
   const subjectsQ = useSubjects();
 
-  const myUid = Number(meQ.data?.profile?.uid);
+  // self profile (ممکن است undefined باشد)
+  const selfProfile = meQ.data?.profile as any | undefined;
+  const myUid = Number(selfProfile?.uid);
 
   const targetUid = useMemo(() => {
     if (viewingOther) return Number.isFinite(routeUid) ? routeUid : NaN;
@@ -177,7 +179,7 @@ export default function ProfilePage() {
   // self vs other
   const isSelf = !viewingOther && Number.isFinite(myUid) && myUid === targetUid;
 
-  // media فقط برای self
+  // ✅ media همیشه باید hookش صدا زده شود (خود hook باید enabled/safe داخلی داشته باشد)
   const media = useMedia(isSelf);
 
   // public profile info
@@ -203,7 +205,7 @@ export default function ProfilePage() {
     staleTime: 30_000,
   });
 
-  // ✅ مهم: این hookها الان خودشان safe/enabled دارند (فایل‌های بالا)
+  // follow info (hookها همیشه صدا زده می‌شوند)
   const countsQ = useFollowCounts(safeTargetUid);
   const statusQ = useFollowStatus(safeTargetUid);
 
@@ -227,8 +229,6 @@ export default function ProfilePage() {
     weekly_goal: "",
   });
 
-  const selfProfile = meQ.data?.profile as any | undefined;
-
   React.useEffect(() => {
     if (!isSelf) return;
     if (!selfProfile) return;
@@ -239,58 +239,7 @@ export default function ProfilePage() {
     });
   }, [isSelf, selfProfile?.uid]);
 
-  // guard route uid invalid
-  if (viewingOther && !Number.isFinite(routeUid)) {
-    return (
-      <div className="min-h-screen bg-[#F7F8FA]">
-        <div className="mx-auto max-w-4xl px-4 py-6">
-          <div className="rounded-3xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">
-            Invalid user id in route.
-          </div>
-          <button
-            type="button"
-            onClick={() => navigate(-1)}
-            className="mt-3 rounded-2xl border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-800 hover:bg-zinc-50 transition"
-          >
-            Go back
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // self requires me profile
-  if (!viewingOther && meQ.isLoading) {
-    return (
-      <div className="min-h-screen bg-[#F7F8FA]">
-        <div className="mx-auto max-w-4xl px-4 py-6">
-          <div className="rounded-3xl border border-zinc-200 bg-white p-5 text-sm text-zinc-600">
-            Loading profile…
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (!viewingOther && (meQ.isError || !selfProfile)) {
-    return (
-      <div className="min-h-screen bg-[#F7F8FA]">
-        <div className="mx-auto max-w-4xl px-4 py-6">
-          <div className="rounded-3xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">
-            Failed to load profile: {toUiErrorMessage(meQ.error)}
-          </div>
-          <button
-            type="button"
-            onClick={() => navigate(-1)}
-            className="mt-3 rounded-2xl border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-800 hover:bg-zinc-50 transition"
-          >
-            Go back
-          </button>
-        </div>
-      </div>
-    );
-  }
-
+  // ✅ profile را قبل از returnها مشخص کن (ممکن است undefined/null باشد)
   const profile = viewingOther ? publicQ.data : selfProfile;
 
   const displayName = (profile as any)?.display_name ?? "—";
@@ -324,8 +273,10 @@ export default function ProfilePage() {
 
   const todayMinutes = !viewingOther ? Number(dashQ.data?.todayStudyMinutes ?? 0) : 0;
 
+  // ✅ این useMemo ها باید همیشه اجرا شوند (قبل از هر return)
   const autoIntro = useMemo(() => {
     if (viewingOther) return "";
+    if (!selfProfile) return "";
     return generateProfileIntroduction({
       displayName: selfProfile?.display_name ?? null,
       groups: (groupsQ.data as any) ?? [],
@@ -335,11 +286,63 @@ export default function ProfilePage() {
   }, [viewingOther, selfProfile, groupsQ.data, subjectsQ.data]);
 
   const introText = useMemo(() => {
-    const bio = (profile as any)?.bio?.trim();
+    const bio = (profile as any)?.bio?.trim?.() ? String((profile as any)?.bio).trim() : "";
     if (bio) return bio;
     if (!viewingOther) return autoIntro;
     return "This user hasn’t added a bio yet.";
   }, [profile, viewingOther, autoIntro]);
+
+  // ✅ guard route uid invalid (بعد از hookها)
+  if (viewingOther && !Number.isFinite(routeUid)) {
+    return (
+      <div className="min-h-screen bg-[#F7F8FA]">
+        <div className="mx-auto max-w-4xl px-4 py-6">
+          <div className="rounded-3xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">
+            Invalid user id in route.
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="mt-3 rounded-2xl border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-800 hover:bg-zinc-50 transition"
+          >
+            Go back
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ✅ self requires me profile
+  if (!viewingOther && meQ.isLoading) {
+    return (
+      <div className="min-h-screen bg-[#F7F8FA]">
+        <div className="mx-auto max-w-4xl px-4 py-6">
+          <div className="rounded-3xl border border-zinc-200 bg-white p-5 text-sm text-zinc-600">
+            Loading profile…
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!viewingOther && (meQ.isError || !selfProfile)) {
+    return (
+      <div className="min-h-screen bg-[#F7F8FA]">
+        <div className="mx-auto max-w-4xl px-4 py-6">
+          <div className="rounded-3xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">
+            Failed to load profile: {toUiErrorMessage(meQ.error)}
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="mt-3 rounded-2xl border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-800 hover:bg-zinc-50 transition"
+          >
+            Go back
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   async function onSave() {
     const display = form.display_name.trim();
@@ -400,7 +403,6 @@ export default function ProfilePage() {
   return (
     <div className="min-h-screen bg-creamtext">
       <div className="mx-auto w-full max-w-6xl 2xl:max-w-7xl px-4 sm:px-6 lg:px-8 py-6">
-
         <motion.div
           {...pageIn}
           transition={{ duration: 0.35, ease: EASE }}
@@ -624,8 +626,17 @@ export default function ProfilePage() {
               </div>
 
               <div className="mt-4 space-y-3">
-                <Field label="Display name" value={form.display_name} onChange={(v) => setForm((s) => ({ ...s, display_name: v }))} />
-                <Field label="Timezone" value={form.timezone} onChange={(v) => setForm((s) => ({ ...s, timezone: v }))} placeholder="UTC" />
+                <Field
+                  label="Display name"
+                  value={form.display_name}
+                  onChange={(v) => setForm((s) => ({ ...s, display_name: v }))}
+                />
+                <Field
+                  label="Timezone"
+                  value={form.timezone}
+                  onChange={(v) => setForm((s) => ({ ...s, timezone: v }))}
+                  placeholder="UTC"
+                />
                 <Field
                   label="Weekly goal (minutes)"
                   value={form.weekly_goal}
