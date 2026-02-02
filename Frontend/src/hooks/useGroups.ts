@@ -1,8 +1,9 @@
 // src/hooks/useGroups.ts
 import { useMemo } from "react";
-import { useMutation, useQuery, useQueryClient, useQueries } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { groupsApi, type CreateGroupBody, type UpdateGroupBody } from "@/api/groups";
-import { profileClient } from "@/api/client";
+import type { ApiGroupMember } from "@/api/types";
+import { usePublicProfilesBatch } from "@/hooks/usePublicProfilesBatch";
 
 // ---------- helpers ----------
 export function isUuid(v: string) {
@@ -51,8 +52,9 @@ function pickProfileFromMember(m: any) {
   };
 }
 
-async function fetchUserByUid(uid: string) {
-  return profileClient.get<any>(`/users/${uid}`);
+function needsRemoteProfile(m: any) {
+  const p = pickProfileFromMember(m);
+  return !p.displayName && !p.username && !p.avatarUrl;
 }
 
 // ---------- query keys ----------
@@ -108,7 +110,7 @@ export function useMyMembership(groupId?: string, enabled = true) {
 }
 
 /**
- * Members with optional profile merge
+ * Members + profile merge via POST /profile/public/batch
  */
 export function useGroupMembers(groupId?: string, enabled = true) {
   const gid = groupId || "";
@@ -121,83 +123,55 @@ export function useGroupMembers(groupId?: string, enabled = true) {
     staleTime: 10_000,
   });
 
-  const rawItems = (membersQ.data as any)?.items ?? [];
+  const rawItems: ApiGroupMember[] = (membersQ.data as any)?.items ?? [];
 
   const needProfileUids = useMemo(() => {
     const need: string[] = [];
     for (const m of rawItems) {
       const uid = pickUid(m);
       if (!uid) continue;
-      const p = pickProfileFromMember(m);
-      if (!p.displayName && !p.username && !p.avatarUrl) need.push(uid);
+      if (needsRemoteProfile(m)) need.push(uid);
     }
     return Array.from(new Set(need));
   }, [rawItems]);
 
-  const profileQueries = useQueries({
-    queries: needProfileUids.map((uid) => ({
-      queryKey: ["profile", "user", uid] as const,
-      queryFn: () => fetchUserByUid(uid),
-      enabled: Boolean(uid),
-      retry: false,
-      staleTime: 60_000,
-    })),
-  });
-
-  const profileMap = useMemo(() => {
-    const map = new Map<string, { displayName: string | null; username: string | null; avatarUrl: string | null }>();
-    for (let i = 0; i < needProfileUids.length; i++) {
-      const uid = needProfileUids[i];
-      const data = profileQueries[i]?.data;
-      if (!data) continue;
-
-      const displayName =
-        data?.display_name ??
-        data?.displayName ??
-        data?.name ??
-        data?.username ??
-        data?.email ??
-        null;
-
-      const username = data?.username ?? data?.handle ?? null;
-      const avatarUrl = data?.avatar_url ?? data?.avatarUrl ?? null;
-
-      map.set(uid, {
-        displayName: typeof displayName === "string" && displayName.trim() ? displayName.trim() : null,
-        username: typeof username === "string" && username.trim() ? username.trim() : null,
-        avatarUrl: typeof avatarUrl === "string" && avatarUrl.trim() ? avatarUrl.trim() : null,
-      });
-    }
-    return map;
-  }, [needProfileUids, profileQueries]);
+  // ✅ batch public profiles (only when needed)
+  const batch = usePublicProfilesBatch(needProfileUids, Boolean(gid) && enabled);
 
   const merged = useMemo(() => {
     const items = rawItems.map((m: any, idx: number) => {
       const uid = pickUid(m) ?? String(idx);
       const base = pickProfileFromMember(m);
-      const fallback = profileMap.get(uid);
+      const p = batch.map.get(String(uid));
 
-      const displayName = base.displayName ?? fallback?.displayName ?? null;
-      const username = base.username ?? fallback?.username ?? null;
-      const avatarUrl = base.avatarUrl ?? fallback?.avatarUrl ?? null;
+      const fallbackDisplayName =
+        (typeof p?.display_name === "string" && p.display_name.trim() ? p.display_name.trim() : null) ||
+        (typeof p?.username === "string" && p.username.trim() ? `@${p.username.replace(/^@/, "")}` : null) ||
+        null;
+
+      const displayName = base.displayName ?? fallbackDisplayName;
+      const username = base.username ?? (typeof p?.username === "string" && p.username.trim() ? p.username.trim() : null);
+      const avatarUrl = base.avatarUrl ?? (typeof p?.avatar_url === "string" && p.avatar_url.trim() ? p.avatar_url.trim() : null);
 
       return {
         ...m,
         uid,
         profile: {
+          ...(m.profile || {}),
           display_name: displayName,
           username,
           avatar_url: avatarUrl,
+          timezone: m?.profile?.timezone ?? p?.timezone ?? null,
         },
       };
     });
 
     const total = (membersQ.data as any)?.total ?? items.length;
     return { items, total };
-  }, [rawItems, profileMap, membersQ.data]);
+  }, [rawItems, membersQ.data, batch.map]);
 
-  const isLoading = membersQ.isLoading || profileQueries.some((q) => q.isLoading);
-  const isError = membersQ.isError;
+  const isLoading = membersQ.isLoading || batch.isLoading;
+  const isError = membersQ.isError || batch.isError;
 
   return {
     ...membersQ,

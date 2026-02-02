@@ -57,7 +57,8 @@ export const WeeklyStudyChart: React.FC<{ data: WeeklyPoint[] }> = ({ data }) =>
 
 
   const maxHours = Math.max(1, ...chartData.map((d) => d.hours));
-  const yMax = Math.ceil(maxHours + 1);
+  const yMax = Math.max(15, Math.ceil(maxHours + 1));
+  
 
   return (
     <div className="h-[260px] w-full">

@@ -1,16 +1,13 @@
-// src/api/media.ts
 import { mediaClient } from "@/api/client";
 import type { ApiAvatarMeta } from "@/api/types";
 
-const UPLOAD_FIELD_NAME = "file"; // backend: upload.single("file")
+const UPLOAD_FIELD_NAME = "file";
 
-// ✅ BASE is already /api/media (see client.ts)
-// so endpoints are relative to that:
 const ENDPOINTS = {
-  upload: "/avatar", // POST multipart
-  remove: "/avatar", // DELETE
-  file: "/avatar", // GET (image)
-  userFile: (uid: string | number) => `/users/${encodeURIComponent(String(uid))}/avatar`, // GET public
+  upload: "/avatar", 
+  remove: "/avatar", 
+  file: "/avatar", 
+  userFile: (uid: string | number) => `/users/${encodeURIComponent(String(uid))}/avatar`, 
 };
 
 function getMediaBase(): string {
@@ -24,11 +21,6 @@ function stripTrailingSlashes(url: string) {
   return String(url).replace(/\/+$/, "");
 }
 
-/**
- * POST /api/media/avatar
- * multipart/form-data: file
- * returns JSON meta row (whatever your backend returns)
- */
 export async function uploadAvatar(file: File): Promise<ApiAvatarMeta> {
   const form = new FormData();
   form.append(UPLOAD_FIELD_NAME, file);
@@ -65,15 +57,6 @@ export function getUserAvatarUrl(uid: string | number, opts?: { bustCache?: bool
   return url.toString();
 }
 
-/**
- * Backend does NOT expose JSON meta.
- * We do existence check with HEAD to avoid JSON parsing issues.
- * HEAD /api/media/avatar
- *
- * Returns:
- * - null if 404/not exists
- * - { exists: true } if ok
- */
 export async function getAvatarMeta(): Promise<(ApiAvatarMeta & { exists?: boolean }) | null> {
   const url = getAvatarUrl({ bustCache: false });
 

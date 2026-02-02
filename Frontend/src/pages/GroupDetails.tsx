@@ -644,41 +644,6 @@ export default function GroupDetails() {
                   </div>
                 </div>
 
-                {/* Chat card */}
-                <div className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <p className="text-sm font-semibold text-zinc-900">Group Chat</p>
-                      <p className="mt-1 text-xs text-zinc-500">
-                        {isMember ? "Discuss goals, share progress, stay accountable." : "Join to unlock chat."}
-                      </p>
-                    </div>
-                    <span className="inline-flex items-center rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1 text-[11px] font-semibold text-zinc-600">
-                      Chat
-                    </span>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={isMember ? goToChat : undefined}
-                    disabled={!isMember}
-                    className="
-                      mt-4 w-full rounded-2xl border border-zinc-200
-                      bg-[#FFFBF2]
-                      px-4 py-3 text-sm font-semibold text-zinc-800
-                      transition-colors
-                      flex items-center justify-between
-                      hover:border-yellow-300 hover:bg-yellow-50
-                      disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:border-zinc-200 disabled:hover:bg-[#FFFBF2]
-                    "
-                  >
-                    <span className="flex items-center gap-2">
-                      <MessageCircle className="h-4 w-4" />
-                      {isMember ? `Open chat for ${title}` : "Chat is locked"}
-                    </span>
-                    <span className="text-xs text-zinc-500">→</span>
-                  </button>
-                </div>
               </div>
             </motion.div>
 

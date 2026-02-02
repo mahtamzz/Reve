@@ -1,6 +1,10 @@
+// src/realtime/chatSocket.ts
 import { io, Socket } from "socket.io-client";
 import { getAccessToken } from "@/utils/authToken";
 
+export type PresenceStatus = "online" | "offline";
+
+// ---------- events ----------
 type ServerToClientEvents = {
   "group:joined": (payload: { groupId: string }) => void;
   "group:left": (payload: { groupId: string }) => void;
@@ -11,6 +15,10 @@ type ServerToClientEvents = {
   "group:revoked": (payload: { groupId: string }) => void;
   "group:deleted": (payload: { groupId: string }) => void;
 
+  // ✅ presence
+  "presence:update": (payload: { uid: string | number; status: PresenceStatus }) => void;
+  "presence:check:result": (map: Record<string, boolean>) => void;
+
   "error": (payload: { code: string; message?: string }) => void;
 };
 
@@ -20,6 +28,9 @@ type ClientToServerEvents = {
 
   "message:send": (payload: { groupId: string; text: string; clientMessageId?: string | null }) => void;
   "messages:list": (payload: { groupId: string; limit?: number; before?: string | null }) => void;
+
+  // ✅ presence
+  "presence:check": (payload: { uids: Array<string> }) => void;
 };
 
 let socket: Socket<ServerToClientEvents, ClientToServerEvents> | null = null;
