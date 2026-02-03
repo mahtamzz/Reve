@@ -1,3 +1,4 @@
+// src/api/chat.ts
 import { createApiClient } from "@/api/client";
 
 const CHAT_BASE = import.meta.env.VITE_API_CHAT_BASE || "http://localhost:3006/api";
@@ -12,7 +13,22 @@ export type ChatMessage = {
   created_at: string;
 };
 
+export type ChatInboxItem = {
+  group: { id: string; name: string };
+  latestMessage: {
+    id: string;
+    groupId: string;
+    senderUid: number | string;
+    text: string;
+    createdAt: string;
+  } | null;
+};
+
 export const chatApi = {
+  listInbox: () => {
+    return apiClient.get<ChatInboxItem[]>("/chat/inbox");
+  },
+
   listGroupMessages: (groupId: string, params?: { limit?: number; before?: string | null }) => {
     const q = new URLSearchParams();
     if (params?.limit != null) q.set("limit", String(params.limit));

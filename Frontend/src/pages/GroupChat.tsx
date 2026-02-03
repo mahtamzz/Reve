@@ -29,10 +29,8 @@ import {
   useMyMembership,
 } from "@/hooks/useGroups";
 
-// ✅ همون هوکی که بالا فرستادی (Public batch)
 import { usePublicProfilesBatch } from "@/hooks/usePublicProfilesBatch";
 
-// ✅ برای آواتار سایر اعضا (public)
 import { getUserAvatarUrl } from "@/api/media";
 
 const EASE_OUT: [number, number, number, number] = [0.16, 1, 0.3, 1];
@@ -271,8 +269,6 @@ export default function GroupChat() {
         safeStr(pub?.handle) ??
         null;
 
-      // ✅ آواتار رو مثل Media layer بساز (این همون مسیریه که بالا داری)
-      // اگر کاربر آواتار نداشته باشه 404 می‌خوری، ولی UI با onError fallback می‌ده
       const avatarUrl = getUserAvatarUrl(uid, { bustCache: true });
 
       const online = presence[String(uid)] === "online" || Boolean(m?.online);
@@ -298,7 +294,6 @@ export default function GroupChat() {
 
       const mine = isMineMessage(senderUidRaw, myUid);
 
-      // label/avatar از memberCards
       const card = memberCards.find((x) => x.uid === senderUid);
 
       const created =

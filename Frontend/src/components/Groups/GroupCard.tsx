@@ -1,10 +1,9 @@
 import React, { useMemo } from "react";
-import { motion, useMotionValue, useTransform } from "framer-motion";
-import { UsersRound, Trash2, ChevronRight, Zap, Sparkles } from "lucide-react";
+import { motion, useMotionValue, useSpring, useTransform } from "framer-motion";
+import { UsersRound, Trash2, ChevronRight, Zap } from "lucide-react";
 import type { Variants } from "framer-motion";
 
-const EASE_OUT: [number, number, number, number] = [0.16, 1, 0.3, 1];
-
+const EASE_SOFT: [number, number, number, number] = [0.22, 1, 0.36, 1];
 
 export type Group = {
   id: string;
@@ -39,43 +38,58 @@ export function GroupCard({
   const progress =
     xpCap > 0 ? Math.min(100, Math.round(((group.xp || 0) / xpCap) * 100)) : 0;
 
-  // 3D tilt (match with clean dashboard feel; subtle)
-  const mx = useMotionValue(0);
-  const my = useMotionValue(0);
-  const rX = useTransform(my, [-0.5, 0.5], [9, -9]);
-  const rY = useTransform(mx, [-0.5, 0.5], [-11, 11]);
+  // ------------------------------------------------------------
+  // Soft 3D tilt (smaller range + spring smoothing)
+  // ------------------------------------------------------------
+  const mxRaw = useMotionValue(0);
+  const myRaw = useMotionValue(0);
+
+  const mx = useSpring(mxRaw, { stiffness: 120, damping: 22, mass: 1.1 });
+  const my = useSpring(myRaw, { stiffness: 120, damping: 22, mass: 1.1 });
+
+  // smaller tilt = calmer
+  const rX = useTransform(my, [-0.5, 0.5], [6, -6]);
+  const rY = useTransform(mx, [-0.5, 0.5], [-8, 8]);
 
   const onMove = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const px = (e.clientX - rect.left) / rect.width - 0.5;
     const py = (e.clientY - rect.top) / rect.height - 0.5;
-    mx.set(clamp(px, -0.5, 0.5));
-    my.set(clamp(py, -0.5, 0.5));
-  };
-  const onLeave = () => {
-    mx.set(0);
-    my.set(0);
+    mxRaw.set(clamp(px, -0.5, 0.5));
+    myRaw.set(clamp(py, -0.5, 0.5));
   };
 
+  const onLeave = () => {
+    mxRaw.set(0);
+    myRaw.set(0);
+  };
+
+  // ------------------------------------------------------------
+  // Variants (gentle entrance)
+  // ------------------------------------------------------------
   const container: Variants = {
-    hidden: { opacity: 0, y: 12, scale: 0.99 },
+    hidden: { opacity: 0, y: 14, scale: 0.985 },
     show: {
       opacity: 1,
       y: 0,
       scale: 1,
-      transition: { duration: 0.42, ease: EASE_OUT, staggerChildren: 0.06 },
+      transition: {
+        duration: 0.72,
+        ease: EASE_SOFT,
+        staggerChildren: 0.09,
+        delayChildren: 0.04,
+      },
     },
   };
-  
+
   const item: Variants = {
     hidden: { opacity: 0, y: 10 },
     show: {
       opacity: 1,
       y: 0,
-      transition: { duration: 0.38, ease: EASE_OUT },
+      transition: { duration: 0.56, ease: EASE_SOFT },
     },
   };
-  
 
   return (
     <motion.div
@@ -91,18 +105,21 @@ export function GroupCard({
       variants={container}
       initial="hidden"
       animate="show"
-      whileHover={{ y: -7 }}
-      whileTap={{ scale: 0.992 }}
-      transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
       onMouseMove={onMove}
       onMouseLeave={onLeave}
+      whileHover={{ y: -3 }} // calmer
+      whileTap={{ scale: 0.993 }}
+      transition={{
+        duration: 0.55,
+        ease: EASE_SOFT,
+      }}
       className="
         group relative w-full text-left outline-none
         overflow-hidden rounded-[30px]
         border border-zinc-200/70
         p-6
-        shadow-[0_18px_60px_-35px_rgba(0,0,0,0.25)]
-        hover:shadow-[0_34px_110px_-52px_rgba(0,0,0,0.34)]
+        shadow-[0_18px_60px_-35px_rgba(0,0,0,0.22)]
+        hover:shadow-[0_30px_95px_-52px_rgba(0,0,0,0.30)]
         focus:ring-2 focus:ring-yellow-300/60
         transition-shadow
         will-change-transform
@@ -112,72 +129,61 @@ export function GroupCard({
         rotateX: rX as any,
         rotateY: rY as any,
         background:
-        "radial-gradient(900px 520px at 12% 10%, rgba(255,228,210,0.85), transparent 62%)," +
-        "radial-gradient(860px 520px at 88% 14%, rgba(238,225,255,0.72), transparent 58%)," +
-        "radial-gradient(720px 520px at 82% 92%, rgba(255,244,200,0.55), transparent 58%)," +
-        "linear-gradient(180deg, rgba(255,255,255,0.82), rgba(255,255,255,0.54))",      
+          "radial-gradient(900px 520px at 12% 10%, rgba(255,228,210,0.85), transparent 62%)," +
+          "radial-gradient(860px 520px at 88% 14%, rgba(238,225,255,0.72), transparent 58%)," +
+          "radial-gradient(720px 520px at 82% 92%, rgba(255,244,200,0.55), transparent 58%)," +
+          "linear-gradient(180deg, rgba(255,255,255,0.82), rgba(255,255,255,0.54))",
         backdropFilter: "blur(18px)",
         WebkitBackdropFilter: "blur(18px)",
       }}
     >
       {/* soft noise */}
       <div
-        className="pointer-events-none absolute inset-0 opacity-[0.07] mix-blend-overlay"
+        className="pointer-events-none absolute inset-0 opacity-[0.06] mix-blend-overlay"
         style={{
           backgroundImage:
             "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='.30'/%3E%3C/svg%3E\")",
         }}
       />
 
-      {/* breathing ring */}
+      {/* breathing ring (slow & subtle) */}
       <motion.div
         aria-hidden
         className="pointer-events-none absolute inset-0 rounded-[30px]"
-        initial={{ opacity: 0.22 }}
-        animate={{ opacity: [0.16, 0.32, 0.16] }}
-        transition={{ duration: 5.2, repeat: Infinity, ease: "easeInOut" }}
+        initial={{ opacity: 0.18 }}
+        animate={{ opacity: [0.14, 0.24, 0.14] }}
+        transition={{ duration: 6.8, repeat: Infinity, ease: "easeInOut" }}
         style={{
-          border: "1px solid rgba(255,255,255,0.24)",
-          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.18)",
+          border: "1px solid rgba(255,255,255,0.22)",
+          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.16)",
         }}
       />
 
-      {/* gentle aurora drift */}
+      {/* gentle aurora drift (slower + lower opacity) */}
       <motion.div
         aria-hidden
-        className="pointer-events-none absolute -inset-20 blur-3xl opacity-[0.28]"
-        animate={{ x: [0, 22, -10, 0], y: [0, -12, 16, 0] }}
-        transition={{ duration: 16, repeat: Infinity, ease: "easeInOut" }}
+        className="pointer-events-none absolute -inset-20 blur-3xl opacity-[0.22]"
+        animate={{ x: [0, 16, -8, 0], y: [0, -9, 12, 0] }}
+        transition={{ duration: 22, repeat: Infinity, ease: "easeInOut" }}
         style={{
           background:
-            "conic-gradient(from 220deg at 50% 50%, rgba(253,224,71,0.14), rgba(210,245,255,0.30), rgba(225,215,255,0.30), rgba(210,255,232,0.26), rgba(253,224,71,0.14))",
+            "conic-gradient(from 220deg at 50% 50%, rgba(253,224,71,0.12), rgba(210,245,255,0.26), rgba(225,215,255,0.26), rgba(210,255,232,0.22), rgba(253,224,71,0.12))",
         }}
       />
 
-      {/* hover sweep */}
+      {/* hover sweep (slower + softer) */}
       <motion.span
         aria-hidden
         className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100"
-        initial={{ x: "-130%" }}
-        whileHover={{ x: "130%" }}
-        transition={{ duration: 1.05, ease: "easeInOut" }}
+        initial={{ x: "-140%" }}
+        whileHover={{ x: "140%" }}
+        transition={{ duration: 1.75, ease: "easeInOut" }}
         style={{
           background:
-            "linear-gradient(90deg, transparent, rgba(255,255,255,0.22), transparent)",
+            "linear-gradient(90deg, transparent, rgba(255,255,255,0.18), transparent)",
           transform: "skewX(-14deg)",
         }}
       />
-
-      {/* mini badge (matches search dropdown vibe) */}
-      <motion.div
-        aria-hidden
-        className="pointer-events-none absolute right-5 top-5"
-        initial={{ opacity: 0, y: -6 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35, ease: "easeOut" }}
-      >
-
-      </motion.div>
 
       <div className="relative" style={{ transform: "translateZ(1px)" }}>
         {/* header */}
@@ -201,16 +207,15 @@ export function GroupCard({
               </span>
             </div>
 
-            <p className="mt-1 text-sm text-zinc-600">
-              Tap to open details & members
-            </p>
+            <p className="mt-1 text-sm text-zinc-600">Tap to open details & members</p>
           </div>
 
           {/* actions */}
           <div className="flex items-center gap-2 shrink-0">
             <motion.div
-              whileHover={{ scale: 1.03 }}
-              whileTap={{ scale: 0.98 }}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.99 }}
+              transition={{ duration: 0.35, ease: EASE_SOFT }}
               className="
                 rounded-full border border-zinc-200/80 bg-white/55
                 px-2.5 py-1 text-[11px] font-semibold text-zinc-700
@@ -229,8 +234,9 @@ export function GroupCard({
                   e.stopPropagation();
                   onDelete(group);
                 }}
-                whileHover={{ scale: 1.06, rotate: -2 }}
-                whileTap={{ scale: 0.97 }}
+                whileHover={{ scale: 1.035, rotate: -1 }}
+                whileTap={{ scale: 0.985 }}
+                transition={{ duration: 0.35, ease: EASE_SOFT }}
                 className="
                   rounded-2xl border border-zinc-200/80 bg-white/55
                   p-2 text-zinc-700
@@ -255,15 +261,15 @@ export function GroupCard({
           className="my-5 h-px w-full"
           style={{
             background:
-              "linear-gradient(90deg, transparent, rgba(250,204,21,0.35), rgba(228,228,231,0.7), transparent)",
+              "linear-gradient(90deg, transparent, rgba(250,204,21,0.32), rgba(228,228,231,0.7), transparent)",
           }}
         />
 
         {/* stats */}
         <motion.div variants={item} className="grid grid-cols-2 gap-4">
           <motion.div
-            whileHover={{ y: -4 }}
-            transition={{ duration: 0.22, ease: "easeOut" }}
+            whileHover={{ y: -2 }}
+            transition={{ duration: 0.38, ease: EASE_SOFT }}
             className="
               relative overflow-hidden rounded-3xl
               border border-zinc-200/70 bg-white/55
@@ -273,11 +279,11 @@ export function GroupCard({
             <motion.div
               aria-hidden
               className="pointer-events-none absolute -top-12 -right-12 h-28 w-28 rounded-full blur-2xl"
-              animate={{ scale: [1, 1.08, 1], opacity: [0.45, 0.72, 0.45] }}
-              transition={{ duration: 5.6, repeat: Infinity, ease: "easeInOut" }}
+              animate={{ scale: [1, 1.06, 1], opacity: [0.38, 0.6, 0.38] }}
+              transition={{ duration: 7.2, repeat: Infinity, ease: "easeInOut" }}
               style={{
                 background:
-                  "radial-gradient(circle at 30% 30%, rgba(34,197,94,0.16), transparent 62%)",
+                  "radial-gradient(circle at 30% 30%, rgba(34,197,94,0.14), transparent 62%)",
               }}
             />
             <p className="text-[11px] text-zinc-600">Score</p>
@@ -288,8 +294,8 @@ export function GroupCard({
           </motion.div>
 
           <motion.div
-            whileHover={{ y: -4 }}
-            transition={{ duration: 0.22, ease: "easeOut" }}
+            whileHover={{ y: -2 }}
+            transition={{ duration: 0.38, ease: EASE_SOFT }}
             className="
               relative overflow-hidden rounded-3xl
               border border-zinc-200/70 bg-white/55
@@ -299,11 +305,11 @@ export function GroupCard({
             <motion.div
               aria-hidden
               className="pointer-events-none absolute -top-12 -right-12 h-28 w-28 rounded-full blur-2xl"
-              animate={{ scale: [1, 1.09, 1], opacity: [0.42, 0.74, 0.42] }}
-              transition={{ duration: 6.2, repeat: Infinity, ease: "easeInOut" }}
+              animate={{ scale: [1, 1.07, 1], opacity: [0.34, 0.6, 0.34] }}
+              transition={{ duration: 7.8, repeat: Infinity, ease: "easeInOut" }}
               style={{
                 background:
-                  "radial-gradient(circle at 30% 30%, rgba(59,130,246,0.14), transparent 62%)",
+                  "radial-gradient(circle at 30% 30%, rgba(59,130,246,0.13), transparent 62%)",
               }}
             />
             <p className="text-[11px] text-zinc-600">Group Points</p>
@@ -335,26 +341,31 @@ export function GroupCard({
             <motion.div
               initial={{ width: 0 }}
               animate={{ width: `${progress}%` }}
-              transition={{ type: "spring", stiffness: 110, damping: 18 }}
+              transition={{
+                type: "spring",
+                stiffness: 65,
+                damping: 24,
+                mass: 1.15,
+              }}
               className="relative h-full rounded-full"
               style={{
                 background:
-                  "linear-gradient(90deg, rgba(253,224,71,0.55), rgba(195,232,255,0.88), rgba(224,214,255,0.90), rgba(199,255,226,0.82))",
+                  "linear-gradient(90deg, rgba(253,224,71,0.52), rgba(195,232,255,0.85), rgba(224,214,255,0.88), rgba(199,255,226,0.78))",
                 boxShadow:
-                  "0 0 18px rgba(253,224,71,0.14), 0 0 26px rgba(195,232,255,0.18)",
+                  "0 0 18px rgba(253,224,71,0.12), 0 0 26px rgba(195,232,255,0.16)",
               }}
             >
-              {/* shimmer */}
+              {/* shimmer (slower, softer) */}
               <motion.span
                 aria-hidden
                 className="absolute inset-0"
-                animate={{ x: ["-60%", "120%"] }}
-                transition={{ duration: 1.55, repeat: Infinity, ease: "easeInOut" }}
+                animate={{ x: ["-70%", "130%"] }}
+                transition={{ duration: 2.35, repeat: Infinity, ease: "easeInOut" }}
                 style={{
                   background:
-                    "linear-gradient(90deg, transparent, rgba(255,255,255,0.34), transparent)",
+                    "linear-gradient(90deg, transparent, rgba(255,255,255,0.28), transparent)",
                   transform: "skewX(-18deg)",
-                  opacity: 0.9,
+                  opacity: 0.85,
                 }}
               />
             </motion.div>
@@ -377,8 +388,8 @@ export function GroupCard({
               opacity-80 group-hover:opacity-100
               transition-opacity
             "
-            whileHover={{ x: 3 }}
-            transition={{ duration: 0.18, ease: "easeOut" }}
+            whileHover={{ x: 2 }}
+            transition={{ duration: 0.32, ease: EASE_SOFT }}
           >
             Open
             <ChevronRight className="h-4 w-4" />

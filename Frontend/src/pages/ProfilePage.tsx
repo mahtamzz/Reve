@@ -586,14 +586,6 @@ export default function ProfilePage() {
                     <StatCard label="Following" value={followingCount} />
                   </>
                 )}
-
-                <button
-                  type="button"
-                  onClick={() => navigate("/connections")}
-                  className="w-full rounded-2xl bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-zinc-800 transition"
-                >
-                  Open Connections
-                </button>
               </div>
             </div>
           </div>

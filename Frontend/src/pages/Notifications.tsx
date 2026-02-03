@@ -1,26 +1,29 @@
 // src/pages/Notifications.tsx
 import React, { useMemo, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { Search, Users, Clock, Check, X, Loader2, AlertTriangle } from "lucide-react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { AnimatePresence, motion } from "framer-motion";
+import {
+  AlertTriangle,
+  Check,
+  Clock,
+  Loader2,
+  Search,
+  Users,
+  X,
+} from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 import Sidebar from "@/components/Dashboard/SidebarIcon";
 import { logout } from "@/utils/authToken";
+
 import { useJoinRequestNotifications } from "@/hooks/useJoinRequestNotifications";
 import {
   useApproveJoinRequestAction,
   useRejectJoinRequestAction,
 } from "@/hooks/useJoinRequestActions";
 
-const EASE_OUT: [number, number, number, number] = [0.16, 1, 0.3, 1];
+import { useChatInbox } from "@/hooks/useChatInbox"; // ✅ NEW (connects Group chats to backend)
 
-type Thread = {
-  id: string;
-  name: string;
-  last: string;
-  time: string;
-  unread?: number;
-};
+const EASE_OUT: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
 function formatWhen(iso: string) {
   const d = new Date(iso);
@@ -44,18 +47,17 @@ type ActionMap = Record<
 
 export default function Notifications() {
   const navigate = useNavigate();
-  const location = useLocation();
-  const focus = (location.state as any)?.focus ?? null;
-
   const [query, setQuery] = useState("");
 
+  // ✅ Join Requests
   const joinNotif = useJoinRequestNotifications(15_000, 20);
-
   const approveMut = useApproveJoinRequestAction();
   const rejectMut = useRejectJoinRequestAction();
 
   const [actionByKey, setActionByKey] = useState<ActionMap>({});
-  const [dismissedKeys, setDismissedKeys] = useState<Record<string, boolean>>({});
+  const [dismissedKeys, setDismissedKeys] = useState<Record<string, boolean>>(
+    {}
+  );
 
   const keyOf = (it: any) => `${it.groupId}-${it.uid}-${it.createdAt}`;
 
@@ -69,24 +71,19 @@ export default function Notifications() {
     }, ms);
   };
 
-  // Example threads (replace later with API data)
-  const threads: Thread[] = useMemo(
-    () => [
-      { id: "1", name: "Group Chat", last: "The latest message will appear here…", time: "12:03", unread: 2 },
-      { id: "2", name: "Project Team", last: "Tomorrow's meeting is at 10 AM.", time: "11:22" },
-      { id: "3", name: "Study Buddies", last: "Did you read Chapter 3?", time: "09:10", unread: 5 },
-      { id: "4", name: "Design Review", last: "I uploaded the new file.", time: "Yesterday" },
-    ],
-    []
-  );
+  // ✅ Group chats inbox (real backend)
+  const inbox = useChatInbox(15_000);
 
-  const filteredThreads = useMemo(() => {
+  const filteredInbox = useMemo(() => {
     const s = query.trim().toLowerCase();
-    if (!s) return threads;
-    return threads.filter(
-      (t) => t.name.toLowerCase().includes(s) || t.last.toLowerCase().includes(s)
-    );
-  }, [query, threads]);
+    if (!s) return inbox.items;
+
+    return inbox.items.filter((it) => {
+      const name = (it.group?.name ?? "").toLowerCase();
+      const last = (it.latestMessage?.text ?? "").toLowerCase();
+      return name.includes(s) || last.includes(s);
+    });
+  }, [query, inbox.items]);
 
   return (
     <div className="h-screen overflow-hidden bg-creamtext text-zinc-900">
@@ -125,7 +122,7 @@ export default function Notifications() {
 
                 {/* Content */}
                 <div className="flex-1 min-h-0 overflow-y-auto p-3">
-                  {/* ✅ Join Requests section */}
+                  {/* ✅ Join Requests */}
                   <div className="mb-4">
                     <div className="flex items-center justify-between px-1">
                       <p className="text-sm font-semibold text-zinc-900">
@@ -152,7 +149,8 @@ export default function Notifications() {
                             .map((it) => {
                               const k = keyOf(it);
                               const st = actionByKey[k]?.state ?? "idle";
-                              const isPending = st === "approving" || st === "rejecting";
+                              const isPending =
+                                st === "approving" || st === "rejecting";
                               const didSucceed = st === "success";
                               const didFail = st === "error";
                               const kind = actionByKey[k]?.kind;
@@ -163,7 +161,10 @@ export default function Notifications() {
                                   initial={{ opacity: 0, y: 6, scale: 0.99 }}
                                   animate={{ opacity: 1, y: 0, scale: 1 }}
                                   exit={{ opacity: 0, y: -6, scale: 0.98 }}
-                                  transition={{ duration: 0.18, ease: EASE_OUT }}
+                                  transition={{
+                                    duration: 0.18,
+                                    ease: EASE_OUT,
+                                  }}
                                   className="
                                     w-full
                                     flex items-center gap-3
@@ -182,25 +183,35 @@ export default function Notifications() {
                                       User #{it.uid} wants to join
                                     </p>
                                     <p className="truncate text-xs text-zinc-600 mt-0.5">
-                                      Group: <span className="font-semibold">{it.groupName}</span>
+                                      Group:{" "}
+                                      <span className="font-semibold">
+                                        {it.groupName}
+                                      </span>
                                     </p>
 
-                                    {/* ✅ inline feedback row */}
-                                    <div className="mt-1.5 flex items-center gap-2" aria-live="polite">
+                                    <div
+                                      className="mt-1.5 flex items-center gap-2"
+                                      aria-live="polite"
+                                    >
                                       {isPending ? (
                                         <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-zinc-600">
                                           <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                          {st === "approving" ? "Approving…" : "Rejecting…"}
+                                          {st === "approving"
+                                            ? "Approving…"
+                                            : "Rejecting…"}
                                         </span>
                                       ) : didSucceed ? (
                                         <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-green-700">
                                           <Check className="h-3.5 w-3.5" />
-                                          {kind === "approve" ? "Approved" : "Rejected"}
+                                          {kind === "approve"
+                                            ? "Approved"
+                                            : "Rejected"}
                                         </span>
                                       ) : didFail ? (
                                         <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-700">
                                           <AlertTriangle className="h-3.5 w-3.5" />
-                                          {actionByKey[k]?.message ?? "Failed. Try again."}
+                                          {actionByKey[k]?.message ??
+                                            "Failed. Try again."}
                                         </span>
                                       ) : null}
                                     </div>
@@ -211,22 +222,34 @@ export default function Notifications() {
                                     {formatWhen(it.createdAt)}
                                   </span>
 
-                                  {/* ✅ actions */}
                                   <div className="flex items-center gap-2">
                                     <button
                                       type="button"
                                       disabled={isPending || didSucceed}
                                       onClick={async () => {
-                                        setItemState(k, { state: "approving", message: undefined, kind: "approve" });
+                                        setItemState(k, {
+                                          state: "approving",
+                                          message: undefined,
+                                          kind: "approve",
+                                        });
                                         try {
-                                          await approveMut.mutateAsync({ groupId: it.groupId, userId: it.uid });
-                                          setItemState(k, { state: "success", message: undefined, kind: "approve" });
+                                          await approveMut.mutateAsync({
+                                            groupId: it.groupId,
+                                            userId: it.uid,
+                                          });
+                                          setItemState(k, {
+                                            state: "success",
+                                            message: undefined,
+                                            kind: "approve",
+                                          });
                                           dismissItemSoon(k, 800);
                                         } catch (e: any) {
                                           setItemState(k, {
                                             state: "error",
                                             kind: "approve",
-                                            message: e?.message ? String(e.message) : "Approve failed.",
+                                            message: e?.message
+                                              ? String(e.message)
+                                              : "Approve failed.",
                                           });
                                         }
                                       }}
@@ -243,23 +266,38 @@ export default function Notifications() {
                                       ) : (
                                         <Check className="h-4 w-4" />
                                       )}
-                                      {st === "approving" ? "Approving" : "Approve"}
+                                      {st === "approving"
+                                        ? "Approving"
+                                        : "Approve"}
                                     </button>
 
                                     <button
                                       type="button"
                                       disabled={isPending || didSucceed}
                                       onClick={async () => {
-                                        setItemState(k, { state: "rejecting", message: undefined, kind: "reject" });
+                                        setItemState(k, {
+                                          state: "rejecting",
+                                          message: undefined,
+                                          kind: "reject",
+                                        });
                                         try {
-                                          await rejectMut.mutateAsync({ groupId: it.groupId, userId: it.uid });
-                                          setItemState(k, { state: "success", message: undefined, kind: "reject" });
+                                          await rejectMut.mutateAsync({
+                                            groupId: it.groupId,
+                                            userId: it.uid,
+                                          });
+                                          setItemState(k, {
+                                            state: "success",
+                                            message: undefined,
+                                            kind: "reject",
+                                          });
                                           dismissItemSoon(k, 800);
                                         } catch (e: any) {
                                           setItemState(k, {
                                             state: "error",
                                             kind: "reject",
-                                            message: e?.message ? String(e.message) : "Reject failed.",
+                                            message: e?.message
+                                              ? String(e.message)
+                                              : "Reject failed.",
                                           });
                                         }
                                       }}
@@ -276,7 +314,9 @@ export default function Notifications() {
                                       ) : (
                                         <X className="h-4 w-4" />
                                       )}
-                                      {st === "rejecting" ? "Rejecting" : "Reject"}
+                                      {st === "rejecting"
+                                        ? "Rejecting"
+                                        : "Reject"}
                                     </button>
                                   </div>
                                 </motion.div>
@@ -287,60 +327,89 @@ export default function Notifications() {
                     </div>
 
                     {joinNotif.loading ? (
-                      <div className="mt-2 px-1 text-xs text-zinc-500">Updating…</div>
+                      <div className="mt-2 px-1 text-xs text-zinc-500">
+                        Updating…
+                      </div>
                     ) : null}
                   </div>
 
-                  {/* Existing list (threads) */}
+                  {/* ✅ Group chats (REAL) */}
                   <div className="mt-2">
-                    <p className="px-1 text-sm font-semibold text-zinc-900">Group chats</p>
+                    <div className="flex items-center justify-between px-1">
+                      <p className="text-sm font-semibold text-zinc-900">
+                        Group chats
+                      </p>
+                      <span className="text-xs text-zinc-500">
+                        {inbox.loading ? "Loading…" : `${inbox.count}`}
+                      </span>
+                    </div>
+
                     <div className="mt-2">
-                      {filteredThreads.map((t) => (
-                        <button
-                          key={t.id}
-                          className="
-                            w-full text-left
-                            flex items-center gap-3
-                            rounded-2xl px-3 py-3
-                            transition hover:bg-zinc-50
-                          "
-                          onClick={() =>
-                            navigate(`/groups/${t.id}/chat`, {
-                              state: { groupName: t.name },
-                            })
-                          }
-                        >
-                          <div className="h-10 w-10 rounded-2xl bg-zinc-100 border border-zinc-200 grid place-items-center text-xs font-bold text-zinc-600">
-                            {t.name.slice(0, 2).toUpperCase()}
-                          </div>
-
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="truncate text-sm font-semibold text-zinc-900">
-                                {t.name}
-                              </p>
-                              <span className="text-[11px] text-zinc-500">
-                                {t.time}
-                              </span>
-                            </div>
-                            <p className="truncate text-xs text-zinc-500 mt-0.5">
-                              {t.last}
-                            </p>
-                          </div>
-
-                          {t.unread ? (
-                            <span className="min-w-[24px] h-6 px-2 rounded-full bg-yellow-400 text-white text-[11px] font-bold grid place-items-center">
-                              {t.unread}
-                            </span>
-                          ) : null}
-                        </button>
-                      ))}
-
-                      {!filteredThreads.length ? (
-                        <div className="p-6 text-center text-sm text-zinc-500">
-                          No results found.
+                      {inbox.error ? (
+                        <div className="p-4 rounded-2xl border border-red-200 bg-red-50 text-sm text-red-700">
+                          {inbox.error}
                         </div>
-                      ) : null}
+                      ) : inbox.loading ? (
+                        <div className="p-4 text-sm text-zinc-500">
+                          Loading chats…
+                        </div>
+                      ) : (
+                        <>
+                          {filteredInbox.map((it) => {
+                            const hasMsg = !!it.latestMessage;
+                            const lastText = hasMsg
+                              ? it.latestMessage!.text
+                              : "No messages yet.";
+                            const timeText = hasMsg
+                              ? formatWhen(it.latestMessage!.createdAt)
+                              : "—";
+
+                            return (
+                              <button
+                                key={it.group.id}
+                                className="
+                                  w-full text-left
+                                  flex items-center gap-3
+                                  rounded-2xl px-3 py-3
+                                  transition hover:bg-zinc-50
+                                "
+                                onClick={() =>
+                                  navigate(`/groups/${it.group.id}/chat`, {
+                                    state: { groupName: it.group.name },
+                                  })
+                                }
+                                type="button"
+                              >
+                                <div className="h-10 w-10 rounded-2xl bg-zinc-100 border border-zinc-200 grid place-items-center text-xs font-bold text-zinc-600">
+                                  {(it.group.name || "G")
+                                    .slice(0, 2)
+                                    .toUpperCase()}
+                                </div>
+
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <p className="truncate text-sm font-semibold text-zinc-900">
+                                      {it.group.name}
+                                    </p>
+                                    <span className="text-[11px] text-zinc-500">
+                                      {timeText}
+                                    </span>
+                                  </div>
+                                  <p className="truncate text-xs text-zinc-500 mt-0.5">
+                                    {lastText}
+                                  </p>
+                                </div>
+                              </button>
+                            );
+                          })}
+
+                          {!filteredInbox.length ? (
+                            <div className="p-6 text-center text-sm text-zinc-500">
+                              No results found.
+                            </div>
+                          ) : null}
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>

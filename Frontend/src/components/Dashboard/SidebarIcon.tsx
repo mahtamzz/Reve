@@ -26,7 +26,7 @@ type SidebarProps = {
   activeKey?: string;
   onLogout: () => void;
   variant?: "desktop" | "drawer";
-  onNavigate?: () => void; // برای بستن Drawer بعد از کلیک
+  onNavigate?: () => void; 
 };
 
 function cx(...classes: Array<string | false | undefined | null>) {
@@ -109,7 +109,7 @@ export default function Sidebar({
     const main: NavItem[] = [
       { key: "dashboard", label: "Dashboard", icon: <LayoutDashboard className="h-4 w-4" />, to: "/dashboard" },
       { key: "groups", label: "Groups", icon: <UsersRound className="h-4 w-4" />, to: "/groups" },
-      { key: "analytics", label: "Subject Analytics", icon: <BarChart3 className="h-4 w-4" />, to: "/analytics", badge: "New" },
+      { key: "analytics", label: "Subject Analytics", icon: <BarChart3 className="h-4 w-4" />, to: "/analytics"},
       { key: "connections", label: "Connections", icon: <Users className="h-4 w-4" />, to: "/connections" },
     ];
 

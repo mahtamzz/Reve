@@ -12,7 +12,7 @@ import {
 import { format, parseISO } from "date-fns";
 
 export type WeeklyPoint = {
-  date: string;   // "YYYY-MM-DD"
+  date: string; 
   hours: number;
 };
 
