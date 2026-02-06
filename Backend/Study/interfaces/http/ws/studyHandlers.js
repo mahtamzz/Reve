@@ -9,18 +9,26 @@ function toDateOnlyUTC(d = new Date()) {
  * Broadcast to ALL groups the user belongs to.
  * This is your "not studying inside a group" requirement.
  */
-async function broadcastToMyGroups(io, { groupClient }, cookieHeader, payload) {
+async function broadcastToMyGroups(io, { groupClient, studyPresenceStore }, cookieHeader, payload) {
     if (!cookieHeader) return;
 
-    // Expected: listMyGroups returns an array. Could be [{id,...}] or [{groupId,...}] depending on your Group service.
     const groups = await groupClient.listMyGroups({ cookieHeader });
 
+    const groupIds = [];
     for (const g of groups || []) {
         const groupId = g.id ?? g.groupId ?? g.group_id;
         if (!groupId) continue;
+        groupIds.push(String(groupId));
         io.to(`group:${groupId}`).emit("study_presence:update", payload);
     }
+
+    try {
+        if (payload?.uid) {
+            await studyPresenceStore.rememberGroups(payload.uid, groupIds);
+        }
+    } catch { }
 }
+
 
 module.exports = function registerStudyHandlers(io, socket, deps) {
     const {
@@ -116,6 +124,8 @@ module.exports = function registerStudyHandlers(io, socket, deps) {
                 socket.id
             );
 
+            socket.data.isStudying = true;
+
             // persisted base minutes for today (does not include live delta)
             const day = toDateOnlyUTC(new Date(meta.startedAt));
             const todayMinsBase = subjectDstRepo?.getTotalByDay
@@ -125,7 +135,7 @@ module.exports = function registerStudyHandlers(io, socket, deps) {
             // Broadcast to ALL groups the user belongs to
             await broadcastToMyGroups(
                 io,
-                { groupClient },
+                { groupClient , studyPresenceStore },
                 cookieHeader,
                 {
                     uid,
@@ -170,12 +180,13 @@ module.exports = function registerStudyHandlers(io, socket, deps) {
             if (!cookieHeader) return socket.emit("error", { code: "NO_AUTH_COOKIE" });
 
             const { becameOffline, meta } = await studyPresenceStore.stopStudying(uid, socket.id);
+            socket.data.isStudying = false;          // simpler: this socket is no longer studying
 
             // Only broadcast offline if this was the last socket/tab for that user.
             if (becameOffline) {
                 await broadcastToMyGroups(
                     io,
-                    { groupClient },
+                    { groupClient , studyPresenceStore },
                     cookieHeader,
                     {
                         uid,

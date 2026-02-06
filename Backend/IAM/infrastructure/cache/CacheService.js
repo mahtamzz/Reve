@@ -34,7 +34,6 @@ class CacheService {
             console.error("Redis GET failed:", err);
             return null;
         });
-        console.log("Cache GET", key, value);
         return value;
     }
     async set(key, value, ttlSeconds = 300) { return this.setBreaker.fire(key, value, ttlSeconds).catch(console.error); }

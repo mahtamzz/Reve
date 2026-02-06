@@ -25,6 +25,10 @@ function keySocks(uid) {
     return `study:active:${uid}:socks`;
 }
 
+function keyGroups(uid) {
+    return `study:active:${uid}:groups`;
+}
+
 function safeParse(json) {
     try {
         return JSON.parse(json);
@@ -85,22 +89,18 @@ module.exports = function createStudyPresenceStore(redis, opts = {}) {
         const mKey = keyMeta(uid);
         const sKey = keySocks(uid);
 
-        // Update meta.lastHbAt if meta exists; refresh TTLs either way.
-        const metaJson = await redis.get(mKey);
-        if (metaJson) {
-            const meta = safeParse(metaJson) || {};
-            meta.lastHbAt = new Date().toISOString();
-            // keep startedAt if present
-            await redis.set(mKey, JSON.stringify(meta), { EX: ttlSeconds });
-        } else {
-            // meta missing: we still refresh sockets TTL, but user won't be considered studying.
-            // (This can happen if meta expired but set didn't yet; TTLs usually match.)
-            await redis.expire(sKey, ttlSeconds);
-        }
+        // Only heartbeat if this socket is already marked as studying
+        const isMember = await redis.sIsMember(sKey, socketId);
+        if (!isMember) return false;
 
-        // Ensure this socket is still counted
+        const metaJson = await redis.get(mKey);
+        if (!metaJson) return false;
+
+        const meta = safeParse(metaJson) || {};
+        meta.lastHbAt = new Date().toISOString();
+
         const tx = redis.multi();
-        tx.sAdd(sKey, socketId);
+        tx.set(mKey, JSON.stringify(meta), { EX: ttlSeconds });
         tx.expire(sKey, ttlSeconds);
         await tx.exec();
 
@@ -234,6 +234,27 @@ module.exports = function createStudyPresenceStore(redis, opts = {}) {
         return out;
     }
 
+    async function rememberGroups(uid, groupIds = []) {
+        if (!uid) throw new Error("uid is required");
+        if (!Array.isArray(groupIds)) throw new Error("groupIds must be an array");
+
+        const gKey = keyGroups(uid);
+
+        const tx = redis.multi();
+        if (groupIds.length > 0) tx.sAdd(gKey, groupIds.map(String));
+        // keep this longer than presence TTL so expiry broadcaster can still find groups
+        tx.expire(gKey, 60 * 60 * 24); // 24h
+        await tx.exec();
+        return true;
+    }
+
+    async function getRememberedGroups(uid) {
+        if (!uid) return [];
+        const gKey = keyGroups(uid);
+        const groups = await redis.sMembers(gKey);
+        return (groups || []).filter(Boolean);
+    }
+
     return {
         ttlSeconds,
         hbIntervalMs,
@@ -246,6 +267,10 @@ module.exports = function createStudyPresenceStore(redis, opts = {}) {
         getActive,
 
         getStudyingMap,
-        getActiveMany
+        getActiveMany,
+
+        rememberGroups,
+        getRememberedGroups
     };
+
 };
