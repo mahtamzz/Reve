@@ -6,7 +6,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 
 import CommandPalette from "../ui/CommandPalette";
 import { authClient } from "@/api/client";
-import { getAvatarUrl } from "@/api/media";
+import { getAvatarMeta, getAvatarUrl } from "@/api/media";
+import { DEFAULT_AVATAR_URL } from "@/constants/avatar";
 import { useJoinRequestNotifications } from "@/hooks/useJoinRequestNotifications";
 
 type TopbarProfile = {
@@ -76,7 +77,7 @@ export default function Topbar({
 
   const [remoteProfile, setRemoteProfile] = useState<TopbarProfile | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string>(DEFAULT_AVATAR_URL);
 
   const [search, setSearch] = useState("");
 
@@ -147,27 +148,31 @@ export default function Topbar({
     window.addEventListener("click", onDoc);
     return () => window.removeEventListener("click", onDoc);
   }, [notifOpen]);
-
+  
   useEffect(() => {
     if (profile) return;
-
+  
     let cancelled = false;
-
+  
     const run = async () => {
       setLoadingProfile(true);
       try {
         const data: any = await authClient.get("/auth/me");
         const u = (data?.user ?? data) as any;
-
+  
         const next: TopbarProfile = {
           username: u?.username ?? "user",
           email: u?.email ?? undefined,
           fullName: u?.fullName ?? u?.name ?? u?.username ?? "User",
           role: u?.role ?? "Student",
         };
-
+  
         if (!cancelled && mountedRef.current) setRemoteProfile(next);
-        if (!cancelled && mountedRef.current) setAvatarUrl(getAvatarUrl({ bustCache: true }));
+  
+        if (!cancelled && mountedRef.current) {
+          const meta = await getAvatarMeta();
+          setAvatarUrl(meta?.exists ? getAvatarUrl({ bustCache: true }) : DEFAULT_AVATAR_URL);
+        }
       } catch {
         if (!cancelled && mountedRef.current) {
           setRemoteProfile({
@@ -175,19 +180,20 @@ export default function Topbar({
             fullName: "User",
             role: "Student",
           });
-          setAvatarUrl(null);
+          setAvatarUrl(DEFAULT_AVATAR_URL);
         }
       } finally {
         if (!cancelled && mountedRef.current) setLoadingProfile(false);
       }
     };
-
+  
     run();
-
+  
     return () => {
       cancelled = true;
     };
   }, [profile]);
+  
 
   const submitSearch = () => {
     const q = search.trim();
