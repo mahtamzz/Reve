@@ -429,16 +429,6 @@ export default function Dashboard() {
                     <div className="mt-5">
                       <LookAtBuddy label="Study buddy" />
                     </div>
-
-                    <div className="mt-5 rounded-2xl border border-zinc-200 bg-gradient-to-br from-yellow-50 to-white p-4">
-                      <p className="text-xs text-zinc-500 truncate">
-                        Timezone: <span className="text-zinc-700">{profile.timezone ?? "—"}</span>
-                      </p>
-
-                      {updateProfileErrMsg ? (
-                        <p className="mt-2 text-xs text-rose-600">{updateProfileErrMsg}</p>
-                      ) : null}
-                    </div>
                   </div>
                 </div>
               </section>

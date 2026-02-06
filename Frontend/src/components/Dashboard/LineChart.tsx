@@ -47,13 +47,28 @@ const CustomTooltip = ({
 
 
 export const WeeklyStudyChart: React.FC<{ data: WeeklyPoint[] }> = ({ data }) => {
-  const chartData = [...data]
-  .reverse()                
-  .map((d) => ({
+  const sorted = [...data].sort(
+    (a, b) => parseISO(a.date).getTime() - parseISO(b.date).getTime()
+  );
+  
+  const startIndex = sorted.length
+    ? sorted.reduce((maxIdx, cur, i) =>
+        parseISO(cur.date).getTime() > parseISO(sorted[maxIdx].date).getTime()
+          ? i
+          : maxIdx
+      , 0)
+    : 0;
+  
+  const rotated = sorted.length
+    ? [...sorted.slice(startIndex), ...sorted.slice(0, startIndex)]
+    : [];
+  
+  const chartData = rotated.map((d) => ({
     ...d,
     day: format(parseISO(d.date), "EEE"),
     full: format(parseISO(d.date), "MMM d, yyyy"),
   }));
+  
 
 
   const maxHours = Math.max(1, ...chartData.map((d) => d.hours));
