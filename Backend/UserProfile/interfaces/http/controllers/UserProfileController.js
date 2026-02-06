@@ -53,15 +53,20 @@ class UserProfileController {
         res.json(data);
     };
 
-    changePassword = async (req, res) => {
-        const authHeader = req.headers.authorization || "";
+    changePassword = async (req, res, next) => {
+        try {
+            const authHeader = req.headers.authorization;
+            console.log("INCOMING Authorization:", authHeader ? authHeader.slice(0, 20) + "..." : authHeader);
 
-        await this.iamClient.changePassword(authHeader, {
-            current_password: req.body.current_password,
-            new_password: req.body.new_password
-        });
+            await this.iamClient.changePassword(authHeader, {
+                currentPassword: req.body.currentPassword,
+                newPassword: req.body.newPassword
+            });
 
-        res.status(204).end();
+            return res.status(204).send();
+        } catch (err) {
+            next(err);
+        }
     };
 
     getPublicProfilesBatchHandler = async (req, res) => {
