@@ -111,6 +111,27 @@ function pickNameFromMember(m: any): { displayName: string | null; username: str
   return { displayName, username };
 }
 
+function pickAvatarHint(m: any, pub: any): string | null {
+  return (
+    safeStr(m?.profile?.avatar_url) ??
+    safeStr(m?.profile?.avatarUrl) ??
+    safeStr(m?.avatar_url) ??
+    safeStr(m?.avatarUrl) ??
+    safeStr(pub?.avatar_url) ??
+    safeStr(pub?.avatarUrl) ??
+    safeStr(pub?.avatar) ??
+    null
+  );
+}
+
+function resolveAvatarUrl(m: any, pub: any, uid: string): string | null {
+  const direct = pickAvatarHint(m, pub);
+  if (direct) return direct; 
+
+  return null;
+}
+
+
 function AvatarCircle({
   uid,
   src,
@@ -269,7 +290,7 @@ export default function GroupChat() {
         safeStr(pub?.handle) ??
         null;
 
-      const avatarUrl = getUserAvatarUrl(uid, { bustCache: true });
+        const avatarUrl = resolveAvatarUrl(m, pub, uid);
 
       const online = presence[String(uid)] === "online" || Boolean(m?.online);
 
@@ -302,7 +323,7 @@ export default function GroupChat() {
         new Date().toISOString();
 
       const senderLabel = mine ? "You" : card?.fullName ?? `User #${senderUid}`;
-      const senderAvatarUrl = card?.avatarUrl ?? (senderUid ? getUserAvatarUrl(senderUid, { bustCache: true }) : null);
+      const senderAvatarUrl = card?.avatarUrl ?? null;
 
       return {
         id: String((m as any).id ?? crypto.randomUUID()),
@@ -477,22 +498,15 @@ export default function GroupChat() {
                             >
                               {/* left avatar */}
                               {!m.mine && (
-                                <div className="mr-2 mt-1 h-8 w-8 overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-100 flex items-center justify-center text-xs font-bold text-zinc-600">
-                                  {m.senderAvatarUrl ? (
-                                    <img
-                                      src={m.senderAvatarUrl}
-                                      alt="user"
-                                      className="h-full w-full object-cover"
-                                      onError={(e) => {
-                                        // ✅ مثل Topbar: fallback
-                                        (e.currentTarget as HTMLImageElement).src = "";
-                                        (e.currentTarget as HTMLImageElement).style.display = "none";
-                                      }}
-                                    />
-                                  ) : (
-                                    "?"
-                                  )}
+                                <div className="mr-2 mt-1">
+                                  <AvatarCircle
+                                    uid={m.senderUid}
+                                    src={m.senderAvatarUrl}
+                                    fallback={initialsFromName(m.senderLabel ?? "User")}
+                                    alt={m.senderLabel ?? "User"}
+                                  />
                                 </div>
+
                               )}
 
                               <div
@@ -515,21 +529,15 @@ export default function GroupChat() {
 
                               {/* right avatar */}
                               {m.mine && (
-                                <div className="ml-2 mt-1 h-8 w-8 overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-100 flex items-center justify-center text-xs font-bold text-zinc-600">
-                                  {m.senderAvatarUrl ? (
-                                    <img
-                                      src={m.senderAvatarUrl}
-                                      alt="me"
-                                      className="h-full w-full object-cover"
-                                      onError={(e) => {
-                                        (e.currentTarget as HTMLImageElement).src = "";
-                                        (e.currentTarget as HTMLImageElement).style.display = "none";
-                                      }}
-                                    />
-                                  ) : (
-                                    "ME"
-                                  )}
+                                <div className="ml-2 mt-1">
+                                  <AvatarCircle
+                                    uid={m.senderUid}
+                                    src={m.senderAvatarUrl}
+                                    fallback={"ME"}
+                                    alt="me"
+                                  />
                                 </div>
+
                               )}
                             </motion.div>
                           ))}

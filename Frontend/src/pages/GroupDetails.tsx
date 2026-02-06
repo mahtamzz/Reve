@@ -5,6 +5,9 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { usePublicProfilesBatch } from "@/hooks/usePublicProfilesBatch";
 import { getUserAvatarUrl } from "@/api/media";
 import { DEFAULT_AVATAR_URL } from "@/constants/avatar";
+import { useStudyPresence } from "@/hooks/useStudy";
+import type { StudyPresenceActiveMeta } from "@/api/study";
+
 import {
   ArrowLeft,
   MessageCircle,
@@ -291,6 +294,16 @@ function JoinCta({
   );
 }
 
+function formatElapsed(ms: number) {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const hh = Math.floor(total / 3600);
+  const mm = Math.floor((total % 3600) / 60);
+  const ss = total % 60;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return hh > 0 ? `${pad(hh)}:${pad(mm)}:${pad(ss)}` : `${pad(mm)}:${pad(ss)}`;
+}
+
+
 function StatCard({
   label,
   value,
@@ -349,9 +362,96 @@ function StatCard({
   );
 }
 
+function ChatCtaButton({
+  onClick,
+}: {
+  onClick: () => void;
+}) {
+  return (
+    <motion.button
+      type="button"
+      onClick={onClick}
+      initial={{ opacity: 0, y: -4 }}
+      animate={{ opacity: 1, y: 0 }}
+      whileHover={{ y: -2, scale: 1.01 }}
+      whileTap={{ scale: 0.985 }}
+      transition={{ duration: 0.25, ease: EASE_SOFT }}
+      className="
+        group relative overflow-hidden
+        inline-flex items-center gap-2
+        rounded-2xl px-4 py-2.5 text-xs font-semibold
+        text-zinc-900
+        border border-white/70
+        bg-gradient-to-r from-sky-100 via-rose-100 to-amber-100
+        shadow-[0_18px_60px_-40px_rgba(2,6,23,0.35)]
+        hover:shadow-[0_26px_78px_-44px_rgba(2,6,23,0.45)]
+        focus:outline-none focus:ring-2 focus:ring-sky-200/80 focus:ring-offset-2 focus:ring-offset-[#FBFBF7]
+      "
+    >
+      {/* glow نرمِ متحرک */}
+      <motion.span
+        aria-hidden
+        className="pointer-events-none absolute -inset-12 opacity-50 blur-2xl"
+        animate={{ x: [0, 18, -12, 0], y: [0, -10, 12, 0] }}
+        transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
+        style={{
+          background:
+            "conic-gradient(from 210deg at 50% 50%, rgba(147,197,253,0.55), rgba(255,175,221,0.45), rgba(253,224,71,0.40), rgba(134,239,172,0.35), rgba(147,197,253,0.55))",
+        }}
+      />
+
+      <span className="relative inline-flex items-center gap-2">
+        <span
+          className="
+            inline-flex h-7 w-7 items-center justify-center
+            rounded-full bg-white/75 border border-white/70
+            shadow-sm
+            transition-transform duration-300
+            group-hover:rotate-[-6deg] group-hover:scale-[1.04]
+          "
+          aria-hidden
+        >
+          <MessageCircle className="h-4 w-4" />
+        </span>
+        <span>Open Group Chat</span>
+      </span>
+
+      <span
+        className="
+          relative ml-1 inline-flex items-center justify-center
+          h-7 w-7 rounded-full
+          bg-white/75 border border-white/70
+          text-zinc-800
+          transition-transform duration-300
+          group-hover:translate-x-0.5
+        "
+        aria-hidden="true"
+      >
+        →
+      </span>
+    </motion.button>
+  );
+}
+
+function calcTodayTotalMs(args: { todayMinsBase?: number; startedAt?: string | null; nowMs: number }) {
+  const baseMs = Math.max(0, Number(args.todayMinsBase ?? 0)) * 60 * 1000;
+  const liveMs = args.startedAt ? Math.max(0, args.nowMs - new Date(args.startedAt).getTime()) : 0;
+  return baseMs + liveMs;
+}
+
+
+
 export default function GroupDetails() {
   const { groupId } = useParams<{ groupId: string }>();
   const gid = groupId || "";
+
+  const [nowTick, setNowTick] = useState(() => Date.now());
+
+  useEffect(() => {
+    const t = window.setInterval(() => setNowTick(Date.now()), 1000);
+    return () => window.clearInterval(t);
+  }, []);
+
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -402,14 +502,31 @@ export default function GroupDetails() {
   }, [membersRaw]);
 
   const profiles = usePublicProfilesBatch(memberUids, canSeeMembers);
+  const presenceQ = useStudyPresence(memberUids, isMember && canSeeMembers);
+  const activeMap = (presenceQ.data?.active ?? {}) as Record<string, StudyPresenceActiveMeta>;
+
+  const todayBaseMap = presenceQ.data?.todayMinsBase ?? {};
+
+
+  useEffect(() => {
+    console.log("presenceQ", {
+      status: presenceQ.status,
+      isFetching: presenceQ.isFetching,
+      error: presenceQ.error,
+      data: presenceQ.data,
+      memberUids,
+    });
+  }, [presenceQ.status, presenceQ.isFetching, presenceQ.error, presenceQ.data, memberUids]);
+  
 
   const members = useMemo(() => {
     return (membersRaw as any[]).map((m, idx) => {
-      const uid = pickUid(m) ?? String(idx);
-
+      const uidRaw = pickUid(m);
+      const uidKey = uidRaw ? String(uidRaw) : null;
+  
       const fromMember = pickNameFromMember(m);
-      const pub = profiles.map.get(String(uid));
-
+      const pub = uidKey ? profiles.map.get(uidKey) : undefined;
+  
       const display =
         fromMember.displayName ??
         safeStr(pub?.display_name) ??
@@ -417,17 +534,34 @@ export default function GroupDetails() {
         safeStr(pub?.name) ??
         (fromMember.username ? `@${fromMember.username.replace(/^@/, "")}` : null) ??
         safeStr(pub?.username) ??
-        `User #${uid}`;
-
+        (uidKey ? `User #${uidKey}` : `User #${idx}`);
+  
       const avatar = pickAvatarUrl(m, pub);
-      
+  
       const role = String(m?.role ?? m?.member_role ?? m?.memberRole ?? "member");
-      const online = Boolean(m?.online ?? m?.user?.online);
-
-      return { uid: String(uid), display: String(display), avatar, role, online };
+  
+      const active = uidKey ? (activeMap[uidKey] ?? null) : null;
+      const online = Boolean(active);
+      const startedAt = active?.startedAt ?? null;
+  
+      const todayMinsBase = uidKey ? Number(todayBaseMap[uidKey] ?? 0) : 0;
+  
+      return {
+        uid: uidKey ?? `idx:${idx}`,
+  
+        uidKey,
+  
+        display: String(display),
+        avatar,
+        role,
+  
+        online,
+        startedAt,
+        todayMinsBase,
+      };
     });
-  }, [membersRaw, profiles.map]);
-
+  }, [membersRaw, profiles.map, activeMap, todayBaseMap]);
+  
 
   const previewMembers = useMemo(() => members.slice(0, 6), [members]);
 
@@ -538,10 +672,8 @@ export default function GroupDetails() {
 
                 {isMember ? (
                   <div className="flex items-center gap-2">
-                    <SoftButton onClick={goToChat}>
-                      <MessageCircle className="h-4 w-4" />
-                      Open Group Chat
-                    </SoftButton>
+                  <ChatCtaButton onClick={goToChat} />
+
 
                     <SoftButton onClick={handleLeave} disabled={leaveMut.isPending}>
                       <LogOut className="h-4 w-4" />
@@ -883,11 +1015,23 @@ export default function GroupDetails() {
                                 `}
                               />
                             </div>
+                            <div className="min-w-0">
+                                <p className="truncate text-xs font-semibold text-zinc-900">{m.display}</p>
 
-                                <div className="min-w-0">
-                                  <p className="truncate text-xs font-semibold text-zinc-900">{m.display}</p>
-                                  <div className="mt-1">{roleBadge(m.role)}</div>
-                                </div>
+                                <p className="mt-0.5 text-[11px] font-semibold tabular-nums text-zinc-400">
+                                  {formatElapsed(
+                                    calcTodayTotalMs({
+                                      todayMinsBase: Number(m.todayMinsBase ?? 0),
+                                      startedAt: m.startedAt ?? null,
+                                      nowMs: nowTick,
+                                    })
+                                  )}
+                                </p>
+
+                                <div className="mt-1">{roleBadge(m.role)}</div>
+                              </div>
+
+
                               </motion.div>
                             ))}
                           </div>
@@ -1043,7 +1187,15 @@ export default function GroupDetails() {
                                             m.online ? "text-emerald-600" : "text-zinc-400"
                                           }`}
                                         >
-                                          {m.online ? "online" : "offline"}
+                                        {formatElapsed(
+                                          calcTodayTotalMs({
+                                            todayMinsBase: m.todayMinsBase,
+                                            startedAt: m.startedAt,
+                                            nowMs: nowTick,
+                                          })
+                                        )}
+
+
                                         </span>
                                       </div>
                                     </div>

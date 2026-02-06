@@ -47,6 +47,22 @@ function toQueryString(obj: Record<string, any>) {
   return s ? `?${s}` : "";
 }
 
+export type StudyPresenceActiveMeta =
+  | null
+  | {
+      subjectId?: string | null;
+      startedAt: string; // ISO date-time
+      lastHbAt?: string;
+      source?: string;
+    };
+
+export type StudyPresenceResponse = {
+  day: string; // YYYY-MM-DD (UTC)
+  active: Record<string, StudyPresenceActiveMeta>;
+  todayMinsBase: Record<string, number>;
+};
+
+
 export const studyApi = {
   // ---------- Subjects ----------
   listSubjects: () =>
@@ -81,4 +97,10 @@ export const studyApi = {
       `${STUDY_PREFIX}/stats/weekly-goal`,
       { weeklyGoalMins }
     ),
+      // ---------- Presence ----------
+  getPresence: (uids: Array<string | number>) => {
+    const q = toQueryString({ uids: uids.map(String).join(",") });
+    return apiClient.get<StudyPresenceResponse>(`${STUDY_PREFIX}/presence${q}`);
+  },
+
 };

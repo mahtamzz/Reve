@@ -2,6 +2,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { studyApi } from "@/api/study";
 import { profileMeKey } from "@/hooks/useProfileMe";
+import type { StudyPresenceResponse } from "@/api/study";
+
 
 import type {
   CreateSubjectBody,
@@ -27,6 +29,9 @@ function stableParamsKey(params: unknown) {
 // ---------- Query Keys ----------
 export const studyKeys = {
   root: ["study"] as const,
+
+  presence: (uids?: Array<string | number>) =>
+    ["study", "presence", (uids ?? []).map(String).sort().join(",")] as const,
 
   subjects: () => ["study", "subjects"] as const,
 
@@ -173,5 +178,21 @@ export function useUpdateWeeklyGoal() {
           q.queryKey[1] === "dashboard",
       });
     },
+  });
+}
+
+
+export function useStudyPresence(uids: Array<string | number>, enabled = true) {
+  const u = (uids ?? []).map(String).filter(Boolean);
+  const ok = enabled && u.length > 0;
+
+  return useQuery({
+    queryKey: studyKeys.presence(u),
+    queryFn: () => studyApi.getPresence(u),
+    enabled: ok,
+    retry: false,
+    staleTime: 0,
+    refetchInterval: ok ? 25000 : false, 
+    refetchOnWindowFocus: true,
   });
 }

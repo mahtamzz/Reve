@@ -122,7 +122,6 @@ const LoginPage: React.FC = () => {
         )}
       </AnimatePresence>
 
-      {/* header ساده */}
       <header className="mx-auto max-w-6xl px-4 pt-8 relative z-10">
         <motion.div
           initial={{ opacity: 0, y: -10 }}
@@ -134,24 +133,6 @@ const LoginPage: React.FC = () => {
             REVE
             <div className="mt-1 h-[2px] w-12 rounded-full bg-yellow-400" />
           </div>
-
-          <nav className="hidden sm:flex items-center gap-6 text-sm">
-            {["about", "services", "contact"].map((p) => (
-              <NavLink
-                key={p}
-                to={`/${p}`}
-                className={({ isActive }) =>
-                  `transition-colors ${
-                    isActive
-                      ? "text-zinc-900 font-semibold"
-                      : "text-zinc-600 hover:text-zinc-900"
-                  }`
-                }
-              >
-                {p === "contact" ? "Contact" : p[0].toUpperCase() + p.slice(1)}
-              </NavLink>
-            ))}
-          </nav>
         </motion.div>
       </header>
 

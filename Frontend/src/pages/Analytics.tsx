@@ -1,4 +1,3 @@
-// src/pages/Analytics.tsx
 import React, { useMemo } from "react";
 import { motion } from "framer-motion";
 

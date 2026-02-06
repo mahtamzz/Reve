@@ -1,4 +1,3 @@
-// src/pages/ProfilePage.tsx
 import React, { useMemo, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
@@ -424,7 +423,7 @@ export default function ProfilePage() {
                   <>
                     <button
                       type="button"
-                      onClick={() => setEditOpen(true)}
+                      onClick={() => navigate("/settings")}
                       className="inline-flex items-center gap-2 rounded-2xl bg-white/70 backdrop-blur px-3 py-2 text-sm font-semibold text-zinc-800 border border-white/60 shadow-sm hover:bg-white/90 transition"
                     >
                       <Pencil className="h-4 w-4" />

@@ -42,7 +42,6 @@ const LoginForm: React.FC<LoginFormProps> = ({
         shadow-sm
       "
     >
-      {/* zard accents بیشتر */}
       <div className="pointer-events-none absolute -top-16 -right-16 h-52 w-52 rounded-full bg-yellow-200/45 blur-3xl" />
       <div className="pointer-events-none absolute -bottom-20 -left-20 h-60 w-60 rounded-full bg-yellow-100/70 blur-3xl" />
 

@@ -1,4 +1,3 @@
-// src/components/layout/Topbar.tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Bell, Mail, Search, Settings2, User2, Users, Clock } from "lucide-react";
@@ -148,7 +147,7 @@ export default function Topbar({
     window.addEventListener("click", onDoc);
     return () => window.removeEventListener("click", onDoc);
   }, [notifOpen]);
-  
+
   useEffect(() => {
     if (profile) return;
   
