@@ -13,7 +13,7 @@ async function main() {
     const plainPassword = mustGetEnv("ADMIN_PASSWORD");
 
     if (plainPassword.length < 8) {
-        throw new Error("ADMIN_PASSWORD must be at least 12 characters");
+        throw new Error("ADMIN_PASSWORD must be at least 8 characters");
     }
 
     const db = new PostgresClient({ database: "iam_db" });

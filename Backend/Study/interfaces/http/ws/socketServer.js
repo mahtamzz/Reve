@@ -29,10 +29,10 @@ module.exports = function createStudySocketServer(httpServer, container) {
 
         const timer = setInterval(() => {
             if (!uid || !presence) return;
-            // Refresh TTL only if this socket is currently counted as studying.
-            // If not studying, this does nothing meaningful (store keeps sockets set updated only when started).
+            if (!socket.data.isStudying) return;
             presence.heartbeat(uid, socket.id).catch(() => { });
         }, HB_INTERVAL_MS);
+
 
         socket.on("disconnect", async () => {
             clearInterval(timer);

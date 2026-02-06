@@ -292,19 +292,68 @@ module.exports = function createAuthRoutes(container) {
 
     /**
      * @swagger
+     * components:
+     *   schemas:
+     *     ResetPasswordOtpRequest:
+     *       type: object
+     *       required: [email, otp, newPassword]
+     *       properties:
+     *         email:
+     *           type: string
+     *           format: email
+     *           example: user@example.com
+     *         otp:
+     *           type: string
+     *           description: OTP sent to the user's email for password reset
+     *           example: "123456"
+     *         newPassword:
+     *           type: string
+     *           minLength: 6
+     *           example: "NewStrongPass123!"
+     *
+     *     ResetPasswordResponse:
+     *       type: object
+     *       properties:
+     *         user:
+     *           $ref: '#/components/schemas/UserResponse'
+     *         accessToken:
+     *           type: string
+     *         refreshToken:
+     *           type: string
+     *
+     *     ErrorResponse:
+     *       type: object
+     *       properties:
+     *         message:
+     *           type: string
+     *           example: "Invalid OTP"
+     */
+
+    /**
+     * @swagger
      * /api/auth/reset-password:
      *   post:
-     *     summary: Reset password using token
+     *     summary: Reset user password using OTP
      *     tags: [Auth]
      *     requestBody:
      *       required: true
      *       content:
      *         application/json:
      *           schema:
-     *             $ref: '#/components/schemas/ResetPasswordRequest'
+     *             $ref: '#/components/schemas/ResetPasswordOtpRequest'
      *     responses:
      *       200:
-     *         description: Password reset successful
+     *         description: Password reset successful, tokens issued
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/ResetPasswordResponse'
+     *       400:
+     *         description: Invalid OTP / OTP expired / weak password
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/ErrorResponse'
      */
 
     /**
@@ -391,7 +440,102 @@ module.exports = function createAuthRoutes(container) {
      *       302:
      *         description: Redirect to frontend after login
      */
+    /**
+     * @swagger
+     * components:
+     *   schemas:
+     *     AdminForgotPasswordRequest:
+     *       type: object
+     *       required: [email]
+     *       properties:
+     *         email:
+     *           type: string
+     *           format: email
+     *           example: admin@example.com
+     *
+     *     AdminResetPasswordRequest:
+     *       type: object
+     *       required: [email, otp, newPassword]
+     *       properties:
+     *         email:
+     *           type: string
+     *           format: email
+     *           example: admin@example.com
+     *         otp:
+     *           type: string
+     *           description: OTP sent to admin email for password reset
+     *           example: "123456"
+     *         newPassword:
+     *           type: string
+     *           minLength: 6
+     *           example: "NewStrongPass123!"
+     *
+     *     RefreshTokenRequest:
+     *       type: object
+     *       required: [refreshToken]
+     *       properties:
+     *         refreshToken:
+     *           type: string
+     *           description: Refresh token previously issued during login/verify-otp.
+     *           example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+     *
+     *     AuthTokensResponse:
+     *       type: object
+     *       properties:
+     *         accessToken:
+     *           type: string
+     *           example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+     *         refreshToken:
+     *           type: string
+     *           example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+     *
+     *     ErrorResponse:
+     *       type: object
+     *       properties:
+     *         message:
+     *           type: string
+     *           example: "Invalid token"
+     */
 
+    /**
+     * @swagger
+     * /api/auth/admin/forgot-password:
+     *   post:
+     *     summary: Request admin password reset
+     *     tags: [AdminAuth]
+     *     requestBody:
+     *       required: true
+     *       content:
+     *         application/json:
+     *           schema:
+     *             $ref: '#/components/schemas/AdminForgotPasswordRequest'
+     *     responses:
+     *       200:
+     *         description: Admin password reset OTP sent (if account exists)
+     *       400:
+     *         description: Validation error
+     *       429:
+     *         description: Too many requests
+     */
+
+    /**
+     * @swagger
+     * /api/auth/admin/reset-password:
+     *   post:
+     *     summary: Reset admin password using OTP
+     *     tags: [AdminAuth]
+     *     requestBody:
+     *       required: true
+     *       content:
+     *         application/json:
+     *           schema:
+     *             $ref: '#/components/schemas/AdminResetPasswordRequest'
+     *     responses:
+     *       200:
+     *         description: Admin password reset successful
+     *       400:
+     *         description: Invalid/expired OTP or validation error
+     */
 
     return router;
 };
