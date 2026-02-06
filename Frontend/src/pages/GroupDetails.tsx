@@ -693,10 +693,7 @@ export default function GroupDetails() {
                   </div>
                 ) : (
                   <div className="hidden sm:flex items-center gap-2">
-                    <Pill className="border-amber-200/70 bg-amber-50/70 text-amber-700">
-                      <Sparkles className="h-3.5 w-3.5" />
-                      preview mode
-                    </Pill>
+
                   </div>
                 )}
               </motion.div>

@@ -370,7 +370,6 @@ export default function ProfilePage() {
     const wasFollowing = isFollowing;
     const delta = wasFollowing ? -1 : +1;
 
-    // ✅ UI لحظه‌ای تغییر کنه
     setFollowersDelta((d) => d + delta);
     setFollowingOverride(!wasFollowing);
 
@@ -381,7 +380,6 @@ export default function ProfilePage() {
 
     const onSettled = () => {
       setFollowingOverride(null);
-      // ✅ queryKey های درست
       qc.invalidateQueries({ queryKey: ["followCounts"] });
       qc.invalidateQueries({ queryKey: ["followStatus"] });
       qc.invalidateQueries({ queryKey: ["followCounts", safeTargetUid] });

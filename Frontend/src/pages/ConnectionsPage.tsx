@@ -82,14 +82,20 @@ export default function ConnectionsPage() {
   const myUid = Number(meQ.data?.profile?.uid);
   const safeMyUid = Number.isFinite(myUid) && myUid > 0 ? myUid : undefined;
 
-  // lists for my connections
+  // my connections
   const followersQ = useFollowers(safeMyUid);
   const followingQ = useFollowing(safeMyUid);
   const countsQ = useFollowCounts(safeMyUid);
 
+  // mutations
   const followMut = useFollowUser({ myUid });
   const unfollowMut = useUnfollowUser({ myUid });
-  const isMutating = followMut.isPending || unfollowMut.isPending;
+
+  // --- local optimistic state to prevent flicker ---
+  // overrides for follow state in UI (uid -> isFollowing)
+  const [followOverride, setFollowOverride] = useState<Record<number, boolean>>({});
+  // per-user pending to avoid locking whole list
+  const [pendingUids, setPendingUids] = useState<Set<number>>(new Set());
 
   const followers = useMemo<Person[]>(
     () => (followersQ.isError ? [] : (followersQ.data?.items ?? []).map(toPerson)),
@@ -100,6 +106,9 @@ export default function ConnectionsPage() {
     [followingQ.data, followingQ.isError]
   );
 
+  // ✅ used for "Follow back" in SEARCH mode
+  const followerUidSet = useMemo(() => new Set(followers.map((p) => p.uid)), [followers]);
+
   const [tab, setTab] = useState<TabKey>("followers");
   const [q, setQ] = useState("");
   const debouncedQ = useDebouncedValue(q, 350);
@@ -107,7 +116,7 @@ export default function ConnectionsPage() {
 
   const [sort, setSort] = useState<"recent" | "name">("recent");
 
-  // server-side search paging
+  // search paging
   const [searchOffset, setSearchOffset] = useState(0);
   const searchQ = useSearchUsers(debouncedQ, {
     limit: 20,
@@ -120,25 +129,31 @@ export default function ConnectionsPage() {
     [searchQ.data, searchQ.isError]
   );
 
-  const list = isSearchMode ? searchItems : tab === "followers" ? followers : following;
+  const baseList = isSearchMode ? searchItems : tab === "followers" ? followers : following;
 
   const filtered = useMemo(() => {
-    if (isSearchMode) return list;
+    if (isSearchMode) return baseList;
 
     const query = q.trim().toLowerCase();
     const base = !query
-      ? list
-      : list.filter((p) => {
-          const hay = `${p.fullName} @${p.username} ${p.bio ?? ""}`.toLowerCase();
+      ? baseList
+      : baseList.filter((p) => {
+          const hay = `${p.fullName} ${p.bio ?? ""}`.toLowerCase();
           return hay.includes(query);
         });
 
     if (sort === "name") return [...base].sort((a, b) => a.fullName.localeCompare(b.fullName));
     return base;
-  }, [list, q, sort, isSearchMode]);
+  }, [baseList, q, sort, isSearchMode]);
 
-  const countFollowers = countsQ.isError ? followers.length : (countsQ.data?.followers ?? followers.length);
-  const countFollowing = countsQ.isError ? following.length : (countsQ.data?.following ?? following.length);
+  // ✅ counts: when countsQ is OK, ONLY trust server counts to avoid bouncing
+  const countFollowers = countsQ.isError
+    ? followers.length
+    : Number(countsQ.data?.followers ?? followers.length);
+
+  const countFollowing = countsQ.isError
+    ? following.length
+    : Number(countsQ.data?.following ?? following.length);
 
   const showConnectionsErrorBanner = followersQ.isError || followingQ.isError || countsQ.isError;
 
@@ -150,13 +165,38 @@ export default function ConnectionsPage() {
   const emptyText = isSearchMode ? "No users found" : "No results";
   const emptySub = isSearchMode ? "Try a different keyword." : "Try a different search or clear the filter.";
 
+  // --- helpers for follow/unfollow with optimistic UI ---
+  const setPending = (uid: number, on: boolean) => {
+    setPendingUids((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(uid);
+      else next.delete(uid);
+      return next;
+    });
+  };
+
+  const optimisticFollow = (uid: number) => {
+    setFollowOverride((prev) => ({ ...prev, [uid]: true }));
+  };
+
+  const optimisticUnfollow = (uid: number) => {
+    setFollowOverride((prev) => ({ ...prev, [uid]: false }));
+  };
+
+  const clearOverride = (uid: number) => {
+    setFollowOverride((prev) => {
+      if (!(uid in prev)) return prev;
+      const next = { ...prev };
+      delete next[uid];
+      return next;
+    });
+  };
+
   return (
     <div className="min-h-screen bg-creamtext text-zinc-900">
       <div className="flex">
-        {/* Sidebar */}
         <Sidebar activeKey="connections" onLogout={logout} />
 
-        {/* Main (content starts after sidebar) */}
         <div className="flex-1 min-w-0 md:ml-64">
           <Topbar />
 
@@ -400,10 +440,45 @@ export default function ConnectionsPage() {
                             person={p}
                             mode={isSearchMode ? "search" : "connections"}
                             tab={tab}
-                            isMutating={isMutating}
-                            onFollow={() => followMut.mutate(p.uid)}
-                            onUnfollow={() => unfollowMut.mutate(p.uid)}
+                            isFollowerOfMe={followerUidSet.has(p.uid)} // ✅ Follow back in search
+                            isPending={pendingUids.has(p.uid)}
+                            followOverride={followOverride[p.uid]}
                             onView={() => navigate(`/profile/${p.uid}`)}
+                            onFollow={() => {
+                              if (!Number.isFinite(p.uid)) return;
+
+                              setPending(p.uid, true);
+                              optimisticFollow(p.uid);
+
+                              followMut.mutate(p.uid, {
+                                onError: () => {
+                                  // revert UI state on error
+                                  optimisticUnfollow(p.uid);
+                                },
+                                onSettled: () => {
+                                  setPending(p.uid, false);
+                                  // letting server refetch become source of truth:
+                                  clearOverride(p.uid);
+                                },
+                              });
+                            }}
+                            onUnfollow={() => {
+                              if (!Number.isFinite(p.uid)) return;
+
+                              setPending(p.uid, true);
+                              optimisticUnfollow(p.uid);
+
+                              unfollowMut.mutate(p.uid, {
+                                onError: () => {
+                                  // revert UI state on error
+                                  optimisticFollow(p.uid);
+                                },
+                                onSettled: () => {
+                                  setPending(p.uid, false);
+                                  clearOverride(p.uid);
+                                },
+                              });
+                            }}
                           />
                         ))}
                       </motion.div>
@@ -536,7 +611,9 @@ function CompactPersonCard({
   person,
   mode,
   tab,
-  isMutating,
+  isFollowerOfMe,
+  isPending,
+  followOverride,
   onFollow,
   onUnfollow,
   onView,
@@ -544,7 +621,9 @@ function CompactPersonCard({
   person: Person;
   mode: "search" | "connections";
   tab: "followers" | "following";
-  isMutating: boolean;
+  isFollowerOfMe: boolean;
+  isPending: boolean;
+  followOverride?: boolean;
   onFollow: () => void;
   onUnfollow: () => void;
   onView: () => void;
@@ -552,23 +631,29 @@ function CompactPersonCard({
   const reduceMotion = useReducedMotion();
   const statusQ = useFollowStatus(person.uid);
 
-  // ✅ avatar via Media API (not profile service)
+  // avatar
   const [avatarOk, setAvatarOk] = React.useState(true);
   React.useEffect(() => setAvatarOk(true), [person.uid]);
   const avatarUrl = useMemo(() => getUserAvatarUrl(person.uid, { bustCache: false }), [person.uid]);
 
-  const isFollowing =
+  // base status (server)
+  const serverIsFollowing =
     mode === "search"
       ? (statusQ.data?.isFollowing ?? false)
       : tab === "following"
         ? true
         : (statusQ.data?.isFollowing ?? false);
 
-  const primaryLabel = isFollowing
-    ? "Unfollow"
-    : tab === "followers"
-      ? "Follow back"
-      : "Follow";
+  // ✅ final status = local optimistic override (if exists) else server
+  const isFollowing = typeof followOverride === "boolean" ? followOverride : serverIsFollowing;
+
+  // ✅ Follow back logic:
+  // - In connections tab "followers": follow back if you're not following
+  // - In search mode: follow back if that person is in YOUR followers list and you're not following
+  const shouldShowFollowBack =
+    !isFollowing && (mode === "search" ? isFollowerOfMe : tab === "followers");
+
+  const primaryLabel = isFollowing ? "Unfollow" : shouldShowFollowBack ? "Follow back" : "Follow";
 
   const onPrimary = () => {
     if (isFollowing) onUnfollow();
@@ -607,7 +692,6 @@ function CompactPersonCard({
               <div className="text-sm font-semibold text-zinc-900 truncate group-hover:underline">
                 {person.fullName}
               </div>
-              <div className="mt-0.5 text-xs text-zinc-500 truncate">@{person.username}</div>
 
               {person.bio ? (
                 <p className="mt-2 text-xs text-zinc-600 leading-relaxed line-clamp-2">{person.bio}</p>
@@ -629,15 +713,9 @@ function CompactPersonCard({
                   {mode === "search" ? "User" : tab === "followers" ? "Follower" : "Following"}
                 </span>
 
-                {mode === "search" ? (
-                  <span className="inline-flex items-center rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-[11px] font-semibold text-zinc-600">
-                    {statusQ.isLoading ? "…" : isFollowing ? "You follow" : "Not following"}
-                  </span>
-                ) : tab === "followers" ? (
-                  <span className="inline-flex items-center rounded-full border border-zinc-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-zinc-600">
-                    {statusQ.isLoading ? "…" : isFollowing ? "You follow" : "Not following"}
-                  </span>
-                ) : null}
+                <span className="inline-flex items-center rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-[11px] font-semibold text-zinc-600">
+                  {statusQ.isLoading ? "…" : isFollowing ? "You follow" : "Not following"}
+                </span>
               </div>
             </div>
           </button>
@@ -662,7 +740,7 @@ function CompactPersonCard({
 
           <button
             type="button"
-            disabled={isMutating}
+            disabled={isPending}
             onClick={onPrimary}
             className={cx(
               "flex-1 rounded-2xl px-3 py-2 text-sm font-semibold transition disabled:opacity-60 disabled:cursor-not-allowed",
@@ -671,7 +749,7 @@ function CompactPersonCard({
                 : "border border-zinc-200 bg-zinc-100 text-zinc-800 hover:bg-zinc-200"
             )}
           >
-            {primaryLabel}
+            {isPending ? "…" : primaryLabel}
           </button>
         </div>
       </div>

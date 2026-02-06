@@ -1,14 +1,14 @@
 // src/pages/Settings.tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Mail, User2, Camera, Check, X, Lock, ShieldAlert, Trash2 } from "lucide-react";
+import { Mail, User2, Camera, Check, X, Lock, ShieldAlert, Trash2, Globe } from "lucide-react";
 
 import Sidebar from "@/components/Dashboard/SidebarIcon";
 import Topbar from "@/components/Dashboard/DashboardHeader";
 
-import { logout, getAccessToken } from "@/utils/authToken";
-import { setAccessToken } from "@/utils/authToken";
-import { ApiError, authClient, profileClient } from "@/api/client";
+import { logout, getAccessToken, setAccessToken } from "@/utils/authToken";
+import { ApiError, authClient } from "@/api/client";
+import { profileApi } from "@/api/profile";
 
 const EASE_OUT: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
@@ -16,11 +16,17 @@ const EASE_OUT: [number, number, number, number] = [0.16, 1, 0.3, 1];
 const MEDIA_ORIGIN = import.meta.env.VITE_API_MEDIA_ORIGIN || "http://localhost:3004";
 const MEDIA_AVATAR_URL = `${MEDIA_ORIGIN}/api/media/avatar`; // GET/POST/DELETE
 
-type UserProfile = {
-  id: number | string;
+type UserProfileUI = {
+  uid: number | string;
+  // IAM-ish fields (usually from auth service)
   username: string;
   email: string;
-  fullName?: string | null;
+
+  // Profile service fields
+  display_name: string;
+  timezone: string | null;
+
+  // (not supported by backend yet)
   bio?: string | null;
 };
 
@@ -328,12 +334,12 @@ async function mediaDeleteAvatar(): Promise<void> {
 }
 
 /* ===========================
-   Settings Page
+   Settings Page (Rewritten)
    =========================== */
 
 export default function Settings() {
   const [loading, setLoading] = useState(true);
-  const [me, setMe] = useState<UserProfile | null>(null);
+  const [me, setMe] = useState<UserProfileUI | null>(null);
 
   const [toast, setToast] = useState<{ kind: "success" | "error"; title: string; message?: string } | null>(null);
   const closeToast = () => setToast(null);
@@ -401,70 +407,60 @@ export default function Settings() {
     };
   }, []);
 
-  /** ====== Load me + avatar ====== **/
-  useEffect(() => {
-    let mounted = true;
+  /** ====== Load profile (profile service) + identity (auth service) ====== **/
+  const loadMe = async () => {
+    setLoading(true);
+    try {
+      // Auth service (email/username/id)
+      const authData: any = await authClient.get("/auth/me");
+      const au = (authData?.user ?? authData) as any;
 
-    const run = async () => {
-      try {
-        // ✅ me از سرویس auth
-        const data: any = await authClient.get("/auth/me");
-        const u = (data?.user ?? data) as any;
+      // Profile service (display_name/timezone/etc)
+      const prof = await profileApi.me();
 
-        const normalized: UserProfile = {
-          id: u.id ?? u.uid ?? "",
-          username: u.username ?? "",
-          email: u.email ?? "",
-          fullName: u.fullName ?? u.name ?? null,
-          bio: u.bio ?? null,
-        };
+      const merged: UserProfileUI = {
+        uid: prof?.profile?.uid ?? au?.uid ?? au?.id ?? "",
+        username: (au?.username ?? prof?.profile?.username ?? "").toString(),
+        email: (au?.email ?? prof?.profile?.email ?? "").toString(),
+        display_name: (prof?.profile?.display_name ?? prof?.profile?.displayName ?? au?.username ?? "").toString(),
+        timezone: (prof?.profile?.timezone ?? "UTC").toString(),
+        bio: prof?.profile?.bio ?? null, // backend doesn't support update yet
+      };
 
-        if (!mounted) return;
-        setMe(normalized);
-
-        await loadMyAvatar();
-      } catch {
-        await logout();
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    };
-
-    run();
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  /** ====== Profile API ====== **/
-  const patchProfile = async (payload: Partial<UserProfile>) => {
-    const data: any = await profileClient.patch("/profile", payload);
-    const u = (data?.user ?? data) as any;
-
-    setMe((prev) =>
-      prev
-        ? {
-            ...prev,
-            username: u?.username ?? prev.username,
-            email: u?.email ?? prev.email,
-            fullName: u?.fullName ?? u?.name ?? prev.fullName,
-            bio: u?.bio ?? prev.bio,
-          }
-        : prev
-    );
+      setMe(merged);
+      await loadMyAvatar();
+    } catch {
+      await logout();
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const saveField = (field: keyof UserProfile) => async (next: string) => {
-    if (!me) return;
-    const prevValue = (me as any)[field];
+  useEffect(() => {
+    loadMe();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
+  /** ====== Update helpers (correct endpoints + correct field names) ====== **/
+  const updateProfile = async (payload: Record<string, any>, successMsg: string) => {
     try {
-      await patchProfile({ [field]: next } as any);
-      setToast({ kind: "success", title: "Saved", message: `${field} updated successfully.` });
+      await profileApi.updateMe(payload);
+      // refresh view (important for source-of-truth)
+      const prof = await profileApi.me();
+      setMe((prev) =>
+        prev
+          ? {
+              ...prev,
+              display_name: (prof?.profile?.display_name ?? prev.display_name).toString(),
+              timezone: (prof?.profile?.timezone ?? prev.timezone ?? "UTC").toString(),
+            }
+          : prev
+      );
+      setToast({ kind: "success", title: "Saved", message: successMsg });
     } catch (e: any) {
-      const msg = e instanceof ApiError ? e.message : (e?.message ?? "Try again.");
+      const msg = e instanceof ApiError ? e.message : e?.message ?? "Try again.";
       setToast({ kind: "error", title: "Couldn’t save", message: msg });
-      setMe((p) => (p ? { ...p, [field]: prevValue } : p));
+      throw e; // IMPORTANT: prevents UI from “pretending” it saved
     }
   };
 
@@ -521,23 +517,24 @@ export default function Settings() {
 
     setPwSaving(true);
     try {
-      await profileClient.post("/profile/password", {
-        currentPassword: pw.current,
-        newPassword: pw.next,
+      // ✅ correct endpoint + correct payload keys
+      await profileApi.changePassword({
+        current_password: pw.current,
+        new_password: pw.next,
       });
 
       setPwOpen(false);
       setPw({ current: "", next: "", confirm: "" });
       setToast({ kind: "success", title: "Password updated" });
     } catch (e: any) {
-      const msg = e instanceof ApiError ? e.message : (e?.message ?? "Try again.");
+      const msg = e instanceof ApiError ? e.message : e?.message ?? "Try again.";
       setToast({ kind: "error", title: "Couldn’t update password", message: msg });
     } finally {
       setPwSaving(false);
     }
   };
 
-  /** ====== UI states ====== **/
+  /** ====== UI ====== **/
   if (loading) {
     return (
       <div className="min-h-screen bg-creamtext text-zinc-900 flex items-center justify-center">
@@ -565,7 +562,7 @@ export default function Settings() {
         <Sidebar activeKey="settings" onLogout={logout} />
 
         <div className="flex-1 min-w-0 md:ml-64">
-          <Topbar username={me.username} />
+          <Topbar />
 
           <div className="mx-auto max-w-6xl px-4 py-6">
             {/* Page header */}
@@ -581,7 +578,7 @@ export default function Settings() {
                   Profile & account
                 </h1>
                 <p className="mt-1 text-sm text-zinc-600 max-w-2xl">
-                  Manage your profile details. Changes are saved instantly.
+                Update your nerdy name and fine-tune your profile here.
                 </p>
               </div>
             </motion.div>
@@ -644,7 +641,7 @@ export default function Settings() {
 
                       <div className="min-w-0">
                         <p className="text-lg font-semibold text-zinc-900 truncate">
-                          {me.fullName?.trim() || me.username}
+                          {me.display_name?.trim() || me.username}
                         </p>
                         <p className="mt-0.5 text-sm text-zinc-600 truncate">{me.email}</p>
 
@@ -667,7 +664,10 @@ export default function Settings() {
 
                           <button
                             type="button"
-                            onClick={loadMyAvatar}
+                            onClick={async () => {
+                              await loadMyAvatar();
+                              setToast({ kind: "success", title: "Refreshed" });
+                            }}
                             disabled={avatarUploading || avatarDeleting}
                             className={cx(
                               "rounded-2xl border px-3 py-2 text-xs font-semibold shadow-sm transition-all",
@@ -682,29 +682,6 @@ export default function Settings() {
                       </div>
                     </div>
 
-                    <div className="mt-5 rounded-2xl border border-zinc-200 bg-[#FFFBF2] p-4">
-                      <p className="text-xs font-semibold text-zinc-900">Security</p>
-                      <p className="mt-1 text-xs text-zinc-600">
-                        Keep your account safe — update password regularly.
-                      </p>
-
-                      <button
-                        type="button"
-                        onClick={() => setPwOpen(true)}
-                        className="
-                          mt-3 w-full rounded-2xl border border-zinc-200 bg-white
-                          px-4 py-3 text-sm font-semibold text-zinc-800
-                          hover:border-yellow-300 hover:bg-yellow-50 transition-colors
-                          flex items-center justify-between
-                        "
-                      >
-                        <span className="flex items-center gap-2">
-                          <Lock className="h-4 w-4" />
-                          Change password
-                        </span>
-                        <span className="text-xs text-zinc-500">→</span>
-                      </button>
-                    </div>
 
                     <div className="mt-4 rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
                       <div className="flex items-start gap-2">
@@ -732,67 +709,46 @@ export default function Settings() {
                   <div className="relative flex items-start justify-between gap-4">
                     <div>
                       <p className="text-sm font-semibold text-zinc-900">Profile</p>
-                      <p className="mt-0.5 text-xs text-zinc-500">
-                        Update how you appear across the app.
-                      </p>
+                      <p className="mt-0.5 text-xs text-zinc-500">Connected to backend: display name, username, timezone.</p>
                     </div>
                     <Pill>Auto-save</Pill>
                   </div>
 
                   <div className="relative mt-5 grid grid-cols-1 gap-4">
-                    <EditableRow
-                      icon={<User2 className="h-4 w-4" />}
-                      label="Full name"
-                      helper="Shown on your profile and group pages."
-                      value={me.fullName ?? ""}
-                      placeholder="e.g. Sarah Johnson"
-                      maxLength={40}
-                      onSave={async (next) => {
-                        await saveField("fullName")(next);
-                        setMe((p) => (p ? { ...p, fullName: next } : p));
-                      }}
-                    />
 
                     <EditableRow
                       icon={<User2 className="h-4 w-4" />}
                       label="Username"
-                      helper="This is your public handle."
+                      helper="Saved via profile service (publishes IAM user.updated)."
                       value={me.username}
                       placeholder="e.g. study_queen"
                       maxLength={24}
                       onSave={async (next) => {
-                        await saveField("username")(next);
-                        setMe((p) => (p ? { ...p, username: next } : p));
+                        const v = next.trim();
+                        await updateProfile({ username: v }, "Username updated.");
+                        setMe((p) => (p ? { ...p, username: v } : p));
                       }}
                     />
 
                     <EditableRow
                       icon={<Mail className="h-4 w-4" />}
                       label="Email"
-                      helper="Used for login and notifications."
+                      helper="Read-only."
                       value={me.email}
                       type="email"
-                      placeholder="you@example.com"
-                      onSave={async (next) => {
-                        await saveField("email")(next);
-                        setMe((p) => (p ? { ...p, email: next } : p));
-                      }}
-                      rightHint={<span className="text-[11px] text-zinc-500">Verified</span>}
+                      disabled
+                      onSave={async () => {}}
                     />
+                  </div>
 
-                    <EditableRow
-                      icon={<User2 className="h-4 w-4" />}
-                      label="Bio"
-                      helper="A short line about you."
-                      value={me.bio ?? ""}
-                      placeholder="What are you studying these days?"
-                      maxLength={160}
-                      multiline
-                      onSave={async (next) => {
-                        await saveField("bio")(next);
-                        setMe((p) => (p ? { ...p, bio: next } : p));
-                      }}
-                    />
+                  <div className="relative mt-5 flex items-center justify-end">
+                    <button
+                      type="button"
+                      onClick={loadMe}
+                      className="rounded-2xl border border-zinc-200 bg-white px-4 py-2 text-xs font-semibold text-zinc-700 hover:border-yellow-300 hover:text-zinc-900 transition-colors"
+                    >
+                      Reload
+                    </button>
                   </div>
                 </motion.section>
               </div>
@@ -803,9 +759,7 @@ export default function Settings() {
 
           {/* Toast */}
           <AnimatePresence>
-            {toast ? (
-              <Toast kind={toast.kind} title={toast.title} message={toast.message} onClose={closeToast} />
-            ) : null}
+            {toast ? <Toast kind={toast.kind} title={toast.title} message={toast.message} onClose={closeToast} /> : null}
           </AnimatePresence>
 
           {/* Password Modal */}
