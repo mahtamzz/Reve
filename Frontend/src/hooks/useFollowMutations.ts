@@ -1,7 +1,12 @@
 // src/hooks/useFollowMutations.ts
+import { useEffect, useRef } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { profileSocialApi } from "@/api/profileSocial";
 import { followStatusKey } from "./useFollowStatus";
+import { handleUiError } from "@/errors/handleUiError";
+import type { NormalizedError } from "@/errors/normalizeError";
+import { ApiError } from "@/api/client";
+import { useUiAdapters } from "@/ui/useUiAdapters";
 
 type FollowCounts = { uid: number; followers: number; following: number };
 type FollowStatus = { isFollowing: boolean };
@@ -24,36 +29,42 @@ function bumpCounts(
 
   qc.setQueryData<FollowCounts>(followCountsKey(uid), {
     ...prev,
-    followers:
-      patch.followers == null ? prev.followers : Math.max(0, patch.followers),
-    following:
-      patch.following == null ? prev.following : Math.max(0, patch.following),
+    followers: patch.followers == null ? prev.followers : Math.max(0, patch.followers),
+    following: patch.following == null ? prev.following : Math.max(0, patch.following),
   });
 
   return prev;
 }
 
+function asNormalized(e: unknown): NormalizedError {
+  return e instanceof ApiError ? e : (e as NormalizedError);
+}
+
 export function useFollowUser(opts?: { myUid?: number }) {
+  const ui = useUiAdapters();
   const qc = useQueryClient();
   const myUid = safeUid(opts?.myUid);
 
-  return useMutation({
-    mutationFn: (targetUid: number) => {
+  const lastVarsRef = useRef<number | null>(null);
+  const lastHandledErrorRef = useRef<unknown>(null);
+
+  const mutation = useMutation({
+    mutationFn: async (targetUid: number) => {
       const t = safeUid(targetUid);
       if (!t) return Promise.reject(new Error("invalid target uid"));
       return profileSocialApi.follow(t);
     },
 
     onMutate: async (targetUidRaw) => {
+      lastVarsRef.current = targetUidRaw;
+
       const targetUid = safeUid(targetUidRaw);
       if (!targetUid) return {};
 
-      // 1) optimistic follow status
       await qc.cancelQueries({ queryKey: followStatusKey(targetUid) });
       const prevStatus = qc.getQueryData<FollowStatus>(followStatusKey(targetUid));
       qc.setQueryData<FollowStatus>(followStatusKey(targetUid), { isFollowing: true });
 
-      // 2) optimistic counts
       let prevMyCounts: FollowCounts | null = null;
       let prevTargetCounts: FollowCounts | null = null;
 
@@ -76,12 +87,10 @@ export function useFollowUser(opts?: { myUid?: number }) {
       const targetUid = (ctx as any)?.targetUid as number | undefined;
       if (!targetUid) return;
 
-      // rollback status
       if ((ctx as any)?.prevStatus) {
         qc.setQueryData(followStatusKey(targetUid), (ctx as any).prevStatus);
       }
 
-      // rollback counts
       const prevMyCounts = (ctx as any)?.prevMyCounts as FollowCounts | null | undefined;
       const prevTargetCounts = (ctx as any)?.prevTargetCounts as FollowCounts | null | undefined;
 
@@ -93,43 +102,60 @@ export function useFollowUser(opts?: { myUid?: number }) {
       const targetUid = safeUid(targetUidRaw);
       if (!targetUid) return;
 
-      // ensure truth
       await qc.invalidateQueries({ queryKey: followStatusKey(targetUid) });
       await qc.invalidateQueries({ queryKey: followCountsKey(targetUid) });
 
-      // refresh my side
       if (myUid) {
         await qc.invalidateQueries({ queryKey: followCountsKey(myUid) });
         await qc.invalidateQueries({ queryKey: followingListKey(myUid) });
       }
 
-      // refresh their followers list too (اگر جایی کش شده باشد)
       await qc.invalidateQueries({ queryKey: followersListKey(targetUid) });
     },
   });
+
+  useEffect(() => {
+    if (!mutation.isError || !mutation.error) return;
+
+    if (lastHandledErrorRef.current === mutation.error) return;
+    lastHandledErrorRef.current = mutation.error;
+
+    const lastVars = lastVarsRef.current;
+    handleUiError(asNormalized(mutation.error), ui, {
+      retry: () => {
+        if (typeof lastVars === "number") mutation.mutate(lastVars);
+      },
+    });
+  }, [mutation.isError, mutation.error, mutation.mutate, ui]);
+
+  return mutation;
 }
 
 export function useUnfollowUser(opts?: { myUid?: number }) {
+  const ui = useUiAdapters();
   const qc = useQueryClient();
   const myUid = safeUid(opts?.myUid);
 
-  return useMutation({
-    mutationFn: (targetUid: number) => {
+  const lastVarsRef = useRef<number | null>(null);
+  const lastHandledErrorRef = useRef<unknown>(null);
+
+  const mutation = useMutation({
+    mutationFn: async (targetUid: number) => {
       const t = safeUid(targetUid);
       if (!t) return Promise.reject(new Error("invalid target uid"));
       return profileSocialApi.unfollow(t);
     },
 
     onMutate: async (targetUidRaw) => {
+      lastVarsRef.current = targetUidRaw;
+
       const targetUid = safeUid(targetUidRaw);
       if (!targetUid) return {};
 
-      // 1) optimistic follow status
       await qc.cancelQueries({ queryKey: followStatusKey(targetUid) });
       const prevStatus = qc.getQueryData<FollowStatus>(followStatusKey(targetUid));
       qc.setQueryData<FollowStatus>(followStatusKey(targetUid), { isFollowing: false });
 
-      // 2) optimistic counts
       let prevMyCounts: FollowCounts | null = null;
       let prevTargetCounts: FollowCounts | null = null;
 
@@ -180,4 +206,20 @@ export function useUnfollowUser(opts?: { myUid?: number }) {
       await qc.invalidateQueries({ queryKey: followersListKey(targetUid) });
     },
   });
+
+  useEffect(() => {
+    if (!mutation.isError || !mutation.error) return;
+
+    if (lastHandledErrorRef.current === mutation.error) return;
+    lastHandledErrorRef.current = mutation.error;
+
+    const lastVars = lastVarsRef.current;
+    handleUiError(asNormalized(mutation.error), ui, {
+      retry: () => {
+        if (typeof lastVars === "number") mutation.mutate(lastVars);
+      },
+    });
+  }, [mutation.isError, mutation.error, mutation.mutate, ui]);
+
+  return mutation;
 }

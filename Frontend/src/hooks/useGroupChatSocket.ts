@@ -1,6 +1,10 @@
 // src/hooks/useGroupChatSocket.ts
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { getChatSocket, type PresenceStatus } from "@/realtime/chatSocket";
+import { handleUiError } from "@/errors/handleUiError";
+import { ERROR_DICTIONARY } from "@/errors/errorDictionary";
+import type { NormalizedError } from "@/errors/normalizeError";
+import { useUiAdapters } from "@/ui/useUiAdapters";
 
 export type ChatMessage = {
   id: string;
@@ -18,7 +22,56 @@ type UseGroupChatSocketOptions = {
 
 export type PresenceMap = Record<string, PresenceStatus>;
 
+function normalizeSocketError(e: { code: string; message?: string } | null): NormalizedError | null {
+  if (!e?.code) return null;
+
+  switch (e.code) {
+    case "REVOKED":
+      return {
+        ...ERROR_DICTIONARY.AUTH_FORBIDDEN,
+        code: "AUTH_FORBIDDEN",
+        title: "Access revoked",
+        message: e.message ?? "You no longer have access to this group.",
+        ui: "page",
+        show: true,
+        retryable: false,
+        action: { kind: "none" },
+        report: false,
+        raw: e,
+      };
+
+    case "DELETED":
+      return {
+        ...ERROR_DICTIONARY.NOT_FOUND,
+        code: "NOT_FOUND",
+        title: "Group not found",
+        message: e.message ?? "This group no longer exists.",
+        ui: "page",
+        show: true,
+        retryable: false,
+        action: { kind: "redirect", to: "/groups" },
+        report: false,
+        raw: e,
+      };
+
+    default:
+      return {
+        ...ERROR_DICTIONARY.UNKNOWN_ERROR,
+        code: "UNKNOWN_ERROR",
+        message: e.message ?? "Something went wrong.",
+        ui: "toast",
+        show: true,
+        retryable: true,
+        action: { kind: "retry" },
+        report: true,
+        raw: e,
+      };
+  }
+}
+
 export function useGroupChatSocket({ groupId, limit = 50 }: UseGroupChatSocketOptions) {
+  const ui = useUiAdapters();
+
   const [connected, setConnected] = useState(false);
   const [joined, setJoined] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -28,6 +81,7 @@ export function useGroupChatSocket({ groupId, limit = 50 }: UseGroupChatSocketOp
 
   const socket = useMemo(() => getChatSocket(), []);
   const joinedRef = useRef(false);
+  const lastHandledErrRef = useRef<string | null>(null);
 
   const checkPresence = useCallback(
     (uids: Array<string | number>) => {
@@ -41,6 +95,25 @@ export function useGroupChatSocket({ groupId, limit = 50 }: UseGroupChatSocketOp
     },
     [socket, groupId]
   );
+
+  const retryJoin = useCallback(() => {
+    if (!groupId) return;
+    if (!socket.connected) socket.connect();
+    socket.emit("group:join", { groupId });
+  }, [socket, groupId]);
+
+  useEffect(() => {
+    const normalized = normalizeSocketError(lastError);
+    if (!normalized) return;
+
+    const dedupeKey = `${normalized.code}:${String((lastError as any)?.code ?? "")}:${String(
+      normalized.message ?? ""
+    )}`;
+    if (lastHandledErrRef.current === dedupeKey) return;
+    lastHandledErrRef.current = dedupeKey;
+
+    handleUiError(normalized, ui, { retry: retryJoin });
+  }, [lastError, ui, retryJoin]);
 
   useEffect(() => {
     if (!groupId) return;
@@ -83,23 +156,21 @@ export function useGroupChatSocket({ groupId, limit = 50 }: UseGroupChatSocketOp
       if (gid !== groupId) return;
       setJoined(false);
       joinedRef.current = false;
-      setLastError({ code: "REVOKED", message: "از گروه حذف شدی." });
+      setLastError({ code: "REVOKED", message: "You no longer have access to this group." });
     };
 
     const onDeleted = ({ groupId: gid }: { groupId: string }) => {
       if (gid !== groupId) return;
       setJoined(false);
       joinedRef.current = false;
-      setLastError({ code: "DELETED", message: "این گروه حذف شده است." });
+      setLastError({ code: "DELETED", message: "This group no longer exists." });
     };
 
-    // ✅ presence:update
     const onPresenceUpdate = (p: { uid: string | number; status: PresenceStatus }) => {
       if (!p?.uid) return;
       setPresence((prev) => ({ ...prev, [String(p.uid)]: p.status }));
     };
 
-    // ✅ presence snapshot
     const onPresenceCheckResult = (map: Record<string, boolean>) => {
       const next: PresenceMap = {};
       for (const [k, v] of Object.entries(map || {})) {

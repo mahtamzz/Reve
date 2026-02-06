@@ -1,7 +1,7 @@
 // src/pages/Settings.tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Mail, User2, Camera, Check, X, Lock, ShieldAlert, Trash2, Globe } from "lucide-react";
+import { Mail, User2, Camera, Check, X, Lock, ShieldAlert, Trash2 } from "lucide-react";
 
 import Sidebar from "@/components/Dashboard/SidebarIcon";
 import Topbar from "@/components/Dashboard/DashboardHeader";
@@ -18,15 +18,12 @@ const MEDIA_AVATAR_URL = `${MEDIA_ORIGIN}/api/media/avatar`; // GET/POST/DELETE
 
 type UserProfileUI = {
   uid: number | string;
-  // IAM-ish fields (usually from auth service)
   username: string;
   email: string;
 
-  // Profile service fields
   display_name: string;
   timezone: string | null;
 
-  // (not supported by backend yet)
   bio?: string | null;
 };
 
@@ -334,7 +331,7 @@ async function mediaDeleteAvatar(): Promise<void> {
 }
 
 /* ===========================
-   Settings Page (Rewritten)
+   Settings Page
    =========================== */
 
 export default function Settings() {
@@ -356,7 +353,7 @@ export default function Settings() {
   const [avatarDeleting, setAvatarDeleting] = useState(false);
   const [avatarSrc, setAvatarSrc] = useState<string | null>(null);
 
-  // ✅ StrictMode-safe blob management
+  // StrictMode-safe blob management
   const currentUrlRef = useRef<string | null>(null);
   const pendingRevokeRef = useRef<string[]>([]);
 
@@ -388,12 +385,10 @@ export default function Settings() {
     setAvatarObjectUrl(url);
   };
 
-  // cleanup (StrictMode causes quick unmount/mount in dev)
   useEffect(() => {
     return () => {
       const cur = currentUrlRef.current;
       const pend = [...pendingRevokeRef.current];
-
       window.setTimeout(() => {
         try {
           if (cur) URL.revokeObjectURL(cur);
@@ -407,15 +402,13 @@ export default function Settings() {
     };
   }, []);
 
-  /** ====== Load profile (profile service) + identity (auth service) ====== **/
+  /** ====== Load me ====== **/
   const loadMe = async () => {
     setLoading(true);
     try {
-      // Auth service (email/username/id)
       const authData: any = await authClient.get("/auth/me");
       const au = (authData?.user ?? authData) as any;
 
-      // Profile service (display_name/timezone/etc)
       const prof = await profileApi.me();
 
       const merged: UserProfileUI = {
@@ -424,7 +417,7 @@ export default function Settings() {
         email: (au?.email ?? prof?.profile?.email ?? "").toString(),
         display_name: (prof?.profile?.display_name ?? prof?.profile?.displayName ?? au?.username ?? "").toString(),
         timezone: (prof?.profile?.timezone ?? "UTC").toString(),
-        bio: prof?.profile?.bio ?? null, // backend doesn't support update yet
+        bio: prof?.profile?.bio ?? null,
       };
 
       setMe(merged);
@@ -441,11 +434,12 @@ export default function Settings() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /** ====== Update helpers (correct endpoints + correct field names) ====== **/
+  /** ====== Profile update ====== **/
   const updateProfile = async (payload: Record<string, any>, successMsg: string) => {
     try {
       await profileApi.updateMe(payload);
-      // refresh view (important for source-of-truth)
+
+      // Refresh source of truth from backend
       const prof = await profileApi.me();
       setMe((prev) =>
         prev
@@ -453,14 +447,16 @@ export default function Settings() {
               ...prev,
               display_name: (prof?.profile?.display_name ?? prev.display_name).toString(),
               timezone: (prof?.profile?.timezone ?? prev.timezone ?? "UTC").toString(),
+              // username/email are from auth; we keep current unless you refresh
             }
           : prev
       );
+
       setToast({ kind: "success", title: "Saved", message: successMsg });
     } catch (e: any) {
       const msg = e instanceof ApiError ? e.message : e?.message ?? "Try again.";
       setToast({ kind: "error", title: "Couldn’t save", message: msg });
-      throw e; // IMPORTANT: prevents UI from “pretending” it saved
+      throw e;
     }
   };
 
@@ -499,7 +495,7 @@ export default function Settings() {
     }
   };
 
-  /** ====== Password modal ====== **/
+  /** ====== Password modal (connected to backend) ====== **/
   const [pwOpen, setPwOpen] = useState(false);
   const [pwSaving, setPwSaving] = useState(false);
   const [pw, setPw] = useState({ current: "", next: "", confirm: "" });
@@ -517,7 +513,7 @@ export default function Settings() {
 
     setPwSaving(true);
     try {
-      // ✅ correct endpoint + correct payload keys
+      // ✅ backend: PATCH /api/profile/me/password with {current_password,new_password}
       await profileApi.changePassword({
         current_password: pw.current,
         new_password: pw.next,
@@ -527,7 +523,12 @@ export default function Settings() {
       setPw({ current: "", next: "", confirm: "" });
       setToast({ kind: "success", title: "Password updated" });
     } catch (e: any) {
-      const msg = e instanceof ApiError ? e.message : e?.message ?? "Try again.";
+      const msg =
+        e instanceof ApiError
+          ? e.status === 403
+            ? "Current password is incorrect."
+            : e.message
+          : e?.message ?? "Try again.";
       setToast({ kind: "error", title: "Couldn’t update password", message: msg });
     } finally {
       setPwSaving(false);
@@ -565,7 +566,6 @@ export default function Settings() {
           <Topbar />
 
           <div className="mx-auto max-w-6xl px-4 py-6">
-            {/* Page header */}
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -578,14 +578,13 @@ export default function Settings() {
                   Profile & account
                 </h1>
                 <p className="mt-1 text-sm text-zinc-600 max-w-2xl">
-                Update your nerdy name and fine-tune your profile here.
+                  Update your nerdy name and fine-tune your profile here.
                 </p>
               </div>
             </motion.div>
 
-            {/* Layout */}
             <div className="mt-6 grid grid-cols-12 gap-6">
-              {/* Left: profile card */}
+              {/* Left card */}
               <motion.section
                 initial={{ opacity: 0, y: 10, scale: 0.99 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -602,12 +601,7 @@ export default function Settings() {
                       <div className="relative">
                         <div className="h-16 w-16 rounded-3xl border border-zinc-200 bg-gradient-to-br from-yellow-50 to-white shadow-sm overflow-hidden">
                           {avatarSrc ? (
-                            <img
-                              src={avatarSrc}
-                              alt="avatar"
-                              className="h-full w-full object-cover"
-                              onLoad={revokePending}
-                            />
+                            <img src={avatarSrc} alt="avatar" className="h-full w-full object-cover" onLoad={revokePending} />
                           ) : (
                             <div className="h-full w-full flex items-center justify-center text-zinc-500">
                               <User2 className="h-6 w-6" />
@@ -640,9 +634,7 @@ export default function Settings() {
                       </div>
 
                       <div className="min-w-0">
-                        <p className="text-lg font-semibold text-zinc-900 truncate">
-                          {me.display_name?.trim() || me.username}
-                        </p>
+                        <p className="text-lg font-semibold text-zinc-900 truncate">{me.display_name?.trim() || me.username}</p>
                         <p className="mt-0.5 text-sm text-zinc-600 truncate">{me.email}</p>
 
                         <div className="mt-3 flex items-center gap-2">
@@ -682,20 +674,40 @@ export default function Settings() {
                       </div>
                     </div>
 
+                    {/* Security block (THIS is what you were missing) */}
+                    <div className="mt-5 rounded-2xl border border-zinc-200 bg-[#FFFBF2] p-4">
+                      <p className="text-xs font-semibold text-zinc-900">Security</p>
+                      <p className="mt-1 text-xs text-zinc-600">Keep your account safe — update your password regularly.</p>
+
+                      <button
+                        type="button"
+                        onClick={() => setPwOpen(true)}
+                        className="
+                          mt-3 w-full rounded-2xl border border-zinc-200 bg-white
+                          px-4 py-3 text-sm font-semibold text-zinc-800
+                          hover:border-yellow-300 hover:bg-yellow-50 transition-colors
+                          flex items-center justify-between
+                        "
+                      >
+                        <span className="flex items-center gap-2">
+                          <Lock className="h-4 w-4" />
+                          Change password
+                        </span>
+                        <span className="text-xs text-zinc-500">→</span>
+                      </button>
+                    </div>
 
                     <div className="mt-4 rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
                       <div className="flex items-start gap-2">
                         <ShieldAlert className="h-4 w-4 text-zinc-500 mt-0.5" />
-                        <p className="text-xs text-zinc-600">
-                          If your session expires, you’ll be logged out automatically.
-                        </p>
+                        <p className="text-xs text-zinc-600">If your session expires, you’ll be logged out automatically.</p>
                       </div>
                     </div>
                   </div>
                 </div>
               </motion.section>
 
-              {/* Right: editable fields */}
+              {/* Right side */}
               <div className="col-span-12 lg:col-span-8 space-y-6">
                 <motion.section
                   initial={{ opacity: 0, y: 10, scale: 0.99 }}
@@ -709,13 +721,12 @@ export default function Settings() {
                   <div className="relative flex items-start justify-between gap-4">
                     <div>
                       <p className="text-sm font-semibold text-zinc-900">Profile</p>
-                      <p className="mt-0.5 text-xs text-zinc-500">Connected to backend: display name, username, timezone.</p>
+                      <p className="mt-0.5 text-xs text-zinc-500">Connected to backend: username.</p>
                     </div>
                     <Pill>Auto-save</Pill>
                   </div>
 
                   <div className="relative mt-5 grid grid-cols-1 gap-4">
-
                     <EditableRow
                       icon={<User2 className="h-4 w-4" />}
                       label="Username"
@@ -738,6 +749,7 @@ export default function Settings() {
                       type="email"
                       disabled
                       onSave={async () => {}}
+                      rightHint={<span className="text-[11px] text-zinc-500">Verified</span>}
                     />
                   </div>
 

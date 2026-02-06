@@ -1,9 +1,13 @@
 // src/hooks/useChatMemberProfiles.ts
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import type { ApiGroupMember } from "@/api/types";
 import { useAuthMeLite } from "@/hooks/useAuthMeLite";
 import { usePublicProfilesBatch } from "@/hooks/usePublicProfilesBatch";
 import { getUserAvatarUrl } from "@/api/media";
+import { handleUiError } from "@/errors/handleUiError";
+import type { NormalizedError } from "@/errors/normalizeError";
+import { ApiError } from "@/api/client";
+import { useUiAdapters } from "@/ui/useUiAdapters";
 
 function pickUid(m: ApiGroupMember): string | number | null {
   return (m?.uid ?? m?.userId ?? (m as any)?.user_id ?? m?.id ?? null) as any;
@@ -23,7 +27,12 @@ export type ChatMemberProfile = {
   avatarUrl: string | null;
 };
 
+function asNormalized(e: unknown): NormalizedError {
+  return e instanceof ApiError ? e : (e as NormalizedError);
+}
+
 export function useChatMemberProfiles(members: ApiGroupMember[], enabled = true) {
+  const ui = useUiAdapters();
   const { me } = useAuthMeLite();
 
   const memberUids = useMemo(() => {
@@ -43,6 +52,13 @@ export function useChatMemberProfiles(members: ApiGroupMember[], enabled = true)
 
   const batch = usePublicProfilesBatch(others, enabled);
 
+  useEffect(() => {
+    if (batch.isError && batch.error) {
+      const err = asNormalized(batch.error);
+      handleUiError(err, ui, { retry: batch.refetch });
+    }
+  }, [batch.isError, batch.error, batch.refetch, ui]);
+
   const map = useMemo(() => {
     const out = new Map<string, ChatMemberProfile>();
 
@@ -59,7 +75,6 @@ export function useChatMemberProfiles(members: ApiGroupMember[], enabled = true)
         continue;
       }
 
-      // ✅ اگر group service پروفایل/اسم داده، همونو ترجیح بده
       const member = (members || []).find((m) => String(pickUid(m)) === uid);
       const local = member ? memberLocalName(member) : null;
 
@@ -88,6 +103,6 @@ export function useChatMemberProfiles(members: ApiGroupMember[], enabled = true)
   return {
     map,
     loading: batch.isLoading,
-    error: batch.isError,
+    error: batch.isError ? ((batch.error as any)?.message ?? true) : null,
   };
 }

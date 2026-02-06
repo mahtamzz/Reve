@@ -1,6 +1,10 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { profileApi } from "@/api/profile"; // همون فایلی که getPublicProfilesBatch داره
+import { profileApi } from "@/api/profile";
+import { handleUiError } from "@/errors/handleUiError";
+import type { NormalizedError } from "@/errors/normalizeError";
+import { ApiError } from "@/api/client";
+import { useUiAdapters } from "@/ui/useUiAdapters";
 
 type PublicProfile = {
   uid: number;
@@ -11,10 +15,16 @@ type PublicProfile = {
   [k: string]: any;
 };
 
+function asNormalized(e: unknown): NormalizedError {
+  return e instanceof ApiError ? e : (e as NormalizedError);
+}
+
 export function usePublicProfilesBatch(uids: Array<string | number>, enabled = true) {
+  const ui = useUiAdapters();
+  const lastHandledRef = useRef<unknown>(null);
+
   const cleaned = useMemo(() => {
-    const arr = [...new Set(uids.map((x) => Number(x)).filter(Number.isFinite))];
-    return arr;
+    return [...new Set(uids.map((x) => Number(x)).filter(Number.isFinite))];
   }, [uids]);
 
   const q = useQuery({
@@ -24,6 +34,14 @@ export function usePublicProfilesBatch(uids: Array<string | number>, enabled = t
     staleTime: 60_000,
     retry: false,
   });
+
+  useEffect(() => {
+    if (!q.isError || !q.error) return;
+    if (lastHandledRef.current === q.error) return;
+    lastHandledRef.current = q.error;
+
+    handleUiError(asNormalized(q.error), ui, { retry: q.refetch });
+  }, [q.isError, q.error, q.refetch, ui]);
 
   const map = useMemo(() => {
     const m = new Map<string, PublicProfile>();

@@ -1,15 +1,39 @@
 // src/api/client.ts
 import { getAccessToken, setAccessToken } from "@/utils/authToken";
+import { normalizeError } from "@/errors/normalizeError";
+import type { NormalizedError } from "@/errors/normalizeError";
+import { ERROR_DICTIONARY } from "@/errors/errorDictionary";
+import type { ErrorDef } from "@/errors/errorDictionary";
 
-export class ApiError<T = unknown> extends Error {
+export class ApiError<T = unknown> extends Error implements NormalizedError {
+  // --- ErrorDef fields ---
+  code!: ErrorDef["code"];
+  type!: ErrorDef["type"];
+  severity!: ErrorDef["severity"];
+  title?: ErrorDef["title"];
+  message!: ErrorDef["message"];
+  ui!: ErrorDef["ui"];
+  show!: ErrorDef["show"];
+  retryable!: ErrorDef["retryable"];
+  action!: ErrorDef["action"];
+  report!: ErrorDef["report"];
+
+  // --- NormalizedError extras ---
   status?: number;
-  details?: T;
+  requestId?: string;
+  details?: T;  
+  raw?: unknown;
 
-  constructor(message: string, status?: number, details?: T) {
-    super(message);
+  constructor(n: NormalizedError) {
+    super(n.message);
     this.name = "ApiError";
-    this.status = status;
-    this.details = details;
+    Object.assign(this, n);
+    this.message = n.message;
+  }
+
+  static from(err: unknown): ApiError {
+    if (err instanceof ApiError) return err;
+    return new ApiError(normalizeError(err));
   }
 }
 
@@ -17,10 +41,6 @@ function stripTrailingSlashes(url: string) {
   return url.replace(/\/+$/, "");
 }
 
-/**
- * Auth base (refresh endpoint lives here)
- * IMPORTANT: this service must implement POST /auth/refresh-token
- */
 const AUTH_BASE = stripTrailingSlashes(
   import.meta.env.VITE_API_AUTH_BASE || "http://localhost:3000/api"
 );
@@ -99,28 +119,76 @@ export function createApiClient(rawBase: string) {
     const contentType = res.headers.get("content-type") || "";
     const isJson = contentType.includes("application/json");
 
-    if (isJson) {
-      return await res.json().catch(() => null);
-    }
-
+    if (isJson) return await res.json().catch(() => null);
     return await res.text().catch(() => null);
+  }
+
+  function requestIdFrom(res: Response): string | undefined {
+    // common header keys (depending on infra)
+    return (
+      res.headers.get("x-request-id") ||
+      res.headers.get("x-correlation-id") ||
+      res.headers.get("x-trace-id") ||
+      undefined
+    );
+  }
+
+  function toApiShape(params: {
+    status?: number;
+    data?: any;
+    requestId?: string;
+    fallbackMessage?: string;
+  }) {
+    const { status, data, requestId, fallbackMessage } = params;
+
+    // backend preferred
+    const code =
+      typeof data?.code === "string"
+        ? data.code
+        : typeof data?.errorCode === "string"
+          ? data.errorCode
+          : undefined;
+
+    const backendMsg =
+      typeof data?.message === "string"
+        ? data.message
+        : typeof data?.error === "string"
+          ? data.error
+          : typeof data === "string"
+            ? data
+            : fallbackMessage;
+
+    // HTML responses should map to server error (not show HTML)
+    const looksLikeHtml =
+      typeof backendMsg === "string" && backendMsg.includes("<!DOCTYPE html");
+
+    return {
+      code: looksLikeHtml ? "SERVER_ERROR" : code,
+      status,
+      message: looksLikeHtml ? "SERVER_ERROR_HTML_RESPONSE" : backendMsg,
+      details: data?.details ?? data,
+      requestId,
+    };
   }
 
   async function parseOrThrow<T>(res: Response): Promise<T> {
     const data: any = await parseBody(res);
 
     if (!res.ok) {
-      const msgRaw =
-        data?.message ||
-        data?.error ||
-        (typeof data === "string" && data.trim() ? data : "Request failed");
+      const apiShape = toApiShape({
+        status: res.status,
+        data,
+        requestId: requestIdFrom(res),
+        fallbackMessage: "Request failed",
+      });
 
-      const msg =
-        typeof msgRaw === "string" && msgRaw.includes("<!DOCTYPE html")
-          ? "SERVER_ERROR_HTML_RESPONSE"
-          : msgRaw;
-
-      throw new ApiError(msg, res.status, data);
+      throw new ApiError(
+        normalizeError({
+          ...apiShape,
+          // keep raw around for reporting/debug
+          raw: { response: { status: res.status, data }, requestId: apiShape.requestId },
+        })
+      );
     }
 
     return data as T;
@@ -147,7 +215,15 @@ export function createApiClient(rawBase: string) {
     }
 
     const controller = timeoutMs ? new AbortController() : null;
-    const timeoutId = timeoutMs ? window.setTimeout(() => controller?.abort(), timeoutMs) : null;
+    let timedOut = false;
+
+    const timeoutId =
+      timeoutMs != null
+        ? window.setTimeout(() => {
+            timedOut = true;
+            controller?.abort();
+          }, timeoutMs)
+        : null;
 
     try {
       const finalOptions: RequestInit = {
@@ -166,12 +242,32 @@ export function createApiClient(rawBase: string) {
       };
 
       const url = buildUrl(path);
-      const res = await fetch(url, finalOptions);
+
+      let res: Response;
+      try {
+        res = await fetch(url, finalOptions);
+      } catch (err) {
+        // Ensure timeout becomes NETWORK_TIMEOUT (not AbortError)
+        if (timedOut) {
+          throw new ApiError({ ...ERROR_DICTIONARY.NETWORK_TIMEOUT, raw: err });
+        }
+        throw ApiError.from(err);
+      }
 
       // auto refresh once
       if (res.status === 401 && auth && retry && !isRefreshRequest(path)) {
         const ok = await refreshOnce();
-        if (!ok) throw new ApiError("UNAUTHENTICATED", 401);
+
+        if (!ok) {
+          // force a dictionary-mapped auth error
+          throw new ApiError(
+            normalizeError({
+              status: 401,
+              code: "AUTH_UNAUTHORIZED",
+              message: "Unauthenticated",
+            })
+          );
+        }
 
         const newToken = getAccessToken();
         const retryHeaders: HeadersInit = { ...(finalHeaders as any) };
@@ -182,6 +278,9 @@ export function createApiClient(rawBase: string) {
       }
 
       return parseOrThrow<T>(res);
+    } catch (err) {
+      // Always throw ApiError normalized to dictionary
+      throw ApiError.from(err);
     } finally {
       if (timeoutId) window.clearTimeout(timeoutId);
     }

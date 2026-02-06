@@ -1,7 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ApiAvatarMeta } from "@/api/types";
 import { deleteAvatar, getAvatarMeta, getAvatarUrl, uploadAvatar } from "@/api/media";
 import { DEFAULT_AVATAR_URL } from "@/constants/avatar";
+import { handleUiError } from "@/errors/handleUiError";
+import type { NormalizedError } from "@/errors/normalizeError";
+import { ApiError } from "@/api/client";
+import { useUiAdapters } from "@/ui/useUiAdapters";
 
 type UseMediaState = {
   loading: boolean;
@@ -12,20 +16,34 @@ type UseMediaState = {
   avatarUrl: string;
 };
 
-function normalizeErr(e: any) {
-  return e?.details?.message || e?.message || "Error";
+function asNormalized(e: unknown): NormalizedError {
+  return e instanceof ApiError ? e : (e as NormalizedError);
 }
 
 export function useMedia(autoLoad: boolean = true) {
+  const ui = useUiAdapters();
+  const lastHandledRef = useRef<unknown>(null);
+
   const [state, setState] = useState<UseMediaState>(() => ({
     loading: false,
     uploading: false,
     deleting: false,
     error: null,
     meta: null,
-    // ✅ مهم: دیفالت، نه /api/media/avatar
     avatarUrl: DEFAULT_AVATAR_URL,
   }));
+
+  const showErr = useCallback(
+    (e: unknown, retry?: () => void) => {
+      if (lastHandledRef.current === e) return;
+      lastHandledRef.current = e;
+
+      const err = asNormalized(e);
+      setState((s) => ({ ...s, error: err.message ?? "Error" }));
+      handleUiError(err, ui, retry ? { retry } : undefined);
+    },
+    [ui]
+  );
 
   const loadMeta = useCallback(async () => {
     setState((s) => ({ ...s, loading: true, error: null }));
@@ -35,38 +53,41 @@ export function useMedia(autoLoad: boolean = true) {
         ...s,
         meta,
         loading: false,
-        // ✅ فقط اگر هست، URL واقعی بده
         avatarUrl: meta?.exists ? getAvatarUrl({ bustCache: true }) : DEFAULT_AVATAR_URL,
       }));
       return meta;
-    } catch (e: any) {
+    } catch (e) {
       setState((s) => ({
         ...s,
         meta: null,
         loading: false,
-        error: normalizeErr(e),
         avatarUrl: DEFAULT_AVATAR_URL,
       }));
+      showErr(e, loadMeta);
       return null;
     }
-  }, []);
+  }, [showErr]);
 
-  const upload = useCallback(async (file: File) => {
-    setState((s) => ({ ...s, uploading: true, error: null }));
-    try {
-      const meta = await uploadAvatar(file);
-      setState((s) => ({
-        ...s,
-        meta: { ...(meta as any), exists: true },
-        uploading: false,
-        avatarUrl: getAvatarUrl({ bustCache: true }),
-      }));
-      return meta;
-    } catch (e: any) {
-      setState((s) => ({ ...s, uploading: false, error: normalizeErr(e) }));
-      throw e;
-    }
-  }, []);
+  const upload = useCallback(
+    async (file: File) => {
+      setState((s) => ({ ...s, uploading: true, error: null }));
+      try {
+        const meta = await uploadAvatar(file);
+        setState((s) => ({
+          ...s,
+          meta: { ...(meta as any), exists: true },
+          uploading: false,
+          avatarUrl: getAvatarUrl({ bustCache: true }),
+        }));
+        return meta;
+      } catch (e) {
+        setState((s) => ({ ...s, uploading: false }));
+        showErr(e, () => void upload(file));
+        throw e;
+      }
+    },
+    [showErr]
+  );
 
   const remove = useCallback(async () => {
     setState((s) => ({ ...s, deleting: true, error: null }));
@@ -78,11 +99,12 @@ export function useMedia(autoLoad: boolean = true) {
         deleting: false,
         avatarUrl: DEFAULT_AVATAR_URL,
       }));
-    } catch (e: any) {
-      setState((s) => ({ ...s, deleting: false, error: normalizeErr(e) }));
+    } catch (e) {
+      setState((s) => ({ ...s, deleting: false }));
+      showErr(e, remove);
       throw e;
     }
-  }, []);
+  }, [showErr]);
 
   const refreshAvatar = useCallback(() => {
     setState((s) => ({

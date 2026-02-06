@@ -1,7 +1,8 @@
 // src/hooks/useAuthMeLite.ts
 import { useEffect, useRef, useState } from "react";
-import { authClient } from "@/api/client";
+import { authClient, ApiError } from "@/api/client";
 import { getAvatarUrl } from "@/api/media";
+import type { NormalizedError } from "@/errors/normalizeError";
 
 export type MeLite = {
   uid: string | number;
@@ -9,6 +10,10 @@ export type MeLite = {
   fullName: string;
   avatarUrl: string | null;
 };
+
+function asNormalized(e: unknown): NormalizedError {
+  return e instanceof ApiError ? e : (e as NormalizedError);
+}
 
 export function useAuthMeLite() {
   const [me, setMe] = useState<MeLite | null>(null);
@@ -43,8 +48,17 @@ export function useAuthMeLite() {
             avatarUrl: getAvatarUrl({ bustCache: true }),
           });
         }
-      } catch {
-        if (!cancelled && mountedRef.current) setMe(null);
+      } catch (e) {
+        const err = asNormalized(e);
+
+        const isAuthish =
+          err.type === "auth" || err.type === "permission" || err.status === 401 || err.status === 403;
+
+        if (!cancelled && mountedRef.current) {
+          setMe(null);
+        }
+
+        void isAuthish;
       } finally {
         if (!cancelled && mountedRef.current) setLoading(false);
       }
