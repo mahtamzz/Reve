@@ -1,0 +1,23 @@
+
+const svg = `
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="40" y1="24" x2="216" y2="232" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#EDE9FE"/>
+      <stop offset="0.5" stop-color="#E0F2FE"/>
+      <stop offset="1" stop-color="#FEF3C7"/>
+    </linearGradient>
+    <linearGradient id="fg" x1="84" y1="72" x2="176" y2="196" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#A78BFA"/>
+      <stop offset="1" stop-color="#38BDF8"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="16" y="16" width="224" height="224" rx="112" fill="url(#bg)"/>
+  <circle cx="128" cy="104" r="34" fill="url(#fg)" opacity="0.95"/>
+  <path d="M64 196c10-36 38-54 64-54s54 18 64 54" stroke="url(#fg)" stroke-width="20" stroke-linecap="round"/>
+</svg>
+`.trim();
+
+export const DEFAULT_AVATAR_URL =
+  "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);

@@ -1,10 +1,10 @@
-// src/pages/GroupDetails.tsx
 import React, { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import type { Variants } from "framer-motion";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { usePublicProfilesBatch } from "@/hooks/usePublicProfilesBatch";
 import { getUserAvatarUrl } from "@/api/media";
+import { DEFAULT_AVATAR_URL } from "@/constants/avatar";
 import {
   ArrowLeft,
   MessageCircle,
@@ -43,19 +43,26 @@ import {
 
 const EASE_SOFT: [number, number, number, number] = [0.22, 1, 0.36, 1];
 
-function placeholderAvatar(seed: string) {
-  const s = encodeURIComponent(seed || "member");
-  return `https://api.dicebear.com/7.x/identicon/svg?seed=${s}`;
+
+function pickAvatarUrl(m: any, pub: any): string {
+  const direct =
+    safeStr(m?.profile?.avatar_url) ??
+    safeStr(m?.profile?.avatarUrl) ??
+    safeStr(m?.avatar_url) ??
+    safeStr(m?.avatarUrl) ??
+    safeStr(pub?.avatar_url) ??
+    safeStr(pub?.avatarUrl) ??
+    null;
+
+  if (direct) return direct;
+
+  const uid = pickUid(m) ?? safeStr(pub?.uid) ?? safeStr(pub?.userId) ?? null;
+  if (uid) return getUserAvatarUrl(uid, { bustCache: true });
+
+  return DEFAULT_AVATAR_URL;
 }
 
-function initialsFromName(name: string) {
-  const cleaned = (name || "").trim().replace(/\s+/g, " ");
-  if (!cleaned) return "?";
-  const parts = cleaned.split(" ");
-  const a = parts[0]?.[0] || "";
-  const b = parts.length > 1 ? parts[parts.length - 1]?.[0] || "" : "";
-  return (a + b).toUpperCase() || "?";
-}
+
 
 function safeStr(x: any): string | null {
   return typeof x === "string" && x.trim() ? x.trim() : null;
@@ -412,9 +419,8 @@ export default function GroupDetails() {
         safeStr(pub?.username) ??
         `User #${uid}`;
 
-      // آواتار مثل GroupChat: همیشه از media api
-      const avatar = uid ? getUserAvatarUrl(uid, { bustCache: true }) : placeholderAvatar(String(uid));
-
+      const avatar = pickAvatarUrl(m, pub);
+      
       const role = String(m?.role ?? m?.member_role ?? m?.memberRole ?? "member");
       const online = Boolean(m?.online ?? m?.user?.online);
 
@@ -858,21 +864,26 @@ export default function GroupDetails() {
                                   px-3 py-2 backdrop-blur
                                 "
                               >
-                                <div className="relative h-10 w-10 rounded-2xl overflow-hidden border border-zinc-200/60 bg-white grid place-items-center">
-                                  {m.avatar ? (
-                                    <img src={m.avatar} alt={m.display} className="h-full w-full object-cover" />
-                                  ) : (
-                                    <span className="text-xs font-bold text-zinc-600">
-                                      {initialsFromName(m.display)}
-                                    </span>
-                                  )}
-                                  <span
-                                    className={`
-                                      absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white
-                                      ${m.online ? "bg-emerald-400" : "bg-zinc-300"}
-                                    `}
-                                  />
-                                </div>
+                            <div className="relative h-10 w-10 rounded-2xl border border-zinc-200/60 bg-white overflow-visible">
+                              <div className="h-full w-full overflow-hidden rounded-2xl">
+                                <img
+                                  src={m.avatar}
+                                  alt={m.display}
+                                  className="h-full w-full object-cover"
+                                  onError={(e) => (e.currentTarget.src = DEFAULT_AVATAR_URL)}
+                                />
+                              </div>
+
+                              <span
+                                className={`
+                                  absolute -right-1 -bottom-1
+                                  h-3.5 w-3.5 rounded-full
+                                  border-2 border-white
+                                  ${m.online ? "bg-emerald-400" : "bg-zinc-300"}
+                                `}
+                              />
+                            </div>
+
                                 <div className="min-w-0">
                                   <p className="truncate text-xs font-semibold text-zinc-900">{m.display}</p>
                                   <div className="mt-1">{roleBadge(m.role)}</div>
@@ -994,25 +1005,27 @@ export default function GroupDetails() {
                                   "
                                 >
                                   <div className="flex items-center gap-3">
-                                    <div className="relative h-12 w-12 rounded-2xl overflow-hidden border border-zinc-200/60 bg-white grid place-items-center">
-                                      {m.avatar ? (
-                                        <img
-                                          src={m.avatar}
-                                          alt={m.display}
-                                          className="h-full w-full object-cover"
-                                        />
-                                      ) : (
-                                        <span className="text-xs font-bold text-zinc-600">
-                                          {initialsFromName(m.display)}
-                                        </span>
-                                      )}
-                                      <span
-                                        className={`
-                                          absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white
-                                          ${m.online ? "bg-emerald-400" : "bg-zinc-300"}
-                                        `}
+                                  <div className="relative h-12 w-12 rounded-2xl border border-zinc-200/60 bg-white overflow-visible">
+                                    <div className="h-full w-full overflow-hidden rounded-2xl">
+                                      <img
+                                        src={m.avatar}
+                                        alt={m.display}
+                                        className="h-full w-full object-cover"
+                                        onError={(e) => {
+                                          e.currentTarget.src = DEFAULT_AVATAR_URL;
+                                        }}
                                       />
                                     </div>
+
+                                    <span
+                                      className={`
+                                        absolute -right-1 -bottom-1
+                                        h-3.5 w-3.5 rounded-full
+                                        border-2 border-white shadow-sm
+                                        ${m.online ? "bg-emerald-400" : "bg-zinc-300"}
+                                      `}
+                                    />
+                                  </div>
 
                                     <div className="min-w-0 flex-1">
                                       <p className="truncate text-sm font-semibold text-zinc-900">

@@ -1,18 +1,14 @@
-// src/hooks/useMedia.ts
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ApiAvatarMeta } from "@/api/types";
 import { deleteAvatar, getAvatarMeta, getAvatarUrl, uploadAvatar } from "@/api/media";
+import { DEFAULT_AVATAR_URL } from "@/constants/avatar";
 
 type UseMediaState = {
   loading: boolean;
   uploading: boolean;
   deleting: boolean;
   error: string | null;
-
-  // backend doesn't provide a JSON meta endpoint; we only know "exists"
   meta: (ApiAvatarMeta & { exists?: boolean }) | null;
-
-  // for <img src>
   avatarUrl: string;
 };
 
@@ -27,7 +23,8 @@ export function useMedia(autoLoad: boolean = true) {
     deleting: false,
     error: null,
     meta: null,
-    avatarUrl: getAvatarUrl({ bustCache: true }),
+    // ✅ مهم: دیفالت، نه /api/media/avatar
+    avatarUrl: DEFAULT_AVATAR_URL,
   }));
 
   const loadMeta = useCallback(async () => {
@@ -38,7 +35,8 @@ export function useMedia(autoLoad: boolean = true) {
         ...s,
         meta,
         loading: false,
-        avatarUrl: getAvatarUrl({ bustCache: true }),
+        // ✅ فقط اگر هست، URL واقعی بده
+        avatarUrl: meta?.exists ? getAvatarUrl({ bustCache: true }) : DEFAULT_AVATAR_URL,
       }));
       return meta;
     } catch (e: any) {
@@ -47,6 +45,7 @@ export function useMedia(autoLoad: boolean = true) {
         meta: null,
         loading: false,
         error: normalizeErr(e),
+        avatarUrl: DEFAULT_AVATAR_URL,
       }));
       return null;
     }
@@ -55,10 +54,10 @@ export function useMedia(autoLoad: boolean = true) {
   const upload = useCallback(async (file: File) => {
     setState((s) => ({ ...s, uploading: true, error: null }));
     try {
-      const meta = await uploadAvatar(file); // backend returns 201 JSON
+      const meta = await uploadAvatar(file);
       setState((s) => ({
         ...s,
-        meta: meta as any,
+        meta: { ...(meta as any), exists: true },
         uploading: false,
         avatarUrl: getAvatarUrl({ bustCache: true }),
       }));
@@ -72,12 +71,12 @@ export function useMedia(autoLoad: boolean = true) {
   const remove = useCallback(async () => {
     setState((s) => ({ ...s, deleting: true, error: null }));
     try {
-      await deleteAvatar(); // backend returns 204
+      await deleteAvatar();
       setState((s) => ({
         ...s,
         meta: null,
         deleting: false,
-        avatarUrl: getAvatarUrl({ bustCache: true }),
+        avatarUrl: DEFAULT_AVATAR_URL,
       }));
     } catch (e: any) {
       setState((s) => ({ ...s, deleting: false, error: normalizeErr(e) }));
@@ -86,7 +85,10 @@ export function useMedia(autoLoad: boolean = true) {
   }, []);
 
   const refreshAvatar = useCallback(() => {
-    setState((s) => ({ ...s, avatarUrl: getAvatarUrl({ bustCache: true }) }));
+    setState((s) => ({
+      ...s,
+      avatarUrl: s.meta?.exists ? getAvatarUrl({ bustCache: true }) : DEFAULT_AVATAR_URL,
+    }));
   }, []);
 
   useEffect(() => {
@@ -94,13 +96,7 @@ export function useMedia(autoLoad: boolean = true) {
   }, [autoLoad, loadMeta]);
 
   return useMemo(
-    () => ({
-      ...state,
-      loadMeta,
-      upload,
-      remove,
-      refreshAvatar,
-    }),
+    () => ({ ...state, loadMeta, upload, remove, refreshAvatar }),
     [state, loadMeta, upload, remove, refreshAvatar]
   );
 }
