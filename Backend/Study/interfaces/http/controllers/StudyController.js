@@ -1,3 +1,10 @@
+function toDateOnlyUTC(d = new Date()) {
+    const yyyy = d.getUTCFullYear();
+    const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+    const dd = String(d.getUTCDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+}
+
 class StudyController {
     constructor({
         createSubject,
@@ -7,7 +14,9 @@ class StudyController {
         logStudySession,
         listStudySessions,
         getDashboard,
-        updateWeeklyGoal
+        updateWeeklyGoal,
+        studyPresenceStore,
+        subjectDstRepo
     }) {
         this.createSubject = createSubject;
         this.listSubjects = listSubjects;
@@ -17,6 +26,9 @@ class StudyController {
         this.listStudySessions = listStudySessions;
         this.getDashboard = getDashboard;
         this.updateWeeklyGoal = updateWeeklyGoal;
+
+        this.studyPresenceStore = studyPresenceStore;
+        this.subjectDstRepo = subjectDstRepo;
 
         this.createSubjectHandler = this.createSubjectHandler.bind(this);
         this.listSubjectsHandler = this.listSubjectsHandler.bind(this);
@@ -28,6 +40,46 @@ class StudyController {
 
         this.getDashboardHandler = this.getDashboardHandler.bind(this);
         this.updateWeeklyGoalHandler = this.updateWeeklyGoalHandler.bind(this);
+
+        this.presenceHandler = this.presenceHandler.bind(this);
+    }
+
+    async presenceHandler(req, res) {
+        // auth + requireUser already ran; this is just a batch query
+        const raw = String(req.query.uids || "");
+        const uids = raw
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean);
+
+        if (uids.length === 0) 
+            return res.status(400).json({ error: "UIDS_REQUIRED" });
+
+        if (!this.studyPresenceStore) 
+            return res.status(503).json({ error: "PRESENCE_UNAVAILABLE" });
+        
+        // Active study meta (startedAt, lastHbAt, subjectId) or null
+        const active = await this.studyPresenceStore.getActiveMany(uids);
+
+        // Persisted mins base for today (doesn't include live delta)
+        const day = toDateOnlyUTC();
+
+        const todayMinsBase = {};
+        if (this.subjectDstRepo?.getTotalByDay) {
+            await Promise.all(
+                uids.map(async (uid) => {
+                    try {
+                        todayMinsBase[String(uid)] = await this.subjectDstRepo.getTotalByDay(uid, day);
+                    } catch {
+                        todayMinsBase[String(uid)] = 0;
+                    }
+                })
+            );
+        } else {
+            for (const uid of uids) todayMinsBase[String(uid)] = 0;
+        }
+
+        return res.json({ active, todayMinsBase, day });
     }
 
     async createSubjectHandler(req, res) {
@@ -76,13 +128,7 @@ class StudyController {
         const uid = req.actor.uid;
         const { subjectId, durationMins, startedAt } = req.body;
 
-        const session = await this.logStudySession.execute(
-            uid,
-            subjectId,
-            durationMins,
-            startedAt ?? null
-        );
-
+        const session = await this.logStudySession.execute(uid, subjectId, durationMins, startedAt ?? null);
         res.status(201).json(session);
     }
 

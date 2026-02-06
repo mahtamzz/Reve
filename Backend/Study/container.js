@@ -1,11 +1,15 @@
+// Study/container.js
 require("dotenv").config();
 
 const PgClient = require("./infrastructure/db/postgres");
 
+/* REDIS */
+const RedisClient = require("./infrastructure/cache/redis");
+const createStudyPresenceStore = require("./infrastructure/cache/studyPresenceStore");
+
 /* SHARED */
 const JwtVerifier = require("../shared/auth/JwtVerifier");
 const authMiddleware = require("../shared/auth/authMiddleware");
-const auditMiddleware = require("../shared/audit/auditMiddleware"); // optional if you want audit route middleware
 const requireUser = require("../shared/auth/requireUser");
 const requireAdmin = require("../shared/auth/requireAdmin");
 
@@ -32,6 +36,9 @@ const UpdateWeeklyGoal = require("./application/useCases/UpdateWeeklyGoal");
 const StudyController = require("./interfaces/http/controllers/StudyController");
 const createStudyRoutes = require("./interfaces/http/routes/study.routes");
 
+/* GROUP CLIENT (for realtime broadcast to all groups user belongs to) */
+const GroupClient = require("./infrastructure/group/GroupClient");
+
 async function createContainer() {
     /* DB */
     const db = new PgClient({
@@ -42,21 +49,33 @@ async function createContainer() {
         port: process.env.PGPORT || 5432
     });
 
+    /* REDIS */
+    const redisClient = new RedisClient({
+        host: process.env.REDIS_HOST || "redis",
+        port: process.env.REDIS_PORT || 6379
+    });
+    const redis = await redisClient.connect();
+
+    // Study presence (online == studying)
+    const studyPresenceStore = createStudyPresenceStore(redis, {
+        ttlSeconds: Number(process.env.STUDY_PRESENCE_TTL_SECONDS || 75),
+        hbIntervalMs: Number(process.env.STUDY_PRESENCE_HB_INTERVAL_MS || 25000)
+    });
+
     /* REPOSITORIES */
-    // Keep constructor style consistent with YOUR repos:
-    // - if your repos expect (db) like Group repos: use new Repo(db)
-    // - if your repos expect ({ pool: db }) like UserProfile repos: use that.
     const subjectRepo = new PgSubjectRepo(db);
     const sessionRepo = new PgStudySessionRepo(db);
     const subjectDstRepo = new PgSubjectDSTRepo(db);
     const statsRepo = new PgUserStudyStatsRepo(db);
     const auditRepo = new PgStudyAuditRepo(db);
 
-    /* JWT */
-    const jwtVerifier = new JwtVerifier({
-        secret: process.env.JWT_SECRET
+    /* GROUP CLIENT */
+    const groupClient = new GroupClient({
+        baseUrl: process.env.GROUP_SERVICE_URL
     });
 
+    /* JWT */
+    const jwtVerifier = new JwtVerifier({ secret: process.env.JWT_SECRET });
     const auth = authMiddleware(jwtVerifier);
 
     /* USE CASES */
@@ -92,13 +111,29 @@ async function createContainer() {
         logStudySession: logStudySessionUC,
         listStudySessions: listStudySessionsUC,
         getDashboard: getDashboardUC,
-        updateWeeklyGoal: updateWeeklyGoalUC
+        updateWeeklyGoal: updateWeeklyGoalUC,
+        studyPresenceStore,
+        subjectDstRepo,
     });
 
     /* ROUTER */
-    const studyRouter = createStudyRoutes({auth, controller, requireUser, requireAdmin});
+    const studyRouter = createStudyRoutes({ auth, controller, requireUser, requireAdmin });
 
     return {
+        repos: {
+            subjectRepo,
+            sessionRepo,
+            subjectDstRepo,
+            statsRepo,
+            auditRepo
+        },
+        clients: {
+            groupClient
+        },
+        cache: {
+            redis
+        },
+        studyPresenceStore,
         routers: {
             studyRouter
         }

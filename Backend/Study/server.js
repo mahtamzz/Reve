@@ -1,13 +1,20 @@
+const http = require("http");
 const createContainer = require("./container");
 const createApp = require("./app");
 const env = require("./config/env");
 
+const createStudySocketServer = require("./interfaces/http/ws/socketServer");
+
 async function start() {
     const container = await createContainer();
-
     const app = createApp(container);
 
-    app.listen(env.PORT, () => {
+    const httpServer = http.createServer(app);
+
+    // attach socket server
+    createStudySocketServer(httpServer, container);
+
+    httpServer.listen(env.PORT, () => {
         console.log(`[${env.SERVICE_NAME}] running on port ${env.PORT}`);
     });
 }

@@ -17,6 +17,8 @@ module.exports = function createStudyRoutes({ controller, auth, requireUser, req
     router.get("/dashboard", auth, requireUser, controller.getDashboardHandler);
     router.patch("/stats/weekly-goal", auth, requireUser, controller.updateWeeklyGoalHandler);
 
+    router.get("/presence", auth, requireUser, controller.presenceHandler);
+
     /**
      * @swagger
      * tags:
@@ -226,6 +228,73 @@ module.exports = function createStudyRoutes({ controller, auth, requireUser, req
      *         description: Weekly goal updated
      *       400:
      *         description: Invalid input
+     */
+
+    /**
+     * @swagger
+     * /api/study/presence:
+     *   get:
+     *     summary: Get study presence + today's base minutes for a list of users
+     *     description: >
+     *       Returns whether each user is currently studying (online) and the base minutes
+     *       already persisted for today (UTC). If a user is currently studying, the frontend
+     *       should add live minutes using (now - startedAt) on top of todayMinsBase.
+     *     tags: [Study]
+     *     security:
+     *       - bearerAuth: []
+     *     parameters:
+     *       - in: query
+     *         name: uids
+     *         required: true
+     *         schema:
+     *           type: string
+     *         description: Comma-separated list of user IDs
+     *         example: "12,15,20"
+     *     responses:
+     *       200:
+     *         description: Presence snapshot
+     *         content:
+     *           application/json:
+     *             schema:
+     *               type: object
+     *               properties:
+     *                 day:
+     *                   type: string
+     *                   format: date
+     *                   example: "2026-02-05"
+     *                 active:
+     *                   type: object
+     *                   description: Map of uid -> active meta (or null)
+     *                   additionalProperties:
+     *                     oneOf:
+     *                       - type: "null"
+     *                       - type: object
+     *                         properties:
+     *                           subjectId:
+     *                             type: string
+     *                             format: uuid
+     *                             nullable: true
+     *                           startedAt:
+     *                             type: string
+     *                             format: date-time
+     *                           lastHbAt:
+     *                             type: string
+     *                             format: date-time
+     *                           source:
+     *                             type: string
+     *                             example: "socket"
+     *                 todayMinsBase:
+     *                   type: object
+     *                   description: Map of uid -> persisted minutes for today (UTC)
+     *                   additionalProperties:
+     *                     type: integer
+     *                     example: 45
+     *       400:
+     *         description: Missing or invalid uids
+     *       401:
+     *         description: Unauthorized
+     *       503:
+     *         description: Presence unavailable (Redis not configured)
      */
 
     return router;
