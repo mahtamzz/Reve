@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { getStudySocket } from "@/realtime/studySocket";
+console.log("[useStudyPresenceRealtime] module loaded");
 
 type PresenceMap = Record<
   string,
@@ -20,12 +21,23 @@ export function useStudyPresenceRealtime(
   const socketRef = useRef<ReturnType<typeof getStudySocket> | null>(null);
 
   useEffect(() => {
+    console.log("[useStudyPresenceRealtime] effect fired");
     if (!groupId || memberUids.length === 0) return;
 
     const socket = getStudySocket();
     socketRef.current = socket;
 
+    console.log("[study socket] before connect", {
+      connected: socket.connected,
+      id: socket.id,
+    });
+
     if (!socket.connected) socket.connect();
+
+    console.log("[study socket] after connect()", {
+      connected: socket.connected,
+      id: socket.id,
+    });
 
     socket.emit("group:watch", { groupId, memberUids });
 
@@ -47,18 +59,25 @@ export function useStudyPresenceRealtime(
     });
 
     socket.on("study_presence:update", (u) => {
-      setPresence((prev) => ({
-        ...prev,
-        [String(u.uid)]: {
-          studying: u.studying,
-          subjectId: u.subjectId ?? null,
-          startedAt: u.startedAt ?? null,
-          todayMinsBase: prev[String(u.uid)]?.todayMinsBase ?? 0,
-          day: prev[String(u.uid)]?.day ?? "",
-        },
-      }));
-    });
+      const id = String(u.uid);
 
+      setPresence((prev) => {
+        const prevRow = prev[id];
+        const nextStudying = !!u.studying;
+
+        return {
+          ...prev,
+          [id]: {
+            studying: nextStudying,
+            subjectId: nextStudying ? (u.subjectId ?? null) : null,
+            startedAt: nextStudying ? (u.startedAt ?? prevRow?.startedAt ?? null) : null, // ✅
+            todayMinsBase: u.todayMinsBase ?? prevRow?.todayMinsBase ?? 0,
+            day: u.day ?? prevRow?.day ?? "",
+          },
+        };
+      });
+    });
+    
     return () => {
       socket.emit("group:unwatch", { groupId });
       socket.off("study_presence:snapshot");

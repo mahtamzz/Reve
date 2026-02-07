@@ -50,14 +50,19 @@ let socket: Socket<ServerToClientEvents, ClientToServerEvents> | null = null;
 export function getStudySocket() {
     if (socket) return socket;
 
+    if (import.meta.env.DEV) {
+        // @ts-ignore
+        window.__studySocket = getStudySocket;
+    }
+    
     const baseUrl =
-        import.meta.env.VITE_STUDY_SOCKET_URL || "http://localhost:3007";
+        import.meta.env.VITE_STUDY_SOCKET_URL || "http://localhost:8080";
 
     socket = io(baseUrl, {
         path: "/study-socket.io",
         transports: ["websocket"],
         withCredentials: true,
-        autoConnect: false,
+        // autoConnect: false,
         extraHeaders: (() => {
         const t = getAccessToken();
         return t ? { Authorization: `Bearer ${t}` } : {};

@@ -7,6 +7,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { ApiError } from "@/api/client";
 import { useCreateSubject, useLogSession, useSubjects } from "@/hooks/useStudy";
 import CreateSubjectModal from "@/components/ui/CreateSubjectModal";
+import { getStudySocket } from "@/realtime/studySocket";
 
 const LAST_SUBJECT_KEY = "study_last_subject_id_v1";
 const tickEverySeconds = 1;
@@ -175,6 +176,9 @@ export default function FocusPage() {
   const studiedSeconds = time;
 
   const reset = async () => {
+    const socket = getStudySocket();
+    if (socket.connected) socket.emit("study:stop");
+
     setRunning(false);
     setTime(0);
     startedAtRef.current = null;
@@ -182,29 +186,38 @@ export default function FocusPage() {
     await releaseWakeLock();
   };
 
-  const toggle = async () => {
-    if (!running) {
-      await requestWakeLock();
-    } else {
-      await releaseWakeLock();
-    }
 
-    setRunning((v) => {
-      const next = !v;
-      if (next) {
-        startedAtRef.current = performance.now();
-        baseAtStartRef.current = time;
-      } else {
-        startedAtRef.current = null;
-        baseAtStartRef.current = time;
-      }
-      return next;
-    });
+  const toggle = async () => {
+    const socket = getStudySocket();
+    if (!socket.connected) socket.connect();
+
+    if (!running) {
+      // START
+      await requestWakeLock();
+
+      socket.emit("study:start", { subjectId: subjectId || null });
+
+      setRunning(true);
+      startedAtRef.current = performance.now();
+      baseAtStartRef.current = time;
+    } else {
+      // STOP
+      await releaseWakeLock();
+
+      socket.emit("study:stop");
+
+      setRunning(false);
+      startedAtRef.current = null;
+      baseAtStartRef.current = time;
+    }
   };
 
   const finish = async () => {
     if (isSaving) return;
     if (!subjectId) return;
+
+    const socket = getStudySocket();
+    if (socket.connected) socket.emit("study:stop");
 
     const durationMins = Math.max(1, Math.round(studiedSeconds / 60));
     const startedAtIso = new Date(Date.now() - durationMins * 60_000).toISOString();
@@ -212,16 +225,9 @@ export default function FocusPage() {
     setRunning(false);
     await releaseWakeLock();
 
-    await logSession({
-      subjectId,
-      durationMins,
-      startedAt: startedAtIso,
-    });
+    await logSession({ subjectId, durationMins, startedAt: startedAtIso });
 
-    navigate("/dashboard", {
-      replace: true,
-      state: { focusSeconds: studiedSeconds },
-    });
+    navigate("/dashboard", { replace: true, state: { focusSeconds: studiedSeconds } });
 
     setTime(0);
     startedAtRef.current = null;

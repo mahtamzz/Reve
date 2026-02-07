@@ -111,6 +111,11 @@ module.exports = function registerStudyHandlers(io, socket, deps) {
     // -----------------------------
     socket.on("study:start", async ({ subjectId = null }) => {
         try {
+            console.log("[WS] study:start received", {
+                uid: socket.user?.uid,
+                socketId: socket.id,
+                subjectId,
+            });
             const uid = socket.user?.uid;
             if (!uid) return socket.emit("error", { code: "UNAUTHORIZED" });
 
@@ -135,7 +140,7 @@ module.exports = function registerStudyHandlers(io, socket, deps) {
             // Broadcast to ALL groups the user belongs to
             await broadcastToMyGroups(
                 io,
-                { groupClient , studyPresenceStore },
+                { groupClient, studyPresenceStore },
                 cookieHeader,
                 {
                     uid,
@@ -186,7 +191,7 @@ module.exports = function registerStudyHandlers(io, socket, deps) {
             if (becameOffline) {
                 await broadcastToMyGroups(
                     io,
-                    { groupClient , studyPresenceStore },
+                    { groupClient, studyPresenceStore },
                     cookieHeader,
                     {
                         uid,

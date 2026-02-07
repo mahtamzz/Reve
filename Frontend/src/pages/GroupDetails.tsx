@@ -434,13 +434,21 @@ function ChatCtaButton({
   );
 }
 
-function calcTodayTotalMs(args: { todayMinsBase?: number; startedAt?: string | null; nowMs: number }) {
+function calcTodayTotalMs(args: {
+  todayMinsBase?: number;
+  startedAt?: string | null;
+  studying?: boolean;
+  nowMs: number;
+}) {
   const baseMs = Math.max(0, Number(args.todayMinsBase ?? 0)) * 60 * 1000;
-  const liveMs = args.startedAt ? Math.max(0, args.nowMs - new Date(args.startedAt).getTime()) : 0;
+
+  const liveMs =
+    args.studying && args.startedAt
+      ? Math.max(0, args.nowMs - new Date(args.startedAt).getTime())
+      : 0;
+
   return baseMs + liveMs;
 }
-
-
 
 export default function GroupDetails() {
   const { groupId } = useParams<{ groupId: string }>();
@@ -1004,6 +1012,7 @@ export default function GroupDetails() {
                                     calcTodayTotalMs({
                                       todayMinsBase: Number(m.todayMinsBase ?? 0),
                                       startedAt: m.startedAt ?? null,
+                                      studying: m.online,
                                       nowMs: nowTick,
                                     })
                                   )}
@@ -1172,6 +1181,7 @@ export default function GroupDetails() {
                                           calcTodayTotalMs({
                                             todayMinsBase: m.todayMinsBase,
                                             startedAt: m.startedAt,
+                                            studying: m.online,
                                             nowMs: nowTick,
                                           })
                                         )}
