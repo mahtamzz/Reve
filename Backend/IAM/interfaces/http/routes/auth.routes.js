@@ -10,6 +10,9 @@ module.exports = function createAuthRoutes(container) {
 
     const authController = new AuthController(container);
 
+    const authMiddleware = createAuthMiddleware(container.jwtService);
+    const adminAuthMiddleware = createAdminAuthMiddleware(container.jwtService);
+
     router.post(
         "/register",
         auditMiddleware(container.auditRepo, "REGISTER_ATTEMPT"),
@@ -59,6 +62,10 @@ module.exports = function createAuthRoutes(container) {
     router.post("/admin/forgot-password", authController.adminForgotPassword);
     router.post("/admin/reset-password", authController.adminResetPassword);
 
+    router.get("/admin/users", adminAuthMiddleware, authController.listUsers);
+    router.delete("/admin/users/:id", adminAuthMiddleware, authController.deleteUser);
+
+
     router.post("/refresh-token", authController.refreshToken);
 
     /* GOOGLE AUTH */
@@ -78,10 +85,6 @@ module.exports = function createAuthRoutes(container) {
         }),
         authController.googleCallback
     );
-
-
-    const authMiddleware = createAuthMiddleware(container.jwtService);
-    const adminAuthMiddleware = createAdminAuthMiddleware(container.jwtService);
 
     router.get("/me", authMiddleware, authController.me);
     router.get("/admin/me", adminAuthMiddleware, authController.adminMe);
@@ -536,6 +539,114 @@ module.exports = function createAuthRoutes(container) {
      *       400:
      *         description: Invalid/expired OTP or validation error
      */
+
+    /**
+     * @swagger
+     * /api/auth/admin/users:
+     *   get:
+     *     summary: List all users (Admin only)
+     *     description: >
+     *       Returns a paginated list of all registered users.
+     *       This endpoint is restricted to app-wide administrators.
+     *     tags:
+     *       - Admin
+     *     security:
+     *       - cookieAuth: []
+     *     parameters:
+     *       - in: query
+     *         name: page
+     *         schema:
+     *           type: integer
+     *           minimum: 1
+     *           default: 1
+     *         description: Page number
+     *       - in: query
+     *         name: limit
+     *         schema:
+     *           type: integer
+     *           minimum: 1
+     *           maximum: 100
+     *           default: 20
+     *         description: Number of users per page
+     *     responses:
+     *       200:
+     *         description: Paginated list of users
+     *         content:
+     *           application/json:
+     *             schema:
+     *               type: object
+     *               properties:
+     *                 data:
+     *                   type: array
+     *                   items:
+     *                     type: object
+     *                     properties:
+     *                       id:
+     *                         type: integer
+     *                         example: 1
+     *                       email:
+     *                         type: string
+     *                         example: user@example.com
+     *                       username:
+     *                         type: string
+     *                         example: john_doe
+     *                       googleid:
+     *                         type: string
+     *                         nullable: true
+     *                         example: null
+     *                 meta:
+     *                   type: object
+     *                   properties:
+     *                     page:
+     *                       type: integer
+     *                       example: 1
+     *                     limit:
+     *                       type: integer
+     *                       example: 20
+     *                     total:
+     *                       type: integer
+     *                       example: 134
+     *                     totalPages:
+     *                       type: integer
+     *                       example: 7
+     *       401:
+     *         description: Unauthorized (missing or invalid admin token)
+     *       403:
+     *         description: Forbidden (not an admin)
+     */
+
+    /**
+     * @swagger
+     * /api/auth/admin/users/{id}:
+     *   delete:
+     *     summary: Delete a user (Admin only)
+     *     description: >
+     *       Permanently deletes a user from the system.
+     *       This action is irreversible and will remove the user from IAM.
+     *       Downstream services are expected to react via USER_DELETED events.
+     *     tags:
+     *       - Admin
+     *     security:
+     *       - cookieAuth: []
+     *     parameters:
+     *       - in: path
+     *         name: id
+     *         required: true
+     *         schema:
+     *           type: integer
+     *           minimum: 1
+     *         description: ID of the user to delete
+     *     responses:
+     *       204:
+     *         description: User deleted successfully (no content)
+     *       401:
+     *         description: Unauthorized (missing or invalid admin token)
+     *       403:
+     *         description: Forbidden (not an admin)
+     *       404:
+     *         description: User not found
+     */
+
 
     return router;
 };

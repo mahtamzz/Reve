@@ -20,6 +20,10 @@ class AuthController {
         this.adminForgotPasswordUC = deps.adminForgotPassword;
         this.adminResetPasswordUC = deps.adminResetPassword;
 
+        // admin
+        this.listUsersUC = deps.listUsers;
+        this.deleteUserUC = deps.deleteUser;
+
         // identity
         this.getCurrentUserUC = deps.getCurrentUser;
         this.getCurrentCurrentAdminUC = deps.getCurrentAdmin;
@@ -209,7 +213,7 @@ class AuthController {
 
             console.log("🔑 [DEV] Admin access token:");
             console.log(accessToken);
-            
+
             res.json({ admin });
         } catch (err) {
             res.status(401).json({ message: err.message });
@@ -272,6 +276,30 @@ class AuthController {
             res.status(code).json({ message: err.message });
         }
     };
+
+    /* ---------------- ADMIN ---------------- */
+    listUsers = async (req, res) => {
+        try {
+            const result = await this.listUsersUC.execute(req.query);
+            res.json(result);
+        } catch (err) {
+            res.status(400).json({ message: err.message });
+        }
+    };
+
+    deleteUser = async (req, res) => {
+        try {
+            await this.deleteUserUC.execute({
+                userId: Number(req.params.id),
+                adminId: req.admin.admin_id
+            });
+            res.status(204).end();
+        } catch (err) {
+            const code = err.message === "USER_NOT_FOUND" ? 404 : 400;
+            res.status(code).json({ message: err.message });
+        }
+    };
+
 
 }
 

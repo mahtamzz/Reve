@@ -142,6 +142,52 @@ class UserRepositoryPg {
         return result.rows[0] || null;
     }
 
+    async listUsers({ limit, offset }) {
+        const usersQuery = `
+        SELECT id, email, username, googleid
+        FROM users
+        ORDER BY id DESC
+        LIMIT $1 OFFSET $2
+        `;
+
+        const countQuery = `SELECT COUNT(*) FROM users`;
+
+        const [usersRes, countRes] = await Promise.all([
+            this.withRetry(() =>
+                this.pool.query(usersQuery, [limit, offset])
+            ),
+            this.withRetry(() =>
+                this.pool.query(countQuery)
+            )
+        ]);
+
+        return {
+            users: usersRes.rows,
+            total: Number(countRes.rows[0].count)
+        };
+    }
+
+    async deleteById(userId) {
+        const result = await this.withRetry(() =>
+            this.pool.query(
+                `DELETE FROM users
+                WHERE id = $1
+                RETURNING id, email`,
+                [userId]
+            )
+        );
+
+        const deleted = result.rows[0];
+        if (!deleted) return null;
+
+        if (deleted.email) {
+            await this.cache.del(`user:${deleted.email}`);
+        }
+
+        return deleted;
+    }
+
+
 }
 
 module.exports = UserRepositoryPg;

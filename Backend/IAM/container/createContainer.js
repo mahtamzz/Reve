@@ -36,6 +36,9 @@ const GetCurrentUserUC = require("../application/useCases/users/GetCurrentUser")
 const GetCurrentAdminUC = require("../application/useCases/users/GetCurrentAdmin");
 const ChangePasswordUC = require("../application/useCases/users/ChangePassword");
 
+const ListUsersUC = require("../application/useCases/admin/ListUsers");
+const DeleteUserUC = require("../application/useCases/admin/DeleteUser");
+
 /* =========================
     ASYNC INITIALIZATION
 ========================= */
@@ -174,6 +177,16 @@ async function createContainer() {
         }
     });
 
+    const listUsers = new ListUsersUC({
+        userRepo: userRepository
+    });
+
+    const deleteUser = new DeleteUserUC({
+        userRepo: userRepository,
+        refreshTokenStore,
+        auditRepo,
+        eventBus
+    });
 
     const userProfileEventsConsumer = new UserProfileEventsConsumer(
         process.env.RABBITMQ_URL,
@@ -198,6 +211,8 @@ async function createContainer() {
         adminLogin,
         adminForgotPassword,
         adminResetPassword,
+        listUsers,
+        deleteUser,
 
         // identity
         getCurrentUser,
