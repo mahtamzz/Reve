@@ -1,14 +1,23 @@
 class IamClient {
     constructor({ baseUrl }) {
-        this.baseUrl = baseUrl; // e.g. process.env.IAM_BASE_URL
+        this.baseUrl = baseUrl;
     }
 
     async changePassword(userAuthHeader, body) {
+        if (!userAuthHeader) {
+            throw new Error("Missing Authorization header when calling IAM");
+        }
+
+        const auth =
+            userAuthHeader.startsWith("Bearer ")
+                ? userAuthHeader
+                : `Bearer ${userAuthHeader}`;
+
         const res = await fetch(`${this.baseUrl}/api/auth/me/password`, {
             method: "PATCH",
             headers: {
                 "Content-Type": "application/json",
-                Authorization: userAuthHeader
+                "Authorization": auth
             },
             body: JSON.stringify(body)
         });

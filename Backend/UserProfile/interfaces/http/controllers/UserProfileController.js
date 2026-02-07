@@ -56,11 +56,10 @@ class UserProfileController {
     changePassword = async (req, res, next) => {
         try {
             const authHeader = req.headers.authorization;
-            console.log("INCOMING Authorization:", authHeader ? authHeader.slice(0, 20) + "..." : authHeader);
 
             await this.iamClient.changePassword(authHeader, {
-                currentPassword: req.body.currentPassword,
-                newPassword: req.body.newPassword
+                current_password: req.body.currentPassword ?? req.body.current_password,
+                new_password: req.body.newPassword ?? req.body.new_password
             });
 
             return res.status(204).send();
@@ -68,6 +67,7 @@ class UserProfileController {
             next(err);
         }
     };
+
 
     getPublicProfilesBatchHandler = async (req, res) => {
         const uids = Array.isArray(req.body.uids) ? req.body.uids : [];
