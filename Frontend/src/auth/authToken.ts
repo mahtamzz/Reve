@@ -1,14 +1,27 @@
-// src/auth/authToken.ts
-let accessToken: string | null = null;
+export type TokenScope = "user" | "admin";
+
+type TokenState = {
+  user: string | null;
+  admin: string | null;
+};
+
+const state: TokenState = {
+  user: null,
+  admin: null,
+};
 
 export const authToken = {
-  setAccessToken(token: string | null) {
-    accessToken = token;
+  set(scope: TokenScope, token: string | null) {
+    state[scope] = token;
   },
-  getAccessToken() {
-    return accessToken;
+  get(scope: TokenScope) {
+    return state[scope];
   },
-  clear() {
-    accessToken = null;
-  }
+  clear(scope?: TokenScope) {
+    if (scope) state[scope] = null;
+    else {
+      state.user = null;
+      state.admin = null;
+    }
+  },
 };

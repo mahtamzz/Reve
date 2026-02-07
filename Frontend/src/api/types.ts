@@ -15,6 +15,17 @@ export type User = {
   [k: string]: any;
 };
 
+export type Admin = {
+  id?: string | number;
+  admin_id?: string | number; 
+  email?: string;
+  username?: string;
+  role?: "admin";
+  created_at?: string;
+  updated_at?: string;
+  [k: string]: any;
+};
+
 
 export type ApiGroup = {
   id: string;

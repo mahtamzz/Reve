@@ -1,20 +1,33 @@
-let accessToken: string | null = null;
+// src/utils/authToken.ts
+export type TokenScope = "user" | "admin";
 
-export function setAccessToken(token: string | null) {
-  accessToken = token;
+const mem: Record<TokenScope, string | null> = {
+  user: null,
+  admin: null,
+};
+
+export function setAccessToken(token: string | null, scope: TokenScope = "user") {
+  mem[scope] = token;
 }
 
-export function getAccessToken(): string | null {
-  return accessToken;
+export function getAccessToken(scope: TokenScope = "user"): string | null {
+  return mem[scope];
+}
+
+export function clearAccessToken(scope?: TokenScope) {
+  if (scope) mem[scope] = null;
+  else {
+    mem.user = null;
+    mem.admin = null;
+  }
 }
 
 export async function logout() {
-    setAccessToken(null);
-    window.location.href = "/login?loggedOut=true";
-  }
-  
-  export async function logout_admin() {
-    setAccessToken(null);
-    window.location.href = "/admin/login?loggedOut=true";
-  }
-  
+  clearAccessToken("user");
+  window.location.href = "/login?loggedOut=true";
+}
+
+export async function logout_admin() {
+  clearAccessToken("admin");
+  window.location.href = "/admin/login?loggedOut=true";
+}

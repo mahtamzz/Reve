@@ -1,13 +1,13 @@
 import SignupPage from "@/pages/Signup";
 import LoginPage from "@/pages/Login";
-import LoginAdmin from "@/components/Login page/Loginadmin";
+import LoginAdmin from "@/pages/AdminLogin";
 import VerificationPage from "@/pages/Verification";
 import Dashboard from "./pages/Dashboard";
 import ForgotPassword from "@/components/Forgotpass/ForgotPassword";
 import About from "@/components/About/About";
 import Services from "@/components/Services/Services";
 import Contactus from "@/components/ContactUs/Contactus";
-import Dashboardadmin from "./components/Dashboard/Dashboardadmin";
+import Dashboard1 from "./pages/AdminDashboard";
 import ResetPassword from "@/components/ResetPassword/ResetPassword";
 import OtpLoginPage from "./pages/OtpLoginPage";
 import FocusPage from "./pages/FocusPage";
@@ -43,7 +43,7 @@ function App() {
       <Route path="/services" element={<Services />} />
       <Route path="/contact" element={<Contactus />} />
       <Route path="/reset-password" element={<ResetPassword />} />
-      <Route path="/dashboard-admin" element={<Dashboardadmin />} />
+      <Route path="/dashboard-admin" element={<Dashboard1 />} />
       <Route path="/focus" element={<FocusPage />} />
       <Route path="/groups" element={<Groups />} />
       <Route path="/groups/:groupId" element={<GroupDetails />} />
