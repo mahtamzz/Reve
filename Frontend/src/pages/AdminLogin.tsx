@@ -156,10 +156,11 @@ const AdminLoginPage: React.FC = () => {
         >
           <div className="pointer-events-none absolute -left-24 -top-24 h-[420px] w-[420px] rounded-full bg-yellow-200/40 blur-3xl" />
 
-          {/* LEFT */}
-          <section className="col-span-12 md:col-span-5 flex items-center justify-center bg-gradient-to-b from-yellow-50 to-white">
+          {/* LEFT – buddy */}
+          <section className="hidden md:flex md:col-span-5 items-center justify-center bg-gradient-to-b from-yellow-50 to-white">
             <FullBodyBuddy />
           </section>
+
 
           {/* RIGHT */}
           <section className="col-span-12 md:col-span-7 p-10 flex items-center">

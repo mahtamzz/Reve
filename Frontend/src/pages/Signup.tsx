@@ -109,9 +109,10 @@ const SignupPage: React.FC = () => {
           {/* Left – Buddy */}
           <section
             className="
+              hidden md:flex
               col-span-12 md:col-span-5
               relative
-              flex items-center justify-center
+              items-center justify-center
               p-8 md:p-10
               bg-gradient-to-br from-yellow-50 via-orange-50 to-white
               border-b md:border-b-0 md:border-r border-yellow-200/60
