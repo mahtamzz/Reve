@@ -5,8 +5,7 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { usePublicProfilesBatch } from "@/hooks/usePublicProfilesBatch";
 import { getUserAvatarUrl } from "@/api/media";
 import { DEFAULT_AVATAR_URL } from "@/constants/avatar";
-import { useStudyPresence } from "@/hooks/useStudy";
-import type { StudyPresenceActiveMeta } from "@/api/study";
+
 import { useStudyPresenceRealtime } from "@/hooks/useStudyPresenceRealtime";
 
 
@@ -504,36 +503,21 @@ export default function GroupDetails() {
   }, [membersRaw]);
 
   const profiles = usePublicProfilesBatch(memberUids, canSeeMembers);
-  const presenceQ = useStudyPresence(memberUids, isMember && canSeeMembers);
-  const activeMap = (presenceQ.data?.active ?? {}) as Record<string, StudyPresenceActiveMeta>;
-
-  const todayBaseMap = presenceQ.data?.todayMinsBase ?? {};
 
 
-  useEffect(() => {
-    console.log("presenceQ", {
-      status: presenceQ.status,
-      isFetching: presenceQ.isFetching,
-      error: presenceQ.error,
-      data: presenceQ.data,
-      memberUids,
-    });
-  }, [presenceQ.status, presenceQ.isFetching, presenceQ.error, presenceQ.data, memberUids]);
-
-  useStudyPresenceRealtime({
-    groupId: gid,
-    uids: memberUids,
-    enabled: isMember && canSeeMembers,
-  });  
+  const presenceMap = useStudyPresenceRealtime(
+    isMember && canSeeMembers ? gid : null,
+    memberUids
+  );
 
   const members = useMemo(() => {
     return (membersRaw as any[]).map((m, idx) => {
       const uidRaw = pickUid(m);
       const uidKey = uidRaw ? String(uidRaw) : null;
-  
+
       const fromMember = pickNameFromMember(m);
       const pub = uidKey ? profiles.map.get(uidKey) : undefined;
-  
+
       const display =
         fromMember.displayName ??
         safeStr(pub?.display_name) ??
@@ -542,34 +526,27 @@ export default function GroupDetails() {
         (fromMember.username ? `@${fromMember.username.replace(/^@/, "")}` : null) ??
         safeStr(pub?.username) ??
         (uidKey ? `User #${uidKey}` : `User #${idx}`);
-  
+
       const avatar = pickAvatarUrl(m, pub);
-  
       const role = String(m?.role ?? m?.member_role ?? m?.memberRole ?? "member");
-  
-      const active = uidKey ? (activeMap[uidKey] ?? null) : null;
-      const online = Boolean(active);
-      const startedAt = active?.startedAt ?? null;
-  
-      const todayMinsBase = uidKey ? Number(todayBaseMap[uidKey] ?? 0) : 0;
-  
+
+      const presence = uidKey ? presenceMap[uidKey] : null;
+
       return {
         uid: uidKey ?? `idx:${idx}`,
-  
         uidKey,
-  
         display: String(display),
         avatar,
         role,
-  
-        online,
-        startedAt,
-        todayMinsBase,
+
+        online: Boolean(presence?.studying),
+        startedAt: presence?.startedAt ?? null,
+        todayMinsBase: Number(presence?.todayMinsBase ?? 0),
       };
     });
-  }, [membersRaw, profiles.map, activeMap, todayBaseMap]);
-  
+  }, [membersRaw, profiles.map, presenceMap]);
 
+  
   const previewMembers = useMemo(() => members.slice(0, 6), [members]);
 
   const joinReqQ = useJoinRequests(gid, Boolean(gid) && canAdmin && isPrivate);

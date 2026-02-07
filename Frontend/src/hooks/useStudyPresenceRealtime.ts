@@ -1,79 +1,70 @@
-import { useEffect } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { studyKeys } from "@/hooks/useStudy";
-import type { StudyPresenceResponse, StudyPresenceActiveMeta } from "@/api/study";
-import { getChatSocket } from "@/realtime/chatSocket";
+import { useEffect, useRef, useState } from "react";
+import { getStudySocket } from "@/realtime/studySocket";
 
-type PresenceUpdatePayload = {
-  uid: string | number;
-  studying: boolean;
-  subjectId: string | null;
-  startedAt: string | null;
-  reason?: string;
-};
+type PresenceMap = Record<
+  string,
+  {
+    studying: boolean;
+    subjectId: string | null;
+    startedAt: string | null;
+    todayMinsBase: number;
+    day: string;
+  }
+>;
 
-function metaFromPayload(p: PresenceUpdatePayload): StudyPresenceActiveMeta {
-  if (!p.studying) return null;
-  return {
-    subjectId: p.subjectId ?? null,
-    startedAt: p.startedAt ?? new Date().toISOString(),
-    lastHbAt: new Date().toISOString(),
-    source: "socket",
-  };
-}
-
-/**
- * - join room گروه تا eventهای io.to(group:gid) رو بگیری
- * - patch کردن react-query cache presence روی study_presence:update
- */
-export function useStudyPresenceRealtime(args: {
-  groupId: string;
-  uids: Array<string | number>;
-  enabled: boolean;
-}) {
-  const { groupId, uids, enabled } = args;
-
-  const qc = useQueryClient();
-  const socket = getChatSocket();
-
-  const u = (uids ?? []).map(String).filter(Boolean);
-  const ok = enabled && Boolean(groupId) && u.length > 0;
+export function useStudyPresenceRealtime(
+  groupId: string | null,
+  memberUids: string[]
+) {
+  const [presence, setPresence] = useState<PresenceMap>({});
+  const socketRef = useRef<ReturnType<typeof getStudySocket> | null>(null);
 
   useEffect(() => {
-    if (!ok) return;
+    if (!groupId || memberUids.length === 0) return;
 
-    // ensure connected
+    const socket = getStudySocket();
+    socketRef.current = socket;
+
     if (!socket.connected) socket.connect();
 
-    // ✅ join group room
-    socket.emit("group:join", { groupId });
+    socket.emit("group:watch", { groupId, memberUids });
 
-    const handler = (payload: PresenceUpdatePayload) => {
-      const uidStr = String(payload.uid);
-      if (!u.includes(uidStr)) return;
+    socket.on("study_presence:snapshot", (snap) => {
+      if (snap.groupId !== groupId) return;
 
-      const key = studyKeys.presence(u);
-
-      qc.setQueryData<StudyPresenceResponse>(key, (prev) => {
-        if (!prev) return prev;
-
-        return {
-          ...prev,
-          active: {
-            ...prev.active,
-            [uidStr]: metaFromPayload(payload),
-          },
+      const map: PresenceMap = {};
+      for (const uid of memberUids) {
+        const meta = snap.active[String(uid)] ?? null;
+        map[String(uid)] = {
+          studying: !!meta,
+          subjectId: meta?.subjectId ?? null,
+          startedAt: meta?.startedAt ?? null,
+          todayMinsBase: snap.todayMinsBase[String(uid)] ?? 0,
+          day: snap.day,
         };
-      });
-    };
+      }
+      setPresence(map);
+    });
 
-    socket.on("study_presence:update", handler);
+    socket.on("study_presence:update", (u) => {
+      setPresence((prev) => ({
+        ...prev,
+        [String(u.uid)]: {
+          studying: u.studying,
+          subjectId: u.subjectId ?? null,
+          startedAt: u.startedAt ?? null,
+          todayMinsBase: prev[String(u.uid)]?.todayMinsBase ?? 0,
+          day: prev[String(u.uid)]?.day ?? "",
+        },
+      }));
+    });
 
     return () => {
-      socket.off("study_presence:update", handler);
-      socket.emit("group:leave", { groupId });
-      // ⚠️ اینجا disconnect نمی‌کنیم چون ممکنه چت/جاهای دیگه هم لازم داشته باشن
+      socket.emit("group:unwatch", { groupId });
+      socket.off("study_presence:snapshot");
+      socket.off("study_presence:update");
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ok, groupId, u.join(","), qc]);
+  }, [groupId, memberUids.join(",")]);
+
+  return presence;
 }
