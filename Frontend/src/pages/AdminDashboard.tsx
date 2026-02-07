@@ -1,418 +1,459 @@
-// src/pages/Dashboard.tsx  (Admin Dashboard)
-// ساختار کلی حفظ شده، اما همه چیزهای user حذف شده و به admin وصل شده.
-
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+// src/pages/AdminDashboard.tsx
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Menu, X } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  Shield,
+  Users,
+  Layers,
+  RefreshCw,
+  LogOut,
+  Trash2,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 
 import { ApiError } from "@/api/client";
 import { authApi } from "@/api/auth";
+import { authSession } from "@/utils/authSession";
 
-// همون کامپوننت‌های فعلی داشبورد رو نگه می‌داریم (فقط رفتارها عوض می‌شه)
-import Sidebar from "@/components/Dashboard/SidebarIcon";
-import Topbar from "@/components/Dashboard/DashboardHeader";
-import LookAtBuddy from "@/components/LookAtBuddy";
-
-// local helper for cx in this file
-function cx(...classes: Array<string | false | undefined | null>) {
+// ---------- helpers ----------
+function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
 
-function getHttpStatus(err: unknown): number | undefined {
-  return err instanceof ApiError ? err.status : (err as any)?.status;
+function getStatus(e: unknown): number | undefined {
+  return e instanceof ApiError ? e.status : (e as any)?.status;
 }
 
-function clamp(n: number, a: number, b: number) {
-  return Math.max(a, Math.min(b, n));
+function formatDate(s: any) {
+  if (!s) return "—";
+  const d = new Date(String(s));
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString();
 }
 
-function playSoftNotify() {
-  try {
-    const Ctx = (window.AudioContext || (window as any).webkitAudioContext);
-    if (!Ctx) return;
-
-    const ctx = new Ctx();
-    const o = ctx.createOscillator();
-    const g = ctx.createGain();
-
-    o.type = "sine";
-    o.frequency.value = 660;
-    g.gain.value = 0.0001;
-
-    o.connect(g);
-    g.connect(ctx.destination);
-
-    const now = ctx.currentTime;
-    g.gain.setValueAtTime(0.0001, now);
-    g.gain.exponentialRampToValueAtTime(0.05, now + 0.02);
-    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.25);
-
-    o.start(now);
-    o.stop(now + 0.28);
-
-    o.onended = () => ctx.close().catch(() => {});
-  } catch {
-    // ignore
-  }
+function pickId(row: any): string | number | null {
+  return row?.id ?? row?.uid ?? row?.userId ?? null;
 }
 
-export default function Dashboard() {
+type TabKey = "users" | "groups";
+
+export default function AdminDashboard() {
   const navigate = useNavigate();
+  const qc = useQueryClient();
 
-  // ----------------- Mobile Drawer -----------------
-  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [tab, setTab] = useState<TabKey>("users");
 
-  useEffect(() => {
-    if (mobileSidebarOpen) document.body.style.overflow = "hidden";
-    else document.body.style.overflow = "";
-    return () => {
-      document.body.style.overflow = "";
-    };
-  }, [mobileSidebarOpen]);
+  // Pagination (back-end)
+  const [page, setPage] = useState(1);
+  const limit = 20;
 
-  useEffect(() => {
-    if (!mobileSidebarOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setMobileSidebarOpen(false);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [mobileSidebarOpen]);
-
-  // ----------------- Admin session -----------------
-  const [admin, setAdmin] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState<unknown>(null);
-
-  // یک toast ساده نگه می‌داریم (فعلاً برای تست/پیام‌های admin)
-  const [toast, setToast] = useState<{ title: string; message: string } | null>(null);
-  const toastDedupeRef = useRef<string>("");
-
-  const logoutAdmin = () => {
-    // اگر بعداً endpoint logout داشتی اینجا صدا بزن
-    navigate("/admin/login?loggedOut=true");
-  };
-
-  // ✅ فقط adminMe
-  useEffect(() => {
-    let alive = true;
-
-    (async () => {
-      try {
-        setLoading(true);
-        setErr(null);
-
-        const res = await authApi.adminMe(); // GET /auth/admin/me
-        if (!alive) return;
-
-        setAdmin(res?.admin ?? null);
-
-        // یک toast خوش‌آمد (اختیاری)
-        const key = `welcome-${res?.admin?.id ?? res?.admin?.admin_id ?? "x"}`;
-        if (toastDedupeRef.current !== key) {
-          toastDedupeRef.current = key;
-          setToast({
-            title: "Admin session ready",
-            message: "You are signed in as admin.",
-          });
-          playSoftNotify();
-        }
-      } catch (e) {
-        if (!alive) return;
-        setErr(e);
-
-        const status = getHttpStatus(e);
-        if (status === 401) {
-          navigate("/admin/login?expired=true", { replace: true });
-          return;
-        }
-      } finally {
-        if (!alive) return;
-        setLoading(false);
-      }
-    })();
-
-    return () => {
-      alive = false;
-    };
-  }, [navigate]);
+  // ---------- admin session ----------
+  const adminMeQuery = useQuery({
+    queryKey: ["admin", "me"],
+    queryFn: async () => {
+      const res = await authApi.adminMe(); // GET /auth/admin/me
+      return (res as any)?.admin ?? (res as any);
+    },
+    retry: false,
+  });
 
   useEffect(() => {
-    if (!toast) return;
-    const t = window.setTimeout(() => setToast(null), 3500);
-    return () => window.clearTimeout(t);
-  }, [toast]);
+    const st = getStatus(adminMeQuery.error);
+    if (st === 401 || st === 403) authSession.logoutAdmin();
+  }, [adminMeQuery.error]);
 
-  const anyLoading = loading;
-  const anyError = !!err;
+  // ---------- list users ----------
+  const usersQuery = useQuery({
+    queryKey: ["admin", "users", { page, limit }],
+    enabled: tab === "users" && !adminMeQuery.isLoading && !adminMeQuery.error,
+    queryFn: async () => {
+      // GET /auth/admin/users?page=&limit=
+      return authApi.adminListUsers({ page, limit });
+    },
+    retry: false,
+    staleTime: 10_000,
+  });
 
-  const status = useMemo(() => getHttpStatus(err), [err]);
+  const usersRaw = (usersQuery.data as any)?.data ?? [];
+  const meta = (usersQuery.data as any)?.meta ?? {};
+  const totalPages = Number(meta?.totalPages ?? 1) || 1;
+  const total = Number(meta?.total ?? usersRaw.length ?? 0) || 0;
 
-  if (anyLoading) {
+  // no search/filter UI
+  const users = useMemo(() => usersRaw, [usersRaw]);
+
+  // ---------- delete user ----------
+  const deleteUserMut = useMutation({
+    mutationFn: async (userId: string | number) => {
+      return authApi.adminDeleteUser(userId);
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["admin", "users"] });
+    },
+  });
+
+  async function onDeleteUser(u: any) {
+    const id = pickId(u);
+    if (id == null) return;
+
+    const label = u?.email ?? u?.username ?? String(id);
+    const ok = window.confirm(
+      `Delete user "${label}"?\nThis action cannot be undone.`
+    );
+    if (!ok) return;
+
+    try {
+      await deleteUserMut.mutateAsync(id);
+    } catch {
+      // error shown below
+    }
+  }
+
+  function onRefresh() {
+    if (tab === "users") qc.invalidateQueries({ queryKey: ["admin", "users"] });
+  }
+
+  function onLogout() {
+    authSession.logoutAdmin();
+  }
+
+  // ---------- error / loading ----------
+  const activeError =
+    adminMeQuery.error || usersQuery.error || deleteUserMut.error;
+  const status = getStatus(activeError);
+
+  if (adminMeQuery.isLoading) {
     return (
-      <div className="min-h-screen bg-[#F7F8FA] flex items-center justify-center">
-        <p className="text-zinc-600">Loading admin dashboard…</p>
+      <div className="min-h-screen bg-creamtext flex items-center justify-center">
+        <div className="relative w-full max-w-sm overflow-hidden rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
+          <div className="pointer-events-none absolute -top-12 -right-14 h-48 w-48 rounded-full bg-yellow-200/45 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-16 -left-16 h-56 w-56 rounded-full bg-yellow-100/60 blur-3xl" />
+
+          <div className="relative flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-zinc-900 text-white shadow-sm">
+              <Shield className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-zinc-900">
+                Loading admin…
+              </p>
+              <p className="text-xs text-zinc-500">Warming up the panel</p>
+            </div>
+          </div>
+
+          <div className="relative mt-5 h-2 w-full overflow-hidden rounded-full bg-zinc-200/60">
+            <div className="h-full w-1/2 rounded-full bg-yellow-300/70 animate-[slide_1.2s_ease-in-out_infinite]" />
+          </div>
+
+          <style>{`
+            @keyframes slide {
+              0% { transform: translateX(-60%); }
+              50% { transform: translateX(60%); }
+              100% { transform: translateX(-60%); }
+            }
+          `}</style>
+        </div>
       </div>
     );
   }
 
-  if (anyError) {
+  if (activeError) {
     return (
-      <div className="min-h-screen bg-[#F7F8FA] flex items-center justify-center">
-        <div className="max-w-md rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
-          <p className="text-zinc-900 font-semibold">Failed to load admin dashboard</p>
-          <p className="mt-2 text-sm text-zinc-600">
-            {status === 401 ? "Session expired. Please login again." : "Something went wrong."}
-          </p>
+      <div className="min-h-screen bg-creamtext flex items-center justify-center px-4">
+        <div className="relative w-full max-w-lg overflow-hidden rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
+          <div className="pointer-events-none absolute -top-12 -right-14 h-48 w-48 rounded-full bg-yellow-200/45 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-16 -left-16 h-56 w-56 rounded-full bg-yellow-100/60 blur-3xl" />
 
-          <div className="mt-4 flex gap-2">
-            <button
-              onClick={() => navigate("/admin/login")}
-              className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-800 hover:border-yellow-300 transition"
-            >
-              Go to admin login
-            </button>
-            <button
-              onClick={() => window.location.reload()}
-              className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-800 hover:border-yellow-300 transition"
-            >
-              Retry
-            </button>
+          <div className="relative">
+            <div className="flex items-center gap-2">
+              <Shield className="h-5 w-5" />
+              <p className="font-semibold text-zinc-900">Admin Dashboard</p>
+            </div>
+
+            <p className="mt-3 text-sm text-zinc-600">
+              {status === 401 || status === 403
+                ? "Session expired. Please sign in again."
+                : `Error: ${(activeError as any)?.message ?? "Failed to load"}`}
+            </p>
+
+            <div className="mt-5 flex gap-2">
+              <button
+                onClick={() => navigate("/admin/login")}
+                className="rounded-2xl border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-800 shadow-sm hover:border-yellow-300 hover:text-zinc-900 transition"
+              >
+                Go to admin login
+              </button>
+              <button
+                onClick={onLogout}
+                className="rounded-2xl bg-zinc-900 px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800"
+              >
+                Logout
+              </button>
+            </div>
           </div>
         </div>
       </div>
     );
   }
 
-  // admin display name
-  const adminName: string =
-    admin?.username ?? admin?.name ?? admin?.email ?? admin?.admin_id ?? "Admin";
+  const admin = adminMeQuery.data as any;
+  const adminName = admin?.username ?? admin?.email ?? "admin";
+
+  const busy =
+    usersQuery.isLoading || deleteUserMut.isPending || usersQuery.isFetching;
 
   return (
     <div className="min-h-screen bg-creamtext text-zinc-900">
-      <div className="flex">
-        {/* Desktop sidebar */}
-        <div className="hidden md:block">
-          <Sidebar activeKey="dashboard-admin" onLogout={logoutAdmin} />
-        </div>
-
-        {/* Mobile hamburger */}
-        <button
-          type="button"
-          onClick={() => setMobileSidebarOpen(true)}
-          className={cx(
-            "md:hidden fixed left-4 top-4 z-[90]",
-            "inline-flex h-10 w-10 items-center justify-center",
-            "rounded-2xl border border-zinc-200 bg-white shadow-sm",
-            "active:scale-95 transition",
-            mobileSidebarOpen ? "opacity-0 pointer-events-none" : "opacity-100"
-          )}
-          aria-label="Open menu"
-        >
-          <Menu className="h-5 w-5 text-zinc-800" />
-        </button>
-
-        {/* Mobile Drawer */}
-        <AnimatePresence>
-          {mobileSidebarOpen && (
-            <>
-              <motion.div
-                className="md:hidden fixed inset-0 z-[80] bg-black/40"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={() => setMobileSidebarOpen(false)}
-              />
-
-              <motion.aside
-                className="
-                  md:hidden fixed left-0 top-0 z-[85] h-full
-                  w-[280px] max-w-[85vw]
-                  shadow-2xl
-                "
-                initial={{ x: -320 }}
-                animate={{ x: 0 }}
-                exit={{ x: -320 }}
-                transition={{ type: "tween", duration: 0.22, ease: "easeOut" }}
-              >
-                <div className="relative h-full bg-white">
-                  <button
-                    type="button"
-                    onClick={() => setMobileSidebarOpen(false)}
-                    className="
-                      absolute right-3 top-3 z-10
-                      inline-flex h-9 w-9 items-center justify-center
-                      rounded-2xl border border-zinc-200 bg-white shadow-sm
-                      active:scale-95 transition
-                    "
-                    aria-label="Close menu"
-                  >
-                    <X className="h-5 w-5 text-zinc-800" />
-                  </button>
-
-                  <Sidebar
-                    variant="drawer"
-                    activeKey="dashboard-admin"
-                    onLogout={() => {
-                      setMobileSidebarOpen(false);
-                      logoutAdmin();
-                    }}
-                    onNavigate={() => setMobileSidebarOpen(false)}
-                  />
-                </div>
-              </motion.aside>
-            </>
-          )}
-        </AnimatePresence>
-
-        <div className="flex-1 min-w-0 md:ml-64">
-          <Topbar />
-
-          <div className="mx-auto max-w-6xl px-4 py-6">
-            {/* ---- Admin Hero ---- */}
-            <div className="grid grid-cols-12 gap-6">
-              <section className="col-span-12 lg:col-span-5">
-                <div className="relative overflow-hidden rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
-                  <div className="pointer-events-none absolute -top-12 -right-14 h-48 w-48 rounded-full bg-yellow-200/45 blur-3xl" />
-                  <div className="pointer-events-none absolute -bottom-20 -left-16 h-56 w-56 rounded-full bg-yellow-100/60 blur-3xl" />
-
-                  <div className="relative">
-                    <p className="text-xl sm:text-2xl font-semibold tracking-tight text-zinc-900">
-                      Welcome, <span className="text-zinc-800">{adminName}</span>
-                    </p>
-
-                    <div className="mt-3 text-xs text-zinc-600">
-                      Admin dashboard is connected. User widgets have been removed.
-                    </div>
-
-                    <div className="mt-5">
-                      <LookAtBuddy label="Admin buddy" />
-                    </div>
-
-                    <div className="mt-5 flex gap-2">
-                      <button
-                        onClick={() => navigate("/admin/users")}
-                        className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-800 shadow-sm hover:border-yellow-300 transition"
-                      >
-                        Users (soon)
-                      </button>
-                      <button
-                        onClick={logoutAdmin}
-                        className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-800 shadow-sm hover:border-yellow-300 transition"
-                      >
-                        Logout
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </section>
-
-              {/* ---- Placeholder panel (keep structure) ---- */}
-              <section className="col-span-12 lg:col-span-7">
-                <motion.div
-                  initial={{ opacity: 0, y: 10, scale: 0.99 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  transition={{ duration: 0.35, ease: "easeOut" }}
-                  className="rounded-3xl bg-white p-6 shadow-sm border border-zinc-200"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-zinc-900">Admin Overview</p>
-                      <p className="mt-0.5 text-xs text-zinc-500">
-                        Placeholder — later you tell me what admin needs here.
-                      </p>
-                    </div>
-
-                    <div className="rounded-2xl border border-zinc-200 bg-creamtext px-3 py-2">
-                      <p className="text-[11px] text-zinc-500">Status</p>
-                      <p className="text-sm font-semibold text-zinc-900">Connected</p>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 rounded-2xl border border-zinc-200 bg-[#FFFBF2] p-4">
-                    <p className="text-sm font-semibold text-zinc-900">Next steps</p>
-                    <ul className="mt-2 text-xs text-zinc-600 list-disc pl-4 space-y-1">
-                      <li>Define admin widgets (users list, audit logs, reports, ...)</li>
-                      <li>Wire endpoints under /auth/admin/*</li>
-                      <li>Add protected routes for admin only</li>
-                    </ul>
-                  </div>
-                </motion.div>
-              </section>
+      {/* Top header */}
+      <header className="sticky top-0 z-30 border-b border-zinc-200 bg-white/80 backdrop-blur">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
+          <div className="flex items-center gap-3">
+            <div className="relative flex h-10 w-10 items-center justify-center rounded-2xl bg-zinc-900 text-white shadow-sm">
+              <Shield className="h-5 w-5" />
+              <span className="pointer-events-none absolute -right-2 -top-2 h-4 w-4 rounded-full bg-yellow-300/70 animate-ping opacity-60" />
             </div>
-
-            {/* ---- Keep 2-column grid structure but empty content ---- */}
-            <div className="mt-6 grid grid-cols-12 gap-6">
-              <section className="col-span-12 lg:col-span-6 rounded-3xl bg-white p-6 shadow-sm border border-zinc-200">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-semibold text-zinc-900">Admin Panel</p>
-                    <p className="mt-0.5 text-xs text-zinc-500">Placeholder</p>
-                  </div>
-
-                  <button
-                    onClick={() =>
-                      setToast({
-                        title: "Not implemented",
-                        message: "Tell me what admin should manage here.",
-                      })
-                    }
-                    className="rounded-xl border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 shadow-sm hover:border-yellow-300 hover:text-zinc-900 transition"
-                  >
-                    Configure
-                  </button>
-                </div>
-
-                <div className="mt-4 rounded-2xl border border-zinc-200 bg-[#FFFBF2] p-4 text-sm text-zinc-600">
-                  User-related blocks removed. This area is reserved for admin features.
-                </div>
-              </section>
-
-              <section className="col-span-12 lg:col-span-6 rounded-3xl bg-white p-6 shadow-sm border border-zinc-200">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-semibold text-zinc-900">Admin Alerts</p>
-                  <span className="text-xs text-zinc-500">Placeholder</span>
-                </div>
-
-                <div className="mt-4 rounded-2xl bg-[#FFFBF2] border border-zinc-200 p-4">
-                  <p className="text-sm font-semibold text-zinc-900">Tip</p>
-                  <p className="text-xs text-zinc-600 mt-1">
-                    When you define admin requirements, we’ll map each to an endpoint and a widget.
-                  </p>
-                </div>
-              </section>
+            <div>
+              <p className="text-sm font-semibold leading-tight">Admin Panel</p>
+              <p className="text-xs text-zinc-500">Signed in as {adminName}</p>
             </div>
-
-            <footer className="mt-10 text-center text-xs text-zinc-400">
-              REVE · admin dashboard
-            </footer>
           </div>
 
-          {/* Toast */}
-          <AnimatePresence>
-            {toast && (
-              <motion.div
-                initial={{ opacity: 0, y: 16, scale: 0.96 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 16, scale: 0.96 }}
-                transition={{ duration: 0.25, ease: "easeOut" }}
-                className="fixed right-6 top-24 z-50 w-[320px] rounded-3xl border border-zinc-200 bg-white shadow-xl p-4"
-              >
-                <p className="text-sm font-semibold text-zinc-900">{toast.title}</p>
-                <p className="mt-1 text-xs text-zinc-600">{toast.message}</p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onRefresh}
+              className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-800 shadow-sm hover:border-yellow-300 hover:text-zinc-900 transition"
+            >
+              <RefreshCw className={cx("h-4 w-4", busy && "animate-spin")} />
+              Refresh
+            </button>
 
-                <button
-                  onClick={() => setToast(null)}
-                  className="mt-3 text-xs font-semibold text-zinc-500 hover:text-zinc-800 transition-colors"
-                >
-                  Dismiss
-                </button>
-              </motion.div>
-            )}
-          </AnimatePresence>
+            <button
+              onClick={onLogout}
+              className="inline-flex items-center gap-2 rounded-2xl bg-zinc-900 px-3 py-2 text-sm font-semibold text-white hover:bg-zinc-800"
+            >
+              <LogOut className="h-4 w-4" />
+              Logout
+            </button>
+          </div>
         </div>
-      </div>
+      </header>
+
+      <main className="mx-auto max-w-6xl px-4 py-6">
+        {/* Summary cards */}
+        <div className="grid grid-cols-12 gap-4">
+          <div className="relative col-span-12 md:col-span-6 overflow-hidden rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm">
+            <div className="pointer-events-none absolute -top-10 -right-12 h-44 w-44 rounded-full bg-yellow-200/45 blur-3xl" />
+            <div className="pointer-events-none absolute -bottom-16 -left-16 h-52 w-52 rounded-full bg-yellow-100/60 blur-3xl" />
+
+            <div className="relative flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Users className="h-5 w-5 text-zinc-700" />
+                <p className="text-sm font-semibold">Users</p>
+              </div>
+              <span className="rounded-2xl border border-zinc-200 bg-[#FFFBF2] px-3 py-1 text-xs font-semibold text-amber-700">
+                total: {total}
+              </span>
+            </div>
+            <p className="relative mt-2 text-xs text-zinc-500">
+              Only allowed action: delete users
+            </p>
+          </div>
+
+          <div className="relative col-span-12 md:col-span-6 overflow-hidden rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm">
+            <div className="pointer-events-none absolute -top-10 -right-12 h-44 w-44 rounded-full bg-yellow-200/35 blur-3xl" />
+            <div className="pointer-events-none absolute -bottom-16 -left-16 h-52 w-52 rounded-full bg-yellow-100/55 blur-3xl" />
+
+            <div className="relative flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Layers className="h-5 w-5 text-zinc-700" />
+                <p className="text-sm font-semibold">Groups</p>
+              </div>
+              <span className="rounded-2xl border border-zinc-200 bg-[#FFFBF2] px-3 py-1 text-xs font-semibold text-zinc-700">
+                pending wiring
+              </span>
+            </div>
+            <p className="relative mt-2 text-xs text-zinc-500">
+              Share group list/delete endpoints and I’ll connect it.
+            </p>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="mt-5 flex items-center justify-between">
+          <div className="flex gap-2">
+            <button
+              onClick={() => setTab("users")}
+              className={cx(
+                "inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-semibold transition",
+                tab === "users"
+                  ? "bg-white border border-zinc-200 shadow-sm"
+                  : "text-zinc-600 hover:text-zinc-900"
+              )}
+            >
+              <Users className="h-4 w-4" />
+              Users
+            </button>
+
+            <button
+              onClick={() => setTab("groups")}
+              className={cx(
+                "inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-semibold transition",
+                "text-zinc-400 cursor-not-allowed border border-transparent"
+              )}
+              title="Not connected yet"
+              disabled
+            >
+              <Layers className="h-4 w-4" />
+              Groups
+            </button>
+          </div>
+        </div>
+
+        {/* Table card */}
+        <div className="relative mt-4 overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-sm">
+          <div className="pointer-events-none absolute -top-12 -right-14 h-48 w-48 rounded-full bg-yellow-200/35 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-20 -left-16 h-56 w-56 rounded-full bg-yellow-100/55 blur-3xl" />
+
+          <div className="relative flex items-center justify-between border-b border-zinc-200 px-5 py-4">
+            <div>
+              <p className="text-sm font-semibold">User Management</p>
+              <p className="mt-1 text-xs text-zinc-500">
+                Page {page} of {totalPages}
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {busy ? (
+                <span className="text-xs text-zinc-500 inline-flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-yellow-300/80 animate-bounce" />
+                  <span className="h-2 w-2 rounded-full bg-yellow-200/80 animate-bounce [animation-delay:120ms]" />
+                  <span className="h-2 w-2 rounded-full bg-yellow-100/80 animate-bounce [animation-delay:240ms]" />
+                  Loading…
+                </span>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="relative overflow-x-auto">
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-[#FFFBF2] text-xs text-zinc-500">
+                <tr>
+                  <th className="px-5 py-3 font-semibold">ID</th>
+                  <th className="px-5 py-3 font-semibold">Email</th>
+                  <th className="px-5 py-3 font-semibold">Username</th>
+                  <th className="px-5 py-3 font-semibold">Created</th>
+                  <th className="px-5 py-3 font-semibold text-right">Action</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {users.map((u: any) => {
+                  const id = pickId(u);
+                  const deletingThis =
+                    deleteUserMut.isPending &&
+                    (deleteUserMut.variables as any) === id;
+
+                  return (
+                    <tr
+                      key={String(id ?? Math.random())}
+                      className="border-t border-zinc-100 hover:bg-[#FFFBF2]/70 transition-colors"
+                    >
+                      <td className="px-5 py-3 text-zinc-800">{id ?? "—"}</td>
+                      <td className="px-5 py-3 text-zinc-800">
+                        {u?.email ?? "—"}
+                      </td>
+                      <td className="px-5 py-3 text-zinc-800">
+                        {u?.username ?? u?.name ?? "—"}
+                      </td>
+                      <td className="px-5 py-3 text-zinc-500">
+                        {formatDate(u?.created_at ?? u?.createdAt)}
+                      </td>
+                      <td className="px-5 py-3 text-right">
+                        <button
+                          onClick={() => onDeleteUser(u)}
+                          disabled={deleteUserMut.isPending}
+                          className={cx(
+                            "inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-xs font-semibold transition shadow-sm",
+                            "border border-red-200 bg-red-50 text-red-700 hover:bg-red-100",
+                            "disabled:opacity-60 disabled:cursor-not-allowed"
+                          )}
+                        >
+                          <Trash2
+                            className={cx(
+                              "h-4 w-4",
+                              deletingThis &&
+                                "animate-[shake_420ms_ease-in-out_infinite]"
+                            )}
+                          />
+                          {deletingThis ? "Deleting…" : "Delete"}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+
+                {!busy && users.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={5}
+                      className="px-5 py-12 text-center text-zinc-500"
+                    >
+                      No users found.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination */}
+          <div className="relative flex items-center justify-between border-t border-zinc-200 px-5 py-4">
+            <p className="text-xs text-zinc-500">
+              Showing{" "}
+              <span className="font-semibold text-zinc-800">
+                {usersRaw.length}
+              </span>{" "}
+               Total{" "}
+              <span className="font-semibold text-zinc-800">{total}</span>
+            </p>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1 || busy}
+                className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-800 shadow-sm disabled:opacity-50 hover:border-yellow-300 hover:text-zinc-900 transition"
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Prev
+              </button>
+
+              <button
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages || busy}
+                className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-800 shadow-sm disabled:opacity-50 hover:border-yellow-300 hover:text-zinc-900 transition"
+              >
+                Next
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <p className="mt-4 text-xs text-zinc-400">
+          As an admin, you can delete users, delete groups.
+        </p>
+
+        <style>{`
+          @keyframes shake {
+            0%, 100% { transform: translateX(0) rotate(0); }
+            25% { transform: translateX(-2px) rotate(-4deg); }
+            50% { transform: translateX(2px) rotate(4deg); }
+            75% { transform: translateX(-1px) rotate(-2deg); }
+          }
+        `}</style>
+      </main>
     </div>
   );
 }
