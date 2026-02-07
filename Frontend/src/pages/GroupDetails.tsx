@@ -7,6 +7,8 @@ import { getUserAvatarUrl } from "@/api/media";
 import { DEFAULT_AVATAR_URL } from "@/constants/avatar";
 import { useStudyPresence } from "@/hooks/useStudy";
 import type { StudyPresenceActiveMeta } from "@/api/study";
+import { useStudyPresenceRealtime } from "@/hooks/useStudyPresenceRealtime";
+
 
 import {
   ArrowLeft,
@@ -517,7 +519,12 @@ export default function GroupDetails() {
       memberUids,
     });
   }, [presenceQ.status, presenceQ.isFetching, presenceQ.error, presenceQ.data, memberUids]);
-  
+
+  useStudyPresenceRealtime({
+    groupId: gid,
+    uids: memberUids,
+    enabled: isMember && canSeeMembers,
+  });  
 
   const members = useMemo(() => {
     return (membersRaw as any[]).map((m, idx) => {

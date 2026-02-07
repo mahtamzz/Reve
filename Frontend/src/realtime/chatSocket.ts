@@ -20,6 +20,15 @@ type ServerToClientEvents = {
   "presence:check:result": (map: Record<string, boolean>) => void;
 
   "error": (payload: { code: string; message?: string }) => void;
+
+  "study_presence:update": (payload: {
+    uid: string | number;
+    studying: boolean;
+    subjectId: string | null;
+    startedAt: string | null;
+    reason?: string;
+  }) => void;
+
 };
 
 type ClientToServerEvents = {
