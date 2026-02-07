@@ -36,8 +36,11 @@ const UpdateWeeklyGoal = require("./application/useCases/UpdateWeeklyGoal");
 const StudyController = require("./interfaces/http/controllers/StudyController");
 const createStudyRoutes = require("./interfaces/http/routes/study.routes");
 
-/* GROUP CLIENT (for realtime broadcast to all groups user belongs to) */
+/* GROUP CLIENT */
 const GroupClient = require("./infrastructure/group/GroupClient");
+
+/* WS broadcaster */
+const StudyBroadcaster = require("./interfaces/http/ws/studyBroadcaster");
 
 async function createContainer() {
     /* DB */
@@ -46,20 +49,20 @@ async function createContainer() {
         user: process.env.PGUSER,
         password: process.env.PGPASSWORD,
         database: process.env.PGDATABASE,
-        port: process.env.PGPORT || 5432
+        port: process.env.PGPORT || 5432,
     });
 
     /* REDIS */
     const redisClient = new RedisClient({
         host: process.env.REDIS_HOST || "redis",
-        port: process.env.REDIS_PORT || 6379
+        port: process.env.REDIS_PORT || 6379,
     });
     const redis = await redisClient.connect();
 
-    // Study presence (online == studying)
+    /* Presence store */
     const studyPresenceStore = createStudyPresenceStore(redis, {
         ttlSeconds: Number(process.env.STUDY_PRESENCE_TTL_SECONDS || 75),
-        hbIntervalMs: Number(process.env.STUDY_PRESENCE_HB_INTERVAL_MS || 25000)
+        hbIntervalMs: Number(process.env.STUDY_PRESENCE_HB_INTERVAL_MS || 25000),
     });
 
     /* REPOSITORIES */
@@ -71,7 +74,7 @@ async function createContainer() {
 
     /* GROUP CLIENT */
     const groupClient = new GroupClient({
-        baseUrl: process.env.GROUP_SERVICE_URL
+        baseUrl: process.env.GROUP_SERVICE_URL,
     });
 
     /* JWT */
@@ -89,7 +92,7 @@ async function createContainer() {
         subjectDstRepo,
         statsRepo,
         auditRepo,
-        subjectRepo
+        subjectRepo,
     });
 
     const listStudySessionsUC = new ListStudySessions(sessionRepo);
@@ -97,10 +100,26 @@ async function createContainer() {
     const getDashboardUC = new GetDashboard({
         subjectRepo,
         subjectDstRepo,
-        statsRepo
+        statsRepo,
     });
 
     const updateWeeklyGoalUC = new UpdateWeeklyGoal(statsRepo, auditRepo);
+
+    /**
+     * Socket.IO is created in socketServer.js, so we can’t construct the broadcaster
+     * with io immediately. We’ll create it once io is injected via setIo(io).
+     */
+    let io = null;
+
+    const studyBroadcaster = new StudyBroadcaster({
+        getIo: () => io, // ✅ allow late binding
+        studyPresenceStore,
+        subjectDstRepo,
+    });
+
+    const setIo = (ioInstance) => {
+        io = ioInstance;
+    };
 
     /* CONTROLLER */
     const controller = new StudyController({
@@ -114,29 +133,36 @@ async function createContainer() {
         updateWeeklyGoal: updateWeeklyGoalUC,
         studyPresenceStore,
         subjectDstRepo,
+
+        // ✅ NEW: broadcaster for "minutes updated"
+        studyBroadcaster,
     });
 
     /* ROUTER */
     const studyRouter = createStudyRoutes({ auth, controller, requireUser, requireAdmin });
 
     return {
+        // ✅ allow socket server to inject io after it creates it
+        setIo,
+
         repos: {
             subjectRepo,
             sessionRepo,
             subjectDstRepo,
             statsRepo,
-            auditRepo
+            auditRepo,
         },
         clients: {
-            groupClient
+            groupClient,
         },
         cache: {
-            redis
+            redis,
         },
         studyPresenceStore,
+        studyBroadcaster,
         routers: {
-            studyRouter
-        }
+            studyRouter,
+        },
     };
 }
 

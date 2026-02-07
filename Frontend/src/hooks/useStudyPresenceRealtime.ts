@@ -62,21 +62,35 @@ export function useStudyPresenceRealtime(
       const id = String(u.uid);
 
       setPresence((prev) => {
-        const prevRow = prev[id];
-        const nextStudying = !!u.studying;
+        const prevRow = prev[id] ?? {
+          studying: false,
+          subjectId: null,
+          startedAt: null,
+          todayMinsBase: 0,
+          day: "",
+        };
+
+        const studyingProvided = typeof (u as any).studying === "boolean";
+        const nextStudying = studyingProvided ? (u as any).studying : prevRow.studying;
 
         return {
           ...prev,
           [id]: {
             studying: nextStudying,
-            subjectId: nextStudying ? (u.subjectId ?? null) : null,
-            startedAt: nextStudying ? (u.startedAt ?? prevRow?.startedAt ?? null) : null, // ✅
-            todayMinsBase: u.todayMinsBase ?? prevRow?.todayMinsBase ?? 0,
-            day: u.day ?? prevRow?.day ?? "",
+
+            // only clear these when server explicitly says studying:false
+            subjectId:
+              studyingProvided && !nextStudying ? null : ((u as any).subjectId ?? prevRow.subjectId),
+            startedAt:
+              studyingProvided && !nextStudying ? null : ((u as any).startedAt ?? prevRow.startedAt),
+
+            todayMinsBase: (u as any).todayMinsBase ?? prevRow.todayMinsBase,
+            day: (u as any).day ?? prevRow.day,
           },
         };
       });
     });
+
     
     return () => {
       socket.emit("group:unwatch", { groupId });

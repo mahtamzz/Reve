@@ -16,7 +16,8 @@ class StudyController {
         getDashboard,
         updateWeeklyGoal,
         studyPresenceStore,
-        subjectDstRepo
+        subjectDstRepo,
+        studyBroadcaster,
     }) {
         this.createSubject = createSubject;
         this.listSubjects = listSubjects;
@@ -42,6 +43,7 @@ class StudyController {
         this.updateWeeklyGoalHandler = this.updateWeeklyGoalHandler.bind(this);
 
         this.presenceHandler = this.presenceHandler.bind(this);
+        this.studyBroadcaster = studyBroadcaster;
     }
 
     async presenceHandler(req, res) {
@@ -52,12 +54,12 @@ class StudyController {
             .map((s) => s.trim())
             .filter(Boolean);
 
-        if (uids.length === 0) 
+        if (uids.length === 0)
             return res.status(400).json({ error: "UIDS_REQUIRED" });
 
-        if (!this.studyPresenceStore) 
+        if (!this.studyPresenceStore)
             return res.status(503).json({ error: "PRESENCE_UNAVAILABLE" });
-        
+
         // Active study meta (startedAt, lastHbAt, subjectId) or null
         const active = await this.studyPresenceStore.getActiveMany(uids);
 
@@ -128,9 +130,23 @@ class StudyController {
         const uid = req.actor.uid;
         const { subjectId, durationMins, startedAt } = req.body;
 
-        const session = await this.logStudySession.execute(uid, subjectId, durationMins, startedAt ?? null);
-        res.status(201).json(session);
+        const session = await this.logStudySession.execute(
+            uid,
+            subjectId,
+            durationMins,
+            startedAt ?? null
+        );
+
+        // ✅ broadcast updated today mins AFTER DB update
+        try {
+            await this.studyBroadcaster?.broadcastTodayMins(uid, session.started_at);
+        } catch {
+            // don't fail HTTP request if WS broadcast fails
+        }
+
+        return res.status(201).json(session);
     }
+
 
     async listSessionsHandler(req, res) {
         const uid = req.actor.uid;

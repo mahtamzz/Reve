@@ -177,39 +177,37 @@ module.exports = function registerStudyHandlers(io, socket, deps) {
     });
 
     socket.on("study:stop", async () => {
-        try {
-            const uid = socket.user?.uid;
-            if (!uid) return socket.emit("error", { code: "UNAUTHORIZED" });
+    try {
+        const uid = socket.user?.uid;
+        if (!uid) return socket.emit("error", { code: "UNAUTHORIZED" });
 
-            const cookieHeader = socket.handshake.headers?.cookie;
-            if (!cookieHeader) return socket.emit("error", { code: "NO_AUTH_COOKIE" });
+        const cookieHeader = socket.handshake.headers?.cookie;
+        if (!cookieHeader) return socket.emit("error", { code: "NO_AUTH_COOKIE" });
 
-            const { becameOffline, meta } = await studyPresenceStore.stopStudying(uid, socket.id);
-            socket.data.isStudying = false;          // simpler: this socket is no longer studying
+        const { becameOffline, meta } = await studyPresenceStore.stopStudying(uid, socket.id);
+        socket.data.isStudying = false;
 
-            // Only broadcast offline if this was the last socket/tab for that user.
-            if (becameOffline) {
-                await broadcastToMyGroups(
-                    io,
-                    { groupClient, studyPresenceStore },
-                    cookieHeader,
-                    {
-                        uid,
-                        studying: false,
-                        // optionally include last startedAt/subjectId for client cleanup
-                        subjectId: meta?.subjectId ?? null,
-                        startedAt: meta?.startedAt ?? null
-                    }
-                );
-            }
+        if (becameOffline) {
+        // ✅ fetch updated persisted mins for today
+        const day = toDateOnlyUTC(); // or toDateOnlyUTC(new Date())
+        const todayMinsBase = subjectDstRepo?.getTotalByDay
+            ? await subjectDstRepo.getTotalByDay(uid, day)
+            : 0;
 
-            socket.emit("study:stop:ok", { studying: !becameOffline });
-        } catch (err) {
-            socket.emit("error", {
-                code: err.code || "STUDY_STOP_FAILED",
-                message: err.message
-            });
+        await broadcastToMyGroups(io, { groupClient, studyPresenceStore }, cookieHeader, {
+            uid,
+            studying: false,
+            subjectId: null,
+            startedAt: null,
+            todayMinsBase,   // ✅ include
+            day              // ✅ include
+        });
         }
+
+        socket.emit("study:stop:ok", { studying: !becameOffline });
+    } catch (err) {
+        socket.emit("error", { code: err.code || "STUDY_STOP_FAILED", message: err.message });
+    }
     });
 
     // -----------------------------
