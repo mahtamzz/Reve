@@ -37,11 +37,10 @@ export type ApiGroup = {
   owner_uid?: number | string | null;
   created_at?: string;
   updated_at?: string;
-
-  // sometimes backend returns camelCase
   weeklyXp?: number | null;
   minimumDstMins?: number | null;
 };
+
 export type ApiGroupMemberProfile = {
   display_name?: string | null;
   timezone?: string | null;
@@ -81,7 +80,7 @@ export type ApiListGroupMembersResponse = {
   items: ApiGroupMember[];
 };
 
-// ---------- Study Types ----------
+// Study 
 
 export type StudySubject = {
   id: string;
@@ -101,6 +100,12 @@ export type StudySession = {
   startedAt?: string | null;
   [k: string]: any;
 };
+
+export type WeeklyGoalUpdateResponse =
+  | { ok: true; weekly_goal_mins?: number; weeklyGoalMins?: number; stats?: StudyStats }
+  | { ok: boolean; weekly_goal_mins?: number; weeklyGoalMins?: number; stats?: StudyStats }
+  | StudyStats;
+
 
 export type StudyDashboardTotalsRow = {
   uid: string;
@@ -128,7 +133,7 @@ export type StudyDashboard = {
 };
 
 
-// ---------- Media Types ----------
+// Media 
 export type ApiAvatarMeta = {
   id?: string;
   userId?: string;

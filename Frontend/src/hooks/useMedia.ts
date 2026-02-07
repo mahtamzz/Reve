@@ -22,6 +22,11 @@ function asNormalized(e: unknown): NormalizedError {
 
 export function useMedia(autoLoad: boolean = true) {
   const ui = useUiAdapters();
+  const uiRef = useRef(ui);
+  useEffect(() => {
+    uiRef.current = ui;
+  }, [ui]);
+
   const lastHandledRef = useRef<unknown>(null);
 
   const [state, setState] = useState<UseMediaState>(() => ({
@@ -33,27 +38,30 @@ export function useMedia(autoLoad: boolean = true) {
     avatarUrl: DEFAULT_AVATAR_URL,
   }));
 
-  const showErr = useCallback(
-    (e: unknown, retry?: () => void) => {
-      if (lastHandledRef.current === e) return;
-      lastHandledRef.current = e;
+  const showErr = useCallback((e: unknown, retry?: () => void) => {
+    if (lastHandledRef.current === e) return;
+    lastHandledRef.current = e;
 
-      const err = asNormalized(e);
-      setState((s) => ({ ...s, error: err.message ?? "Error" }));
-      handleUiError(err, ui, retry ? { retry } : undefined);
-    },
-    [ui]
-  );
+    const err = asNormalized(e);
+    setState((s) => ({ ...s, error: err.message ?? "Error" }));
+    handleUiError(err, uiRef.current, retry ? { retry } : undefined);
+  }, []);
+
+  const loadingMetaRef = useRef(false);
 
   const loadMeta = useCallback(async () => {
+    if (loadingMetaRef.current) return state.meta ?? null;
+
+    loadingMetaRef.current = true;
     setState((s) => ({ ...s, loading: true, error: null }));
+
     try {
       const meta = await getAvatarMeta();
       setState((s) => ({
         ...s,
         meta,
         loading: false,
-        avatarUrl: meta?.exists ? getAvatarUrl({ bustCache: true }) : DEFAULT_AVATAR_URL,
+        avatarUrl: meta?.exists ? getAvatarUrl({ bustCache: false }) : DEFAULT_AVATAR_URL,
       }));
       return meta;
     } catch (e) {
@@ -65,8 +73,11 @@ export function useMedia(autoLoad: boolean = true) {
       }));
       showErr(e, loadMeta);
       return null;
+    } finally {
+      loadingMetaRef.current = false;
     }
-  }, [showErr]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showErr]); // intentionally stable
 
   const upload = useCallback(
     async (file: File) => {

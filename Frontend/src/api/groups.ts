@@ -10,10 +10,6 @@ import type {
 
 const GROUPS_PREFIX = "/groups";
 
-/* ------------------------------------------------------------------ */
-/* Types */
-/* ------------------------------------------------------------------ */
-
 export type CreateGroupBody = {
   name: string;
   description?: string | null;
@@ -45,10 +41,6 @@ export type JoinRequestsResponse = {
   items: JoinRequestItem[];
 };
 
-/* ------------------------------------------------------------------ */
-/* Helpers */
-/* ------------------------------------------------------------------ */
-
 function mapGroup(raw: any): ApiGroup {
   if (!raw) return raw;
   return {
@@ -69,7 +61,6 @@ function normalizeJoinRequestsPayload(
   groupId: string,
   raw: any
 ): JoinRequestsResponse {
-  // backend returns: { groupId, total, items }
   if (raw && Array.isArray(raw.items)) {
     return {
       groupId: raw.groupId ?? groupId,
@@ -78,7 +69,6 @@ function normalizeJoinRequestsPayload(
     };
   }
 
-  // backend returns: []
   if (Array.isArray(raw)) {
     return {
       groupId,
@@ -101,12 +91,7 @@ function minimalPrivateGroup(groupId: string): ApiGroup {
   };
 }
 
-/* ------------------------------------------------------------------ */
-/* API */
-/* ------------------------------------------------------------------ */
-
 export const groupsApi = {
-  /* ---------------- Group ---------------- */
 
   async getGroup(groupId: string): Promise<ApiGroup> {
     try {
@@ -177,8 +162,8 @@ export const groupsApi = {
     return apiClient.delete<void>(`${GROUPS_PREFIX}/${groupId}`);
   },
 
-  /* ---------------- Membership ---------------- */
 
+  
   join(groupId: string) {
     return apiClient.post<{ status: "joined" | "requested" }>(
       `${GROUPS_PREFIX}/${groupId}/join`
@@ -195,7 +180,6 @@ export const groupsApi = {
     );
   },
 
-  /* ---------------- Members ---------------- */
 
   async listMembers(groupId: string): Promise<ApiListGroupMembersResponse> {
     const res = await apiClient.get<any>(
@@ -228,7 +212,6 @@ export const groupsApi = {
     );
   },
 
-  /* ---------------- Join Requests (Group Admin) ---------------- */
 
   async listJoinRequests(groupId: string): Promise<JoinRequestsResponse> {
     const raw = await apiClient.get<any>(
@@ -255,7 +238,6 @@ export const groupsApi = {
     );
   },
 
-  /* ---------------- Discovery ---------------- */
 
   list(params: { limit?: number; offset?: number } = {}) {
     const limit = params.limit ?? 20;

@@ -33,7 +33,7 @@ export type ListSessionsParams = {
 
 // ---------- Dashboard ----------
 export type StudyDashboardParams = {
-  from?: string | null; // swagger گفته date ولی بک string می‌گیره
+  from?: string | null; 
   to?: string | null;
 };
 

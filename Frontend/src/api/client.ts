@@ -42,17 +42,16 @@ function stripTrailingSlashes(url: string) {
 type AuthMode = "cookie" | "bearer";
 
 type CreateClientOptions = {
-  authMode?: AuthMode;               // default: "bearer"
-  tokenScope?: TokenScope;           // default: "user"
+  authMode?: AuthMode;
+  tokenScope?: TokenScope;
 
-  // اگر refreshBase null/undefined باشد refresh کلاً خاموش است
-  refreshBase?: string | null;       // e.g. "/api" or "https://api.example.com"
-  refreshPath?: string;              // default "/auth/refresh-token"
+  refreshBase?: string | null;
+  refreshPath?: string;   
 };
 
 type RequestOptions = Omit<RequestInit, "body"> & {
-  auth?: boolean;                    // include credentials / attach bearer
-  retry?: boolean;                   // auto refresh-on-401 (disabled for login)
+  auth?: boolean;    
+  retry?: boolean; 
   body?: any;
   timeoutMs?: number;
 };
@@ -86,7 +85,6 @@ export function createApiClient(rawBase: string, opts: CreateClientOptions = {})
 
   function buildUrl(path: string) {
     const p = path.startsWith("/") ? path : `/${path}`;
-    // اگر base نسبی بود (مثل "/api") خروجی هم نسبی می‌ماند و same-origin می‌شود
     return `${API_BASE_URL}${p}`;
   }
 
@@ -186,7 +184,6 @@ export function createApiClient(rawBase: string, opts: CreateClientOptions = {})
 
       if (!res.ok) return false;
 
-      // اگر بک تو body توکن داد (bearer-mode) ذخیره کن (اختیاری)
       const token = extractToken(data);
       if (token) setAccessToken(token, tokenScope);
 
@@ -260,7 +257,6 @@ export function createApiClient(rawBase: string, opts: CreateClientOptions = {})
         throw ApiError.from(err);
       }
 
-      // auto-refresh on 401 (فقط برای requestهایی که retry=true هستند)
       if (res.status === 401 && auth && retry && !isRefreshRequest(path)) {
         const ok = await refreshOnce();
         if (!ok) {
@@ -273,13 +269,11 @@ export function createApiClient(rawBase: string, opts: CreateClientOptions = {})
           );
         }
 
-        // cookie-mode: retry همان request
         if (authMode === "cookie") {
           const retryRes = await fetch(url, finalOptions);
           return parseOrThrow<T>(retryRes);
         }
 
-        // bearer-mode: Authorization را آپدیت کن
         const newToken = getAccessToken(tokenScope);
         const retryHeaders: HeadersInit = { ...(finalHeaders as any) };
         if (newToken) (retryHeaders as any).Authorization = `Bearer ${newToken}`;
@@ -308,24 +302,19 @@ export function createApiClient(rawBase: string, opts: CreateClientOptions = {})
   return { apiFetch, apiClient };
 }
 
-/** ---- bases ---- **/
-// ✅ مهم: پیش‌فرض را same-origin کن تا cookie ارسال شود
 const AUTH_BASE = stripTrailingSlashes(import.meta.env.VITE_API_AUTH_BASE || "/api");
 
-// این‌ها را هم بهتر است پشت proxy بیاوری؛ فعلاً اگر env ندادی same-origin می‌شوند
 const PROFILE_BASE = stripTrailingSlashes(import.meta.env.VITE_API_PROFILE_BASE || "/api");
 const GROUPS_BASE  = stripTrailingSlashes(import.meta.env.VITE_API_GROUPS_BASE || "/api");
 const STUDY_BASE   = stripTrailingSlashes(import.meta.env.VITE_API_STUDY_BASE || "/api");
 const MEDIA_BASE   = stripTrailingSlashes(import.meta.env.VITE_API_MEDIA_BASE || "/api/media");
 
-// ✅ user: cookie mode + refresh روشن
 export const authClient = createApiClient(AUTH_BASE, {
   authMode: "cookie",
   tokenScope: "user",
   refreshBase: AUTH_BASE,
 }).apiClient;
 
-// ✅ admin: cookie mode ولی refresh خاموش (چون بک admin-refresh ندارد)
 export const adminAuthClient = createApiClient(AUTH_BASE, {
   authMode: "cookie",
   tokenScope: "admin",
