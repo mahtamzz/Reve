@@ -15,7 +15,6 @@ type ServerToClientEvents = {
   "group:revoked": (payload: { groupId: string }) => void;
   "group:deleted": (payload: { groupId: string }) => void;
 
-  // ✅ presence
   "presence:update": (payload: { uid: string | number; status: PresenceStatus }) => void;
   "presence:check:result": (map: Record<string, boolean>) => void;
 
