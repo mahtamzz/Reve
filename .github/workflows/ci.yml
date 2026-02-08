@@ -11,13 +11,11 @@ jobs:
 
     strategy:
       matrix:
-        service:
-          - IAM
-          - Group
+        service: [ "IAM", "Group" ]
 
     defaults:
       run:
-        working-directory: ${{ matrix.service }}
+        working-directory: Backend/${{ matrix.service }}
 
     steps:
       - name: Checkout
