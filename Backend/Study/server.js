@@ -14,9 +14,10 @@ async function start() {
     // attach socket server
     createStudySocketServer(httpServer, container);
 
-    httpServer.listen(env.PORT, () => {
+    httpServer.listen(env.PORT, "0.0.0.0", () => {
         console.log(`[${env.SERVICE_NAME}] running on port ${env.PORT}`);
-    });
+      });
+      
 }
 
 start().catch(err => {

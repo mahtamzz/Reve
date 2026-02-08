@@ -1,23 +1,26 @@
-app = "mahta-rabbitmq-2026"
-primary_region = "fra"
+app = "reve-rabbit"
+primary_region = "ams"
 
 [build]
-  dockerfile = "/Dockerfile"
 
-[[mounts]]
-  source = "rabbitmq_data"
+[[vm]]
+  memory = "1gb"
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 1024
+
+[[services]]
+  internal_port = 6379
+  protocol = "tcp"
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[services.ports]]
+    port = 6379
+    handlers = []
+
+
+[mounts]
+  source = "rabbit_data"
   destination = "/var/lib/rabbitmq"
-
-[[services]]
-  internal_port = 5672
-  protocol = "tcp"
-
-  [[services.ports]]
-    port = 5672
-
-[[services]]
-  internal_port = 15672
-  protocol = "tcp"
-
-  [[services.ports]]
-    port = 15672

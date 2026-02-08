@@ -1,13 +1,23 @@
-app = "mahta-iam-2026"
-primary_region = "fra"
+# fly.toml app configuration file generated for reve-iam on 2026-02-08T13:02:55+03:30
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'reve-iam'
+primary_region = 'ams'
 
 [build]
-  dockerfile = "/Dockerfile"
 
-[env]
-  PORT = "3000"
-  NODE_ENV = "production"
-
-[[services]]
+[http_service]
   internal_port = 3000
-  protocol = "tcp"
+  force_https = true
+  auto_start_machines = true
+  auto_stop_machines = "off"
+  min_machines_running = 1
+  processes = ["app"]
+
+[[vm]]
+  memory = '1gb'
+  cpu_kind = 'shared'
+  cpus = 1
+  memory_mb = 1024

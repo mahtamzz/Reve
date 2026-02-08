@@ -7,10 +7,10 @@ async function start() {
 
     const app = createApp(container);
 
-    app.listen(env.PORT, () => {
-        console.log(`[$
-            {env.SERVICE_NAME}] running on port ${env.PORT}`);
-    });
+    app.listen(env.PORT, "0.0.0.0", () => {
+        console.log(`[${env.SERVICE_NAME}] running on port ${env.PORT}`);
+      });
+      
 }
 
 start().catch(err => {

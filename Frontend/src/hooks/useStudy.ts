@@ -238,4 +238,3 @@ export function useStudyPresence(uids: Array<string | number>, enabled = true) {
   useQueryErrorUi(q);
   return q;
 }
-
