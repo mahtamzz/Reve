@@ -1,6 +1,6 @@
 // src/hooks/useAuthMeLite.ts
 import { useEffect, useRef, useState } from "react";
-import { authClient, adminAuthClient, ApiError } from "@/api/client";
+import { authClient, ApiError } from "@/api/client";
 import { getAvatarUrl } from "@/api/media";
 import type { NormalizedError } from "@/errors/normalizeError";
 
@@ -36,10 +36,11 @@ export function useAuthMeLite(scope: Scope = "user") {
     const run = async () => {
       setLoading(true);
       try {
-        const client = scope === "admin" ? adminAuthClient : authClient;
         const path = scope === "admin" ? "/auth/admin/me" : "/auth/me";
 
-        const data: any = await client.get(path, { retry: scope !== "admin" }); 
+        // admin: retry/refresh نکن
+        const data: any = await authClient.get(path, { retry: scope !== "admin" });
+
         const entity = (data?.admin ?? data?.user ?? data) as any;
 
         const username = entity?.username ?? (scope === "admin" ? "admin" : "user");
@@ -67,10 +68,7 @@ export function useAuthMeLite(scope: Scope = "user") {
           err.status === 401 ||
           err.status === 403;
 
-        if (!cancelled && mountedRef.current) {
-          setMe(null);
-        }
-
+        if (!cancelled && mountedRef.current) setMe(null);
         void isAuthish;
       } finally {
         if (!cancelled && mountedRef.current) setLoading(false);

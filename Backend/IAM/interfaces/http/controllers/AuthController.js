@@ -255,16 +255,14 @@ class AuthController {
 
     adminMe = async (req, res) => {
         try {
-          if (!req.admin?.admin_id) {
-            return res.status(401).json({ message: "Unauthorized" });
-          }
-      
-          const admin = await this.getCurrentCurrentAdminUC.execute(req.admin.admin_id);
-          return res.json({ admin });
+          const adminId = req.admin?.admin_id; 
+          const admin = await this.getCurrentCurrentAdminUC.execute(adminId);
+          res.json({ admin });
         } catch (err) {
-          return res.status(404).json({ message: err.message });
+          res.status(404).json({ message: err.message });
         }
       };
+      
       
 
     /* ---------------- UPDATE INFO ---------------- */

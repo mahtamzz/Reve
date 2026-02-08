@@ -12,7 +12,7 @@ import {
 import { format, parseISO } from "date-fns";
 
 export type WeeklyPoint = {
-  date: string; 
+  date: string;   // "YYYY-MM-DD"
   hours: number;
 };
 
@@ -47,33 +47,14 @@ const CustomTooltip = ({
 
 
 export const WeeklyStudyChart: React.FC<{ data: WeeklyPoint[] }> = ({ data }) => {
-  const sorted = [...data].sort(
-    (a, b) => parseISO(a.date).getTime() - parseISO(b.date).getTime()
-  );
-  
-  const startIndex = sorted.length
-    ? sorted.reduce((maxIdx, cur, i) =>
-        parseISO(cur.date).getTime() > parseISO(sorted[maxIdx].date).getTime()
-          ? i
-          : maxIdx
-      , 0)
-    : 0;
-  
-  const rotated = sorted.length
-    ? [...sorted.slice(startIndex), ...sorted.slice(0, startIndex)]
-    : [];
-  
-  const chartData = rotated.map((d) => ({
+  const chartData = data.map((d) => ({
     ...d,
-    day: format(parseISO(d.date), "EEE"),
-    full: format(parseISO(d.date), "MMM d, yyyy"),
+    day: format(parseISO(d.date), "EEE"),          // Mon
+    full: format(parseISO(d.date), "MMM d, yyyy"), // Dec 17, 2025
   }));
-  
-
 
   const maxHours = Math.max(1, ...chartData.map((d) => d.hours));
-  const yMax = Math.max(15, Math.ceil(maxHours + 1));
-  
+  const yMax = Math.ceil(maxHours + 1);
 
   return (
     <div className="h-[260px] w-full">

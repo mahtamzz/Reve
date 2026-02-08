@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 
 import { ApiError } from "@/api/client";
-import { authApi } from "@/api/auth";
+import { adminAuthApi } from "@/api/adminAuth";
 import { authSession } from "@/utils/authSession";
 
 // ---------- helpers ----------
@@ -39,24 +39,28 @@ function pickId(row: any): string | number | null {
 
 type TabKey = "users" | "groups";
 
+// ---------- query keys ----------
+const adminMeKey = ["admin", "me"] as const;
+const adminUsersKey = (page: number, limit: number) =>
+  ["admin", "users", { page, limit }] as const;
+
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const qc = useQueryClient();
 
   const [tab, setTab] = useState<TabKey>("users");
-
-  // Pagination (back-end)
   const [page, setPage] = useState(1);
   const limit = 20;
 
   // ---------- admin session ----------
   const adminMeQuery = useQuery({
-    queryKey: ["admin", "me"],
+    queryKey: adminMeKey,
     queryFn: async () => {
-      const res = await authApi.adminMe(); // GET /auth/admin/me
-      return (res as any)?.admin ?? (res as any);
+      const res = await adminAuthApi.me();
+      return (res as any)?.admin ?? res;
     },
     retry: false,
+    staleTime: 30_000,
   });
 
   useEffect(() => {
@@ -66,11 +70,10 @@ export default function AdminDashboard() {
 
   // ---------- list users ----------
   const usersQuery = useQuery({
-    queryKey: ["admin", "users", { page, limit }],
-    enabled: tab === "users" && !adminMeQuery.isLoading && !adminMeQuery.error,
+    queryKey: adminUsersKey(page, limit),
+    enabled: tab === "users" && adminMeQuery.status === "success",
     queryFn: async () => {
-      // GET /auth/admin/users?page=&limit=
-      return authApi.adminListUsers({ page, limit });
+      return adminAuthApi.listUsers({ page, limit });
     },
     retry: false,
     staleTime: 10_000,
@@ -81,13 +84,12 @@ export default function AdminDashboard() {
   const totalPages = Number(meta?.totalPages ?? 1) || 1;
   const total = Number(meta?.total ?? usersRaw.length ?? 0) || 0;
 
-  // no search/filter UI
   const users = useMemo(() => usersRaw, [usersRaw]);
 
   // ---------- delete user ----------
   const deleteUserMut = useMutation({
     mutationFn: async (userId: string | number) => {
-      return authApi.adminDeleteUser(userId);
+      return adminAuthApi.deleteUser(userId);
     },
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ["admin", "users"] });
@@ -113,6 +115,7 @@ export default function AdminDashboard() {
 
   function onRefresh() {
     if (tab === "users") qc.invalidateQueries({ queryKey: ["admin", "users"] });
+    qc.invalidateQueries({ queryKey: adminMeKey });
   }
 
   function onLogout() {
@@ -122,8 +125,16 @@ export default function AdminDashboard() {
   // ---------- error / loading ----------
   const activeError =
     adminMeQuery.error || usersQuery.error || deleteUserMut.error;
+
   const status = getStatus(activeError);
 
+  const busy =
+    adminMeQuery.isFetching ||
+    usersQuery.isLoading ||
+    usersQuery.isFetching ||
+    deleteUserMut.isPending;
+
+  // ---------- UI: loading admin ----------
   if (adminMeQuery.isLoading) {
     return (
       <div className="min-h-screen bg-creamtext flex items-center justify-center">
@@ -159,6 +170,7 @@ export default function AdminDashboard() {
     );
   }
 
+  // ---------- UI: error ----------
   if (activeError) {
     return (
       <div className="min-h-screen bg-creamtext flex items-center justify-center px-4">
@@ -198,11 +210,9 @@ export default function AdminDashboard() {
     );
   }
 
+  // ---------- data ----------
   const admin = adminMeQuery.data as any;
   const adminName = admin?.username ?? admin?.email ?? "admin";
-
-  const busy =
-    usersQuery.isLoading || deleteUserMut.isPending || usersQuery.isFetching;
 
   return (
     <div className="min-h-screen bg-creamtext text-zinc-900">
@@ -415,7 +425,7 @@ export default function AdminDashboard() {
               <span className="font-semibold text-zinc-800">
                 {usersRaw.length}
               </span>{" "}
-               Total{" "}
+              · Total{" "}
               <span className="font-semibold text-zinc-800">{total}</span>
             </p>
 
@@ -442,7 +452,7 @@ export default function AdminDashboard() {
         </div>
 
         <p className="mt-4 text-xs text-zinc-400">
-          As an admin, you can delete users, delete groups.
+          As an admin, you can delete users (groups wiring pending).
         </p>
 
         <style>{`
