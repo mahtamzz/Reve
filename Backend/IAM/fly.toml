@@ -1,0 +1,13 @@
+app = "mahta-iam-2026"
+primary_region = "fra"
+
+[build]
+  dockerfile = "/Dockerfile"
+
+[env]
+  PORT = "3000"
+  NODE_ENV = "production"
+
+[[services]]
+  internal_port = 3000
+  protocol = "tcp"

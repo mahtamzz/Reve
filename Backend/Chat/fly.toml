@@ -1,0 +1,13 @@
+app = "mahta-chat-2026"
+primary_region = "fra"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "3006"
+  NODE_ENV = "production"
+
+[[services]]
+  internal_port = 3006
+  protocol = "tcp"
