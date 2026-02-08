@@ -2,13 +2,11 @@ name: CI
 
 on:
   push:
-    branches: [ "**" ]
   pull_request:
 
 jobs:
   test-services:
     runs-on: ubuntu-latest
-
     strategy:
       matrix:
         service: [ "IAM", "Group" ]
@@ -26,7 +24,7 @@ jobs:
         with:
           node-version: "20"
           cache: "npm"
-          cache-dependency-path: ${{ matrix.service }}/package-lock.json
+          cache-dependency-path: Backend/${{ matrix.service }}/package-lock.json
 
       - name: Install dependencies
         run: npm ci
@@ -36,20 +34,19 @@ jobs:
 
   docker-and-nginx-check:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Verify docker compose config parses
-        run: docker compose -f docker-compose.yml config
+        run: docker compose -f Backend/docker-compose.yml config
 
       - name: Build all service images
-        run: docker compose -f docker-compose.yml build
+        run: docker compose -f Backend/docker-compose.yml build
 
       - name: Nginx config test (gateway)
         run: |
           docker run --rm \
-            -v "$PWD/gateway.local.conf:/etc/nginx/conf.d/default.conf:ro" \
-            -v "$PWD/proxy_common.conf:/etc/nginx/conf.d/proxy_common.conf:ro" \
+            -v "$PWD/Backend/gateway.local.conf:/etc/nginx/conf.d/default.conf:ro" \
+            -v "$PWD/Backend/proxy_common.conf:/etc/nginx/conf.d/proxy_common.conf:ro" \
             nginx:latest nginx -t
