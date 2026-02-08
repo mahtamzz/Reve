@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [ "**" ]
+  pull_request:
+
+jobs:
+  test-services:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        service:
+          - IAM
+          - Group
+
+    defaults:
+      run:
+        working-directory: ${{ matrix.service }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: ${{ matrix.service }}/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests
+        run: npm test
+
+  docker-and-nginx-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify docker compose config parses
+        run: docker compose -f docker-compose.yml config
+
+      - name: Build all service images
+        run: docker compose -f docker-compose.yml build
+
+      - name: Nginx config test (gateway)
+        run: |
+          docker run --rm \
+            -v "$PWD/gateway.local.conf:/etc/nginx/conf.d/default.conf:ro" \
+            -v "$PWD/proxy_common.conf:/etc/nginx/conf.d/proxy_common.conf:ro" \
+            nginx:latest nginx -t

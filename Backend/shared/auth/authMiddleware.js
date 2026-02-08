@@ -4,6 +4,9 @@ module.exports = function authenticate(jwtVerifier) {
         const bearer = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
         const cookieToken = req.cookies?.accessToken;
         const token = bearer || cookieToken;
+        
+        // console.log("req.headers.cookie: " , req.headers.cookie);
+        // console.log("req.cookies: " , req.cookies);
 
         if (!token) return res.status(401).json({ message: "Authorization token required" });
 
