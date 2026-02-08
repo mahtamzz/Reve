@@ -1,24 +1,26 @@
-# ---- مرحله build ----
     FROM node:18-alpine AS build
-
     WORKDIR /app
     
     COPY package*.json ./
-    RUN npm install
+    
+    RUN npm ci
     
     COPY . .
-    RUN npm run build   # خروجی: dist
     
-    # ---- مرحله سرو کردن با nginx ----
-    FROM nginx:alpine
+    RUN npm run build
     
-    # پاک کردن کانفیگ پیش‌فرض
+    FROM nginx:1.27-alpine
+    
     RUN rm -rf /usr/share/nginx/html/*
     
-    # کپی کردن خروجی Vite
+    COPY nginx.conf /etc/nginx/conf.d/default.conf
+    
     COPY --from=build /app/dist /usr/share/nginx/html
     
     EXPOSE 80
+    
+    HEALTHCHECK --interval=30s --timeout=3s \
+      CMD wget -qO- http://localhost/ >/dev/null 2>&1 || exit 1
     
     CMD ["nginx", "-g", "daemon off;"]
     

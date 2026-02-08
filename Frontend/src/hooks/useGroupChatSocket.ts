@@ -22,8 +22,9 @@ type UseGroupChatSocketOptions = {
 
 export type PresenceMap = Record<string, PresenceStatus>;
 
-function normalizeSocketError(e: { code: string; message?: string } | null): NormalizedError | null {
-  if (!e?.code) return null;
+export function normalizeSocketError(
+  e: { code: string; message?: string } | null
+): NormalizedError | null {  if (!e?.code) return null;
 
   switch (e.code) {
     case "REVOKED":

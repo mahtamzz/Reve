@@ -184,7 +184,7 @@ export function useJoinRequestNotifications(basePollMs = 15_000, maxItems = 10) 
 
       // ---- Bounded fan-out knobs ----
       const ROLE_TTL_MS = 5 * 60_000; // 5 minutes
-      const GROUPS_PER_TICK = 3;      // ✅ only check 3 groups per tick
+      const GROUPS_PER_TICK = 3; 
       const MAX_ITEMS = Math.max(1, maxItems);
 
       // Pick a slice in round-robin fashion
@@ -246,8 +246,6 @@ export function useJoinRequestNotifications(basePollMs = 15_000, maxItems = 10) 
         }
       }
 
-      // Merge with existing items to avoid “missing” old ones when round-robin
-      // Keep only newest per (groupId, uid, createdAt)
       const merged = [...all, ...items];
       const dedup = new Map<string, JoinRequestNotifItem>();
       for (const it of merged) {

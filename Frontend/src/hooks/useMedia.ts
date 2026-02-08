@@ -76,8 +76,7 @@ export function useMedia(autoLoad: boolean = true) {
     } finally {
       loadingMetaRef.current = false;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showErr]); // intentionally stable
+  }, [showErr]); 
 
   const upload = useCallback(
     async (file: File) => {
