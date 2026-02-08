@@ -2,7 +2,11 @@
 import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { profileSocialApi } from "@/api/profileSocial";
-import { followersListKey, followingListKey, followCountsKey } from "./useFollowMutations";
+import {
+  followersListKey,
+  followingListKey,
+  followCountsKey,
+} from "./useFollowMutations";
 import { handleUiError } from "@/errors/handleUiError";
 import type { NormalizedError } from "@/errors/normalizeError";
 import { ApiError } from "@/api/client";
@@ -12,20 +16,25 @@ function asNormalized(e: unknown): NormalizedError {
   return e instanceof ApiError ? e : (e as NormalizedError);
 }
 
+function safeUid(uid?: number) {
+  return typeof uid === "number" && Number.isFinite(uid) && uid > 0 ? uid : undefined;
+}
+
 export function useFollowers(uid?: number, params?: { limit?: number; offset?: number }) {
   const ui = useUiAdapters();
+  const u = safeUid(uid);
+  const limit = params?.limit ?? 50;
+  const offset = params?.offset ?? 0;
 
   const q = useQuery({
-    queryKey: uid
-      ? [...followersListKey(uid), params?.limit ?? 50, params?.offset ?? 0]
-      : ["profile", "followers", "missing"],
+    queryKey: u ? [...followersListKey(u), limit, offset] : ["profile", "followers", "missing"],
+    enabled: !!u,
     queryFn: () =>
-      profileSocialApi.followers(uid as number, {
-        limit: params?.limit ?? 50,
-        offset: params?.offset ?? 0,
+      profileSocialApi.followers(u!, {
+        limit,
+        offset,
         includeProfiles: true,
       }),
-    enabled: Number.isFinite(uid),
     staleTime: 10_000,
     retry: false,
   });
@@ -41,18 +50,19 @@ export function useFollowers(uid?: number, params?: { limit?: number; offset?: n
 
 export function useFollowing(uid?: number, params?: { limit?: number; offset?: number }) {
   const ui = useUiAdapters();
+  const u = safeUid(uid);
+  const limit = params?.limit ?? 50;
+  const offset = params?.offset ?? 0;
 
   const q = useQuery({
-    queryKey: uid
-      ? [...followingListKey(uid), params?.limit ?? 50, params?.offset ?? 0]
-      : ["profile", "following", "missing"],
+    queryKey: u ? [...followingListKey(u), limit, offset] : ["profile", "following", "missing"],
+    enabled: !!u,
     queryFn: () =>
-      profileSocialApi.following(uid as number, {
-        limit: params?.limit ?? 50,
-        offset: params?.offset ?? 0,
+      profileSocialApi.following(u!, {
+        limit,
+        offset,
         includeProfiles: true,
       }),
-    enabled: Number.isFinite(uid),
     staleTime: 10_000,
     retry: false,
   });
@@ -68,13 +78,12 @@ export function useFollowing(uid?: number, params?: { limit?: number; offset?: n
 
 export function useFollowCounts(uid?: number) {
   const ui = useUiAdapters();
-
-  const safeUid = typeof uid === "number" && Number.isFinite(uid) && uid > 0 ? uid : undefined;
+  const u = safeUid(uid);
 
   const q = useQuery({
-    queryKey: ["followCounts", safeUid],
-    enabled: !!safeUid,
-    queryFn: () => profileSocialApi.followCounts(safeUid!),
+    queryKey: u ? followCountsKey(u) : ["profile", "followCounts", "missing"],
+    enabled: !!u,
+    queryFn: () => profileSocialApi.followCounts(u!),
     staleTime: 15_000,
     retry: (count, err: any) => {
       const e = asNormalized(err);

@@ -192,6 +192,19 @@ export default function ConnectionsPage() {
     });
   };
 
+  // in ConnectionsPage
+  const pendingRef = React.useRef<Set<number>>(new Set());
+
+  const runOncePerUid = (uid: number, fn: () => void) => {
+    if (pendingRef.current.has(uid)) return;
+    pendingRef.current.add(uid);
+    fn();
+  };
+
+  const clearPendingUid = (uid: number) => {
+    pendingRef.current.delete(uid);
+  };
+
   return (
     <div className="min-h-screen bg-creamtext text-zinc-900">
       <div className="flex">
@@ -445,21 +458,18 @@ export default function ConnectionsPage() {
                             followOverride={followOverride[p.uid]}
                             onView={() => navigate(`/profile/${p.uid}`)}
                             onFollow={() => {
-                              if (!Number.isFinite(p.uid)) return;
+                              runOncePerUid(p.uid, () => {
+                                setPending(p.uid, true);
+                                optimisticFollow(p.uid);
 
-                              setPending(p.uid, true);
-                              optimisticFollow(p.uid);
-
-                              followMut.mutate(p.uid, {
-                                onError: () => {
-                                  // revert UI state on error
-                                  optimisticUnfollow(p.uid);
-                                },
-                                onSettled: () => {
-                                  setPending(p.uid, false);
-                                  // letting server refetch become source of truth:
-                                  clearOverride(p.uid);
-                                },
+                                followMut.mutate(p.uid, {
+                                  onError: () => optimisticUnfollow(p.uid),
+                                  onSettled: () => {
+                                    setPending(p.uid, false);
+                                    clearPendingUid(p.uid);
+                                    clearOverride(p.uid);
+                                  },
+                                });
                               });
                             }}
                             onUnfollow={() => {

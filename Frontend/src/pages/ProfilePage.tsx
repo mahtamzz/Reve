@@ -28,6 +28,8 @@ import { useMedia } from "@/hooks/useMedia";
 import { generateProfileIntroduction } from "@/utils/profileIntro";
 import { profileApi } from "@/api/profile";
 import { getUserAvatarUrl } from "@/api/media";
+import { followStatusKey } from "@/hooks/useFollowStatus";
+import { followCountsKey } from "@/hooks/useFollowMutations";
 
 type EditForm = {
   display_name: string;
@@ -211,14 +213,9 @@ export default function ProfilePage() {
   const followMut = useFollowUser({ myUid });
   const unfollowMut = useUnfollowUser({ myUid });
 
-  // optimistic
-  const [followersDelta, setFollowersDelta] = useState(0);
-  const [followingOverride, setFollowingOverride] = useState<boolean | null>(null);
 
-  React.useEffect(() => {
-    setFollowersDelta(0);
-    setFollowingOverride(null);
-  }, [safeTargetUid]);
+  ///ddd
+  const [followingOverride, setFollowingOverride] = useState<boolean | null>(null);
 
   // edit self
   const [editOpen, setEditOpen] = useState(false);
@@ -252,7 +249,7 @@ export default function ProfilePage() {
   const baseFollowers = countsQ.isError ? 0 : Number((countsQ.data as any)?.followers ?? 0);
   const baseFollowing = countsQ.isError ? 0 : Number((countsQ.data as any)?.following ?? 0);
 
-  const followersCount = Math.max(0, baseFollowers + followersDelta);
+  const followersCount = baseFollowers;
   const followingCount = baseFollowing;
 
   const isPublicLoading = viewingOther && publicQ.isLoading;
@@ -367,23 +364,46 @@ export default function ProfilePage() {
   const onToggleFollow = () => {
     if (!canFollow || !safeTargetUid) return;
 
-    const wasFollowing = isFollowing;
-    const delta = wasFollowing ? -1 : +1;
+    // prevent spamming while a mutation is in-flight
+    if (followMut.isPending || unfollowMut.isPending) return;
 
-    setFollowersDelta((d) => d + delta);
-    setFollowingOverride(!wasFollowing);
+    const wasFollowing = isFollowing;
+    const nextFollowing = !wasFollowing;
+
+    // 1) Instant UI (button label/icon)
+    setFollowingOverride(nextFollowing);
+
+    // 2) Instant cache update for follow status (so useFollowStatus updates immediately)
+    qc.setQueryData(followStatusKey(safeTargetUid), { isFollowing: nextFollowing });
+
+    // 3) Optional: bump counts ONLY if they already exist in cache
+    // (avoids showing 1 when real count is e.g. 120 but not loaded yet)
+    qc.setQueryData(followCountsKey(safeTargetUid), (prev: any) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        followers: Math.max(0, Number(prev.followers ?? 0) + (nextFollowing ? 1 : -1)),
+      };
+    });
 
     const rollback = () => {
-      setFollowersDelta((d) => d - delta);
       setFollowingOverride(wasFollowing);
+      qc.setQueryData(followStatusKey(safeTargetUid), { isFollowing: wasFollowing });
+      qc.setQueryData(followCountsKey(safeTargetUid), (prev: any) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          followers: Math.max(0, Number(prev.followers ?? 0) + (nextFollowing ? -1 : +1)),
+        };
+      });
     };
 
     const onSettled = () => {
+      // release override; let query cache / server be source of truth
       setFollowingOverride(null);
-      qc.invalidateQueries({ queryKey: ["followCounts"] });
-      qc.invalidateQueries({ queryKey: ["followStatus"] });
-      qc.invalidateQueries({ queryKey: ["followCounts", safeTargetUid] });
-      qc.invalidateQueries({ queryKey: ["followStatus", safeTargetUid] });
+
+      qc.invalidateQueries({ queryKey: followStatusKey(safeTargetUid) });
+      qc.invalidateQueries({ queryKey: followCountsKey(safeTargetUid) });
     };
 
     if (wasFollowing) {

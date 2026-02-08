@@ -56,6 +56,7 @@ export function useFollowUser(opts?: { myUid?: number }) {
     },
 
     onMutate: async (targetUidRaw) => {
+      console.log("onMutate follow", targetUidRaw, Date.now());
       lastVarsRef.current = targetUidRaw;
 
       const targetUid = safeUid(targetUidRaw);
