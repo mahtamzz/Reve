@@ -1,5 +1,3 @@
-// src/errors/handleUiError.ts
-
 import type { NormalizedError } from "./normalizeError";
 
 export type UiAdapters = {
@@ -10,13 +8,10 @@ export type UiAdapters = {
 
   showDialog: (title: string | undefined, msg: string, opts?: { actionLabel?: string; onAction?: () => void }) => void;
 
-  /** Full page error renderer (preferred for err.ui === "page") */
   showPageError?: (title: string | undefined, msg: string, opts?: { actionLabel?: string; onAction?: () => void }) => void;
 
-  /** Inline error (preferred for err.ui === "inline") */
   showInlineError?: (msg: string, details?: unknown) => void;
 
-  // navigation & auth
   navigate: (to: string) => void;
   logout?: () => void;
 
@@ -25,13 +20,9 @@ export type UiAdapters = {
 };
 
 export type HandleUiErrorOptions = {
-  /**
-   * Actual retry of the failed operation (NOT page reload).
-   * If omitted and action.kind is "retry", we fall back to reload().
-   */
+
   retry?: () => void;
 
-  /** Override reload behavior (defaults to window.location.reload). */
   reload?: () => void;
 };
 
@@ -44,7 +35,7 @@ export function handleUiError(err: NormalizedError, ui: UiAdapters, opts: Handle
     let actionLabel: string | undefined;
     let onAction: (() => void) | undefined;
   
-    const action = err.action; // <-- مهم
+    const action = err.action;
   
     switch (action.kind) {
       case "retry":
@@ -59,7 +50,7 @@ export function handleUiError(err: NormalizedError, ui: UiAdapters, opts: Handle
   
       case "redirect":
         actionLabel = "Continue";
-        onAction = () => ui.navigate(action.to); // <-- OK
+        onAction = () => ui.navigate(action.to); 
         break;
   
       case "logout":

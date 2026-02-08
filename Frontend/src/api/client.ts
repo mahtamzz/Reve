@@ -247,7 +247,7 @@ export function createApiClient(rawBase: string) {
       try {
         res = await fetch(url, finalOptions);
       } catch (err) {
-        // Ensure timeout becomes NETWORK_TIMEOUT (not AbortError)
+        // Ensure timeout becomes NETWORK_TIMEOUT 
         if (timedOut) {
           throw new ApiError({ ...ERROR_DICTIONARY.NETWORK_TIMEOUT, raw: err });
         }
@@ -303,15 +303,16 @@ export function createApiClient(rawBase: string) {
   return { apiFetch, apiClient };
 }
 
-// ---- bases (must match your gateway/services) ----
 const PROFILE_BASE = import.meta.env.VITE_API_PROFILE_BASE || "http://localhost:3001/api";
 const GROUPS_BASE = import.meta.env.VITE_API_GROUPS_BASE || "http://localhost:3002/api";
 const STUDY_BASE = import.meta.env.VITE_API_STUDY_BASE || "http://localhost:3003/api";
 
 const MEDIA_BASE = import.meta.env.VITE_API_MEDIA_BASE || "http://localhost:3004/api/media";
 
+
 export const profileClient = createApiClient(PROFILE_BASE).apiClient;
 export const groupsClient = createApiClient(GROUPS_BASE).apiClient;
 export const studyClient = createApiClient(STUDY_BASE).apiClient;
 export const mediaClient = createApiClient(MEDIA_BASE).apiClient;
 export const authClient = createApiClient(AUTH_BASE).apiClient;
+

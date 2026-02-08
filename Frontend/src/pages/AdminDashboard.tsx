@@ -1,5 +1,6 @@
 // src/pages/AdminDashboard.tsx
 import React, { useEffect, useMemo, useState } from "react";
+import AdminGroupsPanel from "@/components/Admin/AdminGroupsPanel";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -115,6 +116,7 @@ export default function AdminDashboard() {
 
   function onRefresh() {
     if (tab === "users") qc.invalidateQueries({ queryKey: ["admin", "users"] });
+    if (tab === "groups") qc.invalidateQueries({ queryKey: ["admin", "groups"] });
     qc.invalidateQueries({ queryKey: adminMeKey });
   }
 
@@ -280,12 +282,12 @@ export default function AdminDashboard() {
                 <Layers className="h-5 w-5 text-zinc-700" />
                 <p className="text-sm font-semibold">Groups</p>
               </div>
-              <span className="rounded-2xl border border-zinc-200 bg-[#FFFBF2] px-3 py-1 text-xs font-semibold text-zinc-700">
-                pending wiring
+              <span className="rounded-2xl border border-zinc-200 bg-[#FFFBF2] px-3 py-1 text-xs font-semibold text-emerald-700">
+                connected
               </span>
             </div>
             <p className="relative mt-2 text-xs text-zinc-500">
-              Share group list/delete endpoints and I’ll connect it.
+              Admin list/delete groups
             </p>
           </div>
         </div>
@@ -294,7 +296,10 @@ export default function AdminDashboard() {
         <div className="mt-5 flex items-center justify-between">
           <div className="flex gap-2">
             <button
-              onClick={() => setTab("users")}
+              onClick={() => {
+                setTab("users");
+                setPage(1);
+              }}
               className={cx(
                 "inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-semibold transition",
                 tab === "users"
@@ -310,10 +315,10 @@ export default function AdminDashboard() {
               onClick={() => setTab("groups")}
               className={cx(
                 "inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-semibold transition",
-                "text-zinc-400 cursor-not-allowed border border-transparent"
+                tab === "groups"
+                  ? "bg-white border border-zinc-200 shadow-sm"
+                  : "text-zinc-600 hover:text-zinc-900"
               )}
-              title="Not connected yet"
-              disabled
             >
               <Layers className="h-4 w-4" />
               Groups
@@ -321,139 +326,154 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Table card */}
-        <div className="relative mt-4 overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-sm">
-          <div className="pointer-events-none absolute -top-12 -right-14 h-48 w-48 rounded-full bg-yellow-200/35 blur-3xl" />
-          <div className="pointer-events-none absolute -bottom-20 -left-16 h-56 w-56 rounded-full bg-yellow-100/55 blur-3xl" />
+        {/* Content */}
+        {tab === "users" ? (
+          <>
+            {/* Table card */}
+            <div className="relative mt-4 overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-sm">
+              <div className="pointer-events-none absolute -top-12 -right-14 h-48 w-48 rounded-full bg-yellow-200/35 blur-3xl" />
+              <div className="pointer-events-none absolute -bottom-20 -left-16 h-56 w-56 rounded-full bg-yellow-100/55 blur-3xl" />
 
-          <div className="relative flex items-center justify-between border-b border-zinc-200 px-5 py-4">
-            <div>
-              <p className="text-sm font-semibold">User Management</p>
-              <p className="mt-1 text-xs text-zinc-500">
-                Page {page} of {totalPages}
-              </p>
-            </div>
+              <div className="relative flex items-center justify-between border-b border-zinc-200 px-5 py-4">
+                <div>
+                  <p className="text-sm font-semibold">User Management</p>
+                  <p className="mt-1 text-xs text-zinc-500">
+                    Page {page} of {totalPages}
+                  </p>
+                </div>
 
-            <div className="flex items-center gap-2">
-              {busy ? (
-                <span className="text-xs text-zinc-500 inline-flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full bg-yellow-300/80 animate-bounce" />
-                  <span className="h-2 w-2 rounded-full bg-yellow-200/80 animate-bounce [animation-delay:120ms]" />
-                  <span className="h-2 w-2 rounded-full bg-yellow-100/80 animate-bounce [animation-delay:240ms]" />
-                  Loading…
-                </span>
-              ) : null}
-            </div>
-          </div>
+                <div className="flex items-center gap-2">
+                  {busy ? (
+                    <span className="text-xs text-zinc-500 inline-flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-full bg-yellow-300/80 animate-bounce" />
+                      <span className="h-2 w-2 rounded-full bg-yellow-200/80 animate-bounce [animation-delay:120ms]" />
+                      <span className="h-2 w-2 rounded-full bg-yellow-100/80 animate-bounce [animation-delay:240ms]" />
+                      Loading…
+                    </span>
+                  ) : null}
+                </div>
+              </div>
 
-          <div className="relative overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
-              <thead className="bg-[#FFFBF2] text-xs text-zinc-500">
-                <tr>
-                  <th className="px-5 py-3 font-semibold">ID</th>
-                  <th className="px-5 py-3 font-semibold">Email</th>
-                  <th className="px-5 py-3 font-semibold">Username</th>
-                  <th className="px-5 py-3 font-semibold">Created</th>
-                  <th className="px-5 py-3 font-semibold text-right">Action</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {users.map((u: any) => {
-                  const id = pickId(u);
-                  const deletingThis =
-                    deleteUserMut.isPending &&
-                    (deleteUserMut.variables as any) === id;
-
-                  return (
-                    <tr
-                      key={String(id ?? Math.random())}
-                      className="border-t border-zinc-100 hover:bg-[#FFFBF2]/70 transition-colors"
-                    >
-                      <td className="px-5 py-3 text-zinc-800">{id ?? "—"}</td>
-                      <td className="px-5 py-3 text-zinc-800">
-                        {u?.email ?? "—"}
-                      </td>
-                      <td className="px-5 py-3 text-zinc-800">
-                        {u?.username ?? u?.name ?? "—"}
-                      </td>
-                      <td className="px-5 py-3 text-zinc-500">
-                        {formatDate(u?.created_at ?? u?.createdAt)}
-                      </td>
-                      <td className="px-5 py-3 text-right">
-                        <button
-                          onClick={() => onDeleteUser(u)}
-                          disabled={deleteUserMut.isPending}
-                          className={cx(
-                            "inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-xs font-semibold transition shadow-sm",
-                            "border border-red-200 bg-red-50 text-red-700 hover:bg-red-100",
-                            "disabled:opacity-60 disabled:cursor-not-allowed"
-                          )}
-                        >
-                          <Trash2
-                            className={cx(
-                              "h-4 w-4",
-                              deletingThis &&
-                                "animate-[shake_420ms_ease-in-out_infinite]"
-                            )}
-                          />
-                          {deletingThis ? "Deleting…" : "Delete"}
-                        </button>
-                      </td>
+              <div className="relative overflow-x-auto">
+                <table className="min-w-full text-left text-sm">
+                  <thead className="bg-[#FFFBF2] text-xs text-zinc-500">
+                    <tr>
+                      <th className="px-5 py-3 font-semibold">ID</th>
+                      <th className="px-5 py-3 font-semibold">Email</th>
+                      <th className="px-5 py-3 font-semibold">Username</th>
+                      <th className="px-5 py-3 font-semibold">Created</th>
+                      <th className="px-5 py-3 font-semibold text-right">Action</th>
                     </tr>
-                  );
-                })}
+                  </thead>
 
-                {!busy && users.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={5}
-                      className="px-5 py-12 text-center text-zinc-500"
-                    >
-                      No users found.
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
+                  <tbody>
+                    {users.map((u: any) => {
+                      const id = pickId(u);
+                      const deletingThis =
+                        deleteUserMut.isPending &&
+                        (deleteUserMut.variables as any) === id;
 
-          {/* Pagination */}
-          <div className="relative flex items-center justify-between border-t border-zinc-200 px-5 py-4">
-            <p className="text-xs text-zinc-500">
-              Showing{" "}
-              <span className="font-semibold text-zinc-800">
-                {usersRaw.length}
-              </span>{" "}
-              · Total{" "}
-              <span className="font-semibold text-zinc-800">{total}</span>
-            </p>
+                      return (
+                        <tr
+                          key={String(id ?? Math.random())}
+                          className="border-t border-zinc-100 hover:bg-[#FFFBF2]/70 transition-colors"
+                        >
+                          <td className="px-5 py-3 text-zinc-800">{id ?? "—"}</td>
+                          <td className="px-5 py-3 text-zinc-800">
+                            {u?.email ?? "—"}
+                          </td>
+                          <td className="px-5 py-3 text-zinc-800">
+                            {u?.username ?? u?.name ?? "—"}
+                          </td>
+                          <td className="px-5 py-3 text-zinc-500">
+                            {formatDate(u?.created_at ?? u?.createdAt)}
+                          </td>
+                          <td className="px-5 py-3 text-right">
+                            <button
+                              onClick={() => onDeleteUser(u)}
+                              disabled={deleteUserMut.isPending}
+                              className={cx(
+                                "inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-xs font-semibold transition shadow-sm",
+                                "border border-red-200 bg-red-50 text-red-700 hover:bg-red-100",
+                                "disabled:opacity-60 disabled:cursor-not-allowed"
+                              )}
+                            >
+                              <Trash2
+                                className={cx(
+                                  "h-4 w-4",
+                                  deletingThis &&
+                                    "animate-[shake_420ms_ease-in-out_infinite]"
+                                )}
+                              />
+                              {deletingThis ? "Deleting…" : "Delete"}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
 
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page <= 1 || busy}
-                className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-800 shadow-sm disabled:opacity-50 hover:border-yellow-300 hover:text-zinc-900 transition"
-              >
-                <ChevronLeft className="h-4 w-4" />
-                Prev
-              </button>
+                    {!busy && users.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={5}
+                          className="px-5 py-12 text-center text-zinc-500"
+                        >
+                          No users found.
+                        </td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
 
-              <button
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page >= totalPages || busy}
-                className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-800 shadow-sm disabled:opacity-50 hover:border-yellow-300 hover:text-zinc-900 transition"
-              >
-                Next
-                <ChevronRight className="h-4 w-4" />
-              </button>
+              {/* Pagination */}
+              <div className="relative flex items-center justify-between border-t border-zinc-200 px-5 py-4">
+                <p className="text-xs text-zinc-500">
+                  Showing{" "}
+                  <span className="font-semibold text-zinc-800">
+                    {usersRaw.length}
+                  </span>{" "}
+                  · Total{" "}
+                  <span className="font-semibold text-zinc-800">{total}</span>
+                </p>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={page <= 1 || busy}
+                    className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-800 shadow-sm disabled:opacity-50 hover:border-yellow-300 hover:text-zinc-900 transition"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    Prev
+                  </button>
+
+                  <button
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={page >= totalPages || busy}
+                    className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-800 shadow-sm disabled:opacity-50 hover:border-yellow-300 hover:text-zinc-900 transition"
+                  >
+                    Next
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
 
-        <p className="mt-4 text-xs text-zinc-400">
-          As an admin, you can delete users (groups wiring pending).
-        </p>
+            <p className="mt-4 text-xs text-zinc-400">
+              As an admin, you can delete users.
+            </p>
+          </>
+        ) : (
+          <>
+            <div className="mt-4">
+              <AdminGroupsPanel />
+            </div>
+
+            <p className="mt-4 text-xs text-zinc-400">
+              As an admin, you can list and delete groups.
+            </p>
+          </>
+        )}
 
         <style>{`
           @keyframes shake {

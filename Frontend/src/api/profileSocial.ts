@@ -1,4 +1,3 @@
-// src/api/profileSocial.ts
 import { profileClient } from "@/api/client";
 
 const P = "/profile";
@@ -34,7 +33,6 @@ export type FollowActionResponse =
   | { status: "skipped"; reason: "not_following" };
 
 export const profileSocialApi = {
-  /** GET /api/profile/:uid/followers */
   followers: (uid: number, params?: { limit?: number; offset?: number; includeProfiles?: boolean }) => {
     const q = new URLSearchParams();
     if (params?.limit != null) q.set("limit", String(params.limit));
@@ -46,7 +44,6 @@ export const profileSocialApi = {
     );
   },
 
-  /** GET /api/profile/:uid/following */
   following: (uid: number, params?: { limit?: number; offset?: number; includeProfiles?: boolean }) => {
     const q = new URLSearchParams();
     if (params?.limit != null) q.set("limit", String(params.limit));

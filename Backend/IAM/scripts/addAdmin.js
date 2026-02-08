@@ -46,5 +46,5 @@ main().catch((err) => {
 // docker compose exec \
 //   -e ADMIN_USERNAME=super \
 //   -e ADMIN_EMAIL=super@mail.com \
-//   -e ADMIN_PASSWORD='121212' \
+//   -e ADMIN_PASSWORD='aaaaaaaa' \
 //   iam_service node scripts/addAdmin.js

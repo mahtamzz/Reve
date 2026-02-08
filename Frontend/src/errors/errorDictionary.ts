@@ -37,7 +37,6 @@ export type ErrorDef = {
   retryable: boolean;
   action: ErrorAction;
 
-  /** Send to Sentry/Datadog/etc */
   report: boolean;
 };
 

@@ -1,6 +1,5 @@
 import { profileClient as apiClient } from "@/api/client";
 
-/** ---------- Types (shape from backend responses) ---------- */
 
 export type Profile = {
   uid: number;
@@ -31,11 +30,7 @@ export type Profile = {
 export type Preferences = {
   uid: number;
 
-  // swagger: is_subject_public
   is_subject_public?: boolean | null;
-
-  // but your CreateUserProfile sets: isProfilePublic, showStreak
-  // so we tolerate those too:
   isProfilePublic?: boolean | null;
   showStreak?: boolean | null;
 
@@ -56,7 +51,6 @@ export type DashboardResponse = {
 };
 
 export type UpdateProfilePayload = {
-  // swagger supports these (and backend supports both snake/camel for some)
   username?: string;
   display_name?: string | null;
   displayName?: string | null;
@@ -71,10 +65,8 @@ export type UpdateProfilePayload = {
 };
 
 export type UpdatePreferencesPayload = {
-  // swagger says only is_subject_public, but backend accepts arbitrary prefs object
   is_subject_public?: boolean | null;
 
-  // tolerate repo-style keys too:
   isProfilePublic?: boolean | null;
   showStreak?: boolean | null;
 };
@@ -94,15 +86,13 @@ export type PublicProfilesBatchResponse = {
   }>;
 };
 
-/** ---------- Normalizers (for snake/camel tolerance) ---------- */
-
 function normalizeProfile(raw: any): Profile {
   if (!raw || typeof raw !== "object") return raw as Profile;
 
   const display_name =
     raw.display_name ??
     raw.displayName ??
-    raw.username ?? // sometimes you sync username -> display_name
+    raw.username ?? 
     "";
 
   return {
@@ -127,8 +117,6 @@ function normalizeDashboard(raw: any): DashboardResponse {
     todayStudyMinutes: Number(raw?.todayStudyMinutes ?? raw?.data?.todayStudyMinutes ?? 0),
   };
 }
-
-/** ---------- API ---------- */
 
 export const profileApi = {
   me: async (): Promise<ProfileMeResponse> => {

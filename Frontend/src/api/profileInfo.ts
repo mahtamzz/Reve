@@ -12,7 +12,6 @@ export type Profile = {
   created_at: string;
   updated_at: string;
 
-  // optional fields (if backend adds later)
   username?: string;
   email?: string;
   avatar_url?: string | null;

@@ -9,10 +9,8 @@ export function useAdminLogin() {
   return useMutation({
     mutationFn: (body: AdminLoginBody) => adminAuthApi.login(body),
     onSuccess: async () => {
-      // 1) کش me را فوراً تازه کن
       await qc.invalidateQueries({ queryKey: adminMeQueryKey });
 
-      // 2) (اختیاری) با refetch فوری احتمال race کمتر میشه
       await qc.refetchQueries({ queryKey: adminMeQueryKey });
     },
   });

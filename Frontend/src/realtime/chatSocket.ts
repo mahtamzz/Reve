@@ -1,4 +1,3 @@
-// src/realtime/chatSocket.ts
 import { io, Socket } from "socket.io-client";
 import { getAccessToken } from "@/utils/authToken";
 
@@ -29,7 +28,6 @@ type ClientToServerEvents = {
   "message:send": (payload: { groupId: string; text: string; clientMessageId?: string | null }) => void;
   "messages:list": (payload: { groupId: string; limit?: number; before?: string | null }) => void;
 
-  // ✅ presence
   "presence:check": (payload: { uids: Array<string> }) => void;
 };
 

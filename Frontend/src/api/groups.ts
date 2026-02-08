@@ -10,9 +10,7 @@ import type {
 
 const GROUPS_PREFIX = "/groups";
 
-/* ------------------------------------------------------------------ */
 /* Types */
-/* ------------------------------------------------------------------ */
 
 export type CreateGroupBody = {
   name: string;
@@ -45,9 +43,7 @@ export type JoinRequestsResponse = {
   items: JoinRequestItem[];
 };
 
-/* ------------------------------------------------------------------ */
 /* Helpers */
-/* ------------------------------------------------------------------ */
 
 function mapGroup(raw: any): ApiGroup {
   if (!raw) return raw;
@@ -101,9 +97,7 @@ function minimalPrivateGroup(groupId: string): ApiGroup {
   };
 }
 
-/* ------------------------------------------------------------------ */
 /* API */
-/* ------------------------------------------------------------------ */
 
 export const groupsApi = {
   /* ---------------- Group ---------------- */
